@@ -1,0 +1,57 @@
+diff --git a/dist/node.js b/dist/node.js
+index 513168c89e387668a79b6beb109587b3eb41a7d0..3d0c4bac0aceda7db94be69cebd2d75fb8176d61 100644
+--- a/dist/node.js
++++ b/dist/node.js
+@@ -1,15 +1,10 @@
+ 'use strict';
+ 
+ Object.defineProperty(exports, "__esModule", { value: true });
++// OpenTab disables bigint-buffer's unpatched native conversion path. The
++// package's pure-JavaScript implementation is API-compatible and avoids
++// CVE-2025-3194 while Particle's upstream dependency remains pinned.
+ let converter;
+-{
+-    try {
+-        converter = require('bindings')('bigint_buffer');
+-    }
+-    catch (e) {
+-        console.warn('bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)');
+-    }
+-}
+ /**
+  * Convert a little-endian buffer into a BigInt.
+  * @param buf The little-endian buffer to convert
+diff --git a/package.json b/package.json
+index ea456c2fb65a6e891fb0dff5fbb254fc267fdc22..fb4de4e9888667cd2b625e8aeb4fbc01006bb39b 100644
+--- a/package.json
++++ b/package.json
+@@ -12,7 +12,7 @@
+     "coverage": "istanbul cover ./test/index.js",
+     "coveralls": "npm run coverage && coveralls <coverage/lcov.info",
+     "lint": "gts check",
+-    "install": "npm run rebuild || echo \"Couldn't build bindings. Non-native version used.\"",
++    "install": "node -e \"process.stdout.write('OpenTab: bigint-buffer native addon disabled; using pure JavaScript.\\n')\"",
+     "prepare": "npm run compile",
+     "prepublishOnly": "rm -rf build/Release; rm build/Makefile; rm build/gyp-*; rm build/*.mk; rm build/*.Makefile; rm *.tgz",
+     "test:browser": "karma start karma.conf.js",
+diff --git a/src/index.ts b/src/index.ts
+index 3c78463c2fac414612aa49a9fd27d529a2041ec0..e410395d8cc3d8ebd03f640bb08fc31ad7e28335 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -8,14 +8,8 @@ declare var process: {browser: boolean;};
+ 
+ let converter: ConverterInterface;
+ 
+-if (!process.browser) {
+-  try {
+-    converter = require('bindings')('bigint_buffer');
+-  } catch (e) {
+-    console.warn(
+-        'bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)');
+-  }
+-}
++// OpenTab deliberately leaves the converter undefined so every environment
++// uses the memory-safe JavaScript fallback. See QUALITY_WAIVERS.md (QW-002).
+ 
+ /**
+  * Convert a little-endian buffer into a BigInt.

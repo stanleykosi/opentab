@@ -1,0 +1,39 @@
+{
+  "name": "@opentab/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src tests --no-errors-on-unmatched",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run --passWithNoTests tests/*.integration.test.ts",
+    "test:live": "vitest run --passWithNoTests",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx src/seed-cli.ts",
+    "db:check": "drizzle-kit check",
+    "evidence:ingest": "tsx src/live-acceptance-ingest-cli.ts"
+  },
+  "dependencies": {
+    "@opentab/application": "workspace:*",
+    "@opentab/config": "workspace:*",
+    "@opentab/observability": "workspace:*",
+    "@opentab/shared": "workspace:*",
+    "bullmq": "5.80.1",
+    "drizzle-orm": "0.45.2",
+    "ioredis": "5.11.1",
+    "postgres": "3.4.9",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

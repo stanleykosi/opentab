@@ -1,0 +1,17 @@
+name: Feature request
+description: Product/engineering proposal tied to a user job and priority
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes: { label: User problem and evidence }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: Proposed outcome, not implementation }
+    validations: { required: true }
+  - type: dropdown
+    attributes:
+      label: Priority
+      options: [P0 hackathon core, P1 product completeness, P2 post-hackathon]
+  - type: textarea
+    attributes: { label: Money, custody, security, legal, UX, and sponsor impact }

@@ -1,0 +1,44 @@
+{
+  "name": "@opentab/integrations",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts",
+    "./indexer": "./src/indexer.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "abi:check": "node scripts/generate-operation-abis.mjs --check",
+    "abi:generate": "node scripts/generate-operation-abis.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src tests --no-errors-on-unmatched",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests",
+    "test:live": "vitest run --config vitest.live.config.ts --passWithNoTests"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "3.1086.0",
+    "@magic-ext/evm": "1.7.0",
+    "@magic-ext/oauth2": "15.10.0",
+    "@magic-sdk/admin": "2.8.2",
+    "@opentab/application": "workspace:*",
+    "@opentab/config": "workspace:*",
+    "@opentab/observability": "workspace:*",
+    "@opentab/shared": "workspace:*",
+    "@particle-network/universal-account-sdk": "2.0.3",
+    "@vercel/oidc-aws-credentials-provider": "3.3.0",
+    "encoding": "0.1.13",
+    "ethers": "6.17.0",
+    "magic-sdk": "33.9.0",
+    "viem": "2.55.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

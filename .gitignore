@@ -1,0 +1,59 @@
+# GitHub publication policy
+# Keep project working notes and agent/runtime material local. The root README is
+# the only Markdown document intentionally published from this repository.
+*.md
+!/README.md
+/artifacts/
+/.agents/
+/.codex/
+/agents/
+/codex/
+**/.skills/
+**/skills/
+/.vscode/
+/source/
+/MANIFEST.json
+/packages/contracts/evidence/
+/evidence/vendor/sdk-surface.json
+
+# dependencies/build
+node_modules/
+.pnpm-store/
+.deploy-smoke/
+.next/
+dist/
+out/
+coverage/
+playwright-report/
+test-results/
+.turbo/
+cache/
+.cache/
+.vite/
+.nyc_output/
+*.tsbuildinfo
+*.log
+.eslintcache
+broadcast/
+
+# environment/secrets
+.env*
+!.env.example
+*.pem
+*.key
+
+# Foundry
+packages/contracts/lib/
+packages/contracts/cache/
+packages/contracts/out/
+
+# OS/editors
+.DS_Store
+.idea/
+.vercel/
+.railway/
+
+# generated private/live evidence
+/evidence/live-private/
+/evidence/private/
+/vendor-cache/

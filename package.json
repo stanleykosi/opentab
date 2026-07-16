@@ -1,0 +1,79 @@
+{
+  "name": "opentab",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenTab walletless cross-chain checkout on Arbitrum",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@9.15.1",
+  "engines": {
+    "node": "25.0.0",
+    "pnpm": "9.15.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "jayson@4.3.0>uuid": "11.1.1",
+      "next@16.2.10>postcss": "8.5.10"
+    },
+    "patchedDependencies": {
+      "@particle-network/universal-account-sdk@2.0.3": "patches/@particle-network__universal-account-sdk@2.0.3.patch",
+      "bigint-buffer@1.1.5": "patches/bigint-buffer@1.1.5.patch"
+    }
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit --concurrency=2",
+    "test:integration": "turbo run test:integration --concurrency=2",
+    "test:e2e": "pnpm --filter @opentab/web test:e2e",
+    "test:live": "turbo run test:live",
+    "db:seed": "pnpm --filter @opentab/db db:seed",
+    "db:supabase:sql": "node scripts/generate-supabase-sql-editor-setup.mjs",
+    "db:supabase:sql:check": "node scripts/generate-supabase-sql-editor-setup.mjs --check",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "docs:index": "node scripts/generate-file-index.mjs",
+    "docs:check": "node scripts/check-docs-structure.mjs && node scripts/check-markdown-links.mjs",
+    "api:schema:judge": "tsx scripts/sync-judge-openapi-schema.ts",
+    "api:check": "tsx scripts/sync-judge-openapi-schema.ts --check && node scripts/check-openapi-parity.mjs",
+    "env:check": "node scripts/verify-env.mjs",
+    "quality:placeholders": "node scripts/check-production-placeholders.mjs",
+    "quality:boundaries": "node scripts/check-import-boundaries.mjs",
+    "security:secrets": "node scripts/verify-no-obvious-secrets.mjs",
+    "security:audit": "node --test scripts/verify-dependency-audit.test.mjs && node scripts/verify-dependency-audit.mjs",
+    "security:licenses": "node scripts/verify-dependency-licenses.mjs && node scripts/generate-third-party-notices.mjs",
+    "ops:check": "node scripts/verify-operations.mjs && node --test scripts/lib/supabase-target.test.mjs && node scripts/verify-supabase-target.mjs --template && pnpm db:supabase:sql:check",
+    "supabase:check": "node --test scripts/lib/supabase-target.test.mjs && node scripts/verify-supabase-target.mjs --template",
+    "supabase:check:target": "node scripts/verify-supabase-target.mjs",
+    "release:artifacts": "node --test scripts/lib/release-source-fingerprint.test.mjs && node scripts/verify-release-artifacts.mjs",
+    "vendor:inspect": "node scripts/inspect-sdk-api.mjs",
+    "vendor:metadata": "node scripts/sync-vendor-source-metadata.mjs",
+    "contracts:bootstrap": "./scripts/bootstrap-contracts.sh",
+    "contracts:build": "pnpm --dir packages/contracts build",
+    "contracts:test": "pnpm --dir packages/contracts test",
+    "contracts:fmt:check": "pnpm --dir packages/contracts lint",
+    "contracts:test:fork": "pnpm --dir packages/contracts test:live",
+    "contracts:coverage": "pnpm --dir packages/contracts coverage",
+    "contracts:slither": "pnpm --dir packages/contracts security",
+    "contracts:security": "pnpm --dir packages/contracts security",
+    "contracts:artifacts": "node scripts/generate-contract-artifacts.mjs",
+    "smoke:demo": "./scripts/smoke-demo.sh",
+    "manifest": "node scripts/generate-manifest.mjs",
+    "verify": "pnpm docs:check && pnpm api:check && pnpm env:check && pnpm quality:placeholders && pnpm quality:boundaries && pnpm security:secrets && pnpm ops:check && pnpm vendor:inspect && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm contracts:fmt:check && pnpm contracts:build && pnpm contracts:test",
+    "verify:release": "pnpm verify && pnpm security:audit && pnpm security:licenses && pnpm contracts:coverage && pnpm contracts:slither && pnpm release:artifacts",
+    "ci": "pnpm verify",
+    "codex:autonomous": "bash scripts/run-autonomous-codex.sh",
+    "codex:resume": "bash scripts/resume-autonomous-codex.sh"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.3",
+    "@types/node": "25.9.5",
+    "tsx": "4.23.0",
+    "turbo": "2.10.4",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

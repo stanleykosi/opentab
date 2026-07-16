@@ -1,0 +1,246 @@
+# Temporarily disabled. Move back to .github/workflows/ to reactivate.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  quality-and-build:
+    name: Quality, types, and production builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install pnpm 9.15.1
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 9.15.1
+      - name: Install Node 25.0.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 25.0.0
+          cache: pnpm
+      - name: Verify exact toolchain
+        run: |
+          test "$(node --version)" = "v25.0.0"
+          test "$(pnpm --version)" = "9.15.1"
+      - name: Install frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Validate release configuration
+        run: node scripts/verify-release-config.mjs
+      - name: Validate documentation
+        run: pnpm docs:check
+      - name: Validate safe default environment
+        run: pnpm env:check
+      - name: Detect production placeholders
+        run: pnpm quality:placeholders
+      - name: Enforce package boundaries
+        run: pnpm quality:boundaries
+      - name: Scan tracked content for obvious secrets
+        run: pnpm security:secrets
+      - name: Verify backup and restore safeguards
+        run: pnpm ops:check
+      - name: Inspect installed vendor SDK surfaces
+        run: pnpm vendor:inspect
+      - name: Check formatting
+        run: pnpm format:check
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck TypeScript workspaces
+        run: pnpm --filter '!@opentab/contracts' typecheck
+      - name: Build TypeScript workspaces
+        run: pnpm --filter '!@opentab/contracts' build
+      - name: Upload SDK compatibility surface
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sdk-surface-${{ github.sha }}
+          path: evidence/vendor/sdk-surface.json
+          if-no-files-found: error
+          retention-days: 14
+
+  unit-tests:
+    name: Deterministic unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install pnpm 9.15.1
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 9.15.1
+      - name: Install Node 25.0.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 25.0.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter '!@opentab/contracts' test:unit
+
+  integration-tests:
+    name: PostgreSQL and Redis integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: opentab
+          POSTGRES_PASSWORD: opentab_ci
+          POSTGRES_DB: opentab_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opentab -d opentab_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      NEXT_PUBLIC_APP_ENV: test
+      DATABASE_URL: postgresql://opentab:opentab_ci@127.0.0.1:5432/opentab_ci
+      DATABASE_URL_TEST: postgresql://opentab:opentab_ci@127.0.0.1:5432/opentab_ci
+      DATABASE_URL_MIGRATIONS: postgresql://opentab:opentab_ci@127.0.0.1:5432/opentab_ci
+      REDIS_URL: redis://127.0.0.1:6379
+      REDIS_URL_TEST: redis://127.0.0.1:6379
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install pnpm 9.15.1
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 9.15.1
+      - name: Install Node 25.0.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 25.0.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate migration journal
+        run: pnpm --filter @opentab/db db:check
+      - name: Apply migrations to ephemeral database
+        run: pnpm --filter @opentab/db db:migrate
+      - name: Run integration tests
+        run: pnpm --filter '!@opentab/contracts' test:integration
+
+  browser-tests:
+    name: Chromium journeys and cross-browser critical portability
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      APP_ENV: local
+      NEXT_PUBLIC_APP_ENV: local
+      PROVIDER_MODE: deterministic
+      DETERMINISTIC_DEMO_ENABLED: "true"
+      PAYMENTS_ENABLED: "false"
+      PARTICLE_LIVE_ENABLED: "false"
+      BOOTSTRAP_SPONSOR_ENABLED: "false"
+      INDEXER_ENABLED: "false"
+      INDEXER_WRITES_ENABLED: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install pnpm 9.15.1
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 9.15.1
+      - name: Install Node 25.0.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 25.0.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium, Firefox, and WebKit dependencies
+        run: pnpm --filter @opentab/web exec playwright install --with-deps chromium firefox webkit
+      - name: Run desktop and mobile Playwright projects
+        run: pnpm --filter @opentab/web test:e2e
+      - name: Run Firefox critical portability checks
+        env:
+          PLAYWRIGHT_FIREFOX_ENABLED: "true"
+          PLAYWRIGHT_RESULTS_FILE: ../../artifacts/autonomous-build/test-results/frontend-playwright-firefox.json
+        run: pnpm --filter @opentab/web exec playwright test --project=firefox-critical
+      - name: Run WebKit mobile critical portability checks
+        env:
+          PLAYWRIGHT_WEBKIT_ENABLED: "true"
+          PLAYWRIGHT_RESULTS_FILE: ../../artifacts/autonomous-build/test-results/frontend-playwright-webkit.json
+        run: pnpm --filter @opentab/web exec playwright test --project=webkit-mobile-critical
+      - name: Upload Playwright diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-${{ github.sha }}
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            artifacts/autonomous-build/test-results/frontend-playwright-firefox.json
+            artifacts/autonomous-build/test-results/frontend-playwright-webkit.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  indexer-image:
+    name: Railway indexer container
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOCKER_BUILDKIT: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Build the production indexer image
+        run: docker build --file apps/indexer/Dockerfile --tag "opentab-indexer:${GITHUB_SHA}" .
+      - name: Verify non-root runtime, healthcheck, and Node pin
+        run: |
+          mkdir -p artifacts/autonomous-build/test-results
+          {
+            docker inspect --format 'user={{.Config.User}} health={{json .Config.Healthcheck.Test}}' "opentab-indexer:${GITHUB_SHA}"
+            docker run --rm --entrypoint node "opentab-indexer:${GITHUB_SHA}" --version
+            docker run --rm \
+              --env APP_ENV=production \
+              --env INDEXER_ENABLED=false \
+              --env INDEXER_WRITES_ENABLED=false \
+              "opentab-indexer:${GITHUB_SHA}"
+          } | tee artifacts/autonomous-build/test-results/ci-indexer-image.txt
+          test "$(docker inspect --format '{{.Config.User}}' "opentab-indexer:${GITHUB_SHA}")" = "node"
+          test "$(docker run --rm --entrypoint node "opentab-indexer:${GITHUB_SHA}" --version)" = "v25.0.0"
+          docker inspect --format '{{json .Config.Healthcheck.Test}}' "opentab-indexer:${GITHUB_SHA}" | grep -F '/health/live'
+      - name: Upload container inspection evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: indexer-image-${{ github.sha }}
+          path: artifacts/autonomous-build/test-results/ci-indexer-image.txt
+          if-no-files-found: warn
+          retention-days: 14

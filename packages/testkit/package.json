@@ -1,0 +1,28 @@
+{
+  "name": "@opentab/testkit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src --no-errors-on-unmatched",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests",
+    "test:live": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@opentab/application": "workspace:*",
+    "@opentab/shared": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

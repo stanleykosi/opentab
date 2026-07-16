@@ -1,0 +1,800 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "evidenceId": {
+      "type": "string",
+      "pattern": "^evd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "orderId": {
+      "type": "string",
+      "pattern": "^ord_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "provenance": {
+      "type": "string",
+      "enum": ["deterministic", "staging", "recorded_live", "live"]
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["local", "preview", "staging", "demo-mainnet", "production"]
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "refreshedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "versions": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "particleSdk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "magicSdk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "contracts": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      },
+      "required": ["application", "particleSdk", "magicSdk", "contracts"],
+      "additionalProperties": false
+    },
+    "account": {
+      "type": "object",
+      "properties": {
+        "magicEoaBefore": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "magicEoaAfter": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "addressContinuous": {
+          "type": "boolean"
+        },
+        "continuityEvidence": {
+          "default": "not_evidenced",
+          "type": "string",
+          "enum": ["evidenced", "not_evidenced", "deterministic_fixture"]
+        },
+        "authMethod": {
+          "type": "string",
+          "enum": ["google", "email_otp"]
+        },
+        "delegationTarget": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "delegationTransactionHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        }
+      },
+      "required": [
+        "magicEoaBefore",
+        "magicEoaAfter",
+        "addressContinuous",
+        "continuityEvidence",
+        "authMethod"
+      ],
+      "additionalProperties": false
+    },
+    "particle": {
+      "type": "object",
+      "properties": {
+        "eip7702Enabled": {
+          "type": "boolean"
+        },
+        "eip7702Evidence": {
+          "default": "not_evidenced",
+          "type": "string",
+          "enum": ["evidenced", "not_evidenced", "deterministic_fixture"]
+        },
+        "universalAccountAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "routeEvidence": {
+          "default": "not_evidenced",
+          "type": "string",
+          "enum": ["evidenced", "not_evidenced", "deterministic_fixture"]
+        },
+        "totalUsd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "sourceSummary": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "chainId": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20
+              },
+              "amount": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "amountUsd": {
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+              }
+            },
+            "required": ["chainId", "symbol", "amount", "amountUsd"],
+            "additionalProperties": false
+          }
+        },
+        "estimatedFeeUsd": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        },
+        "slippageBps": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "quoteObservedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "previewDigest": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "activityUrl": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "eip7702Enabled",
+        "eip7702Evidence",
+        "universalAccountAddress",
+        "routeEvidence",
+        "sourceSummary"
+      ],
+      "additionalProperties": false
+    },
+    "settlement": {
+      "type": "object",
+      "properties": {
+        "chainId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "checkoutAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "passAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "tokenAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "amountBaseUnits": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "receiptId": {
+          "type": "string",
+          "pattern": "^rcp_[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "passTokenId": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "event": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "chainId": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "contractAddress": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "transactionHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "blockNumber": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "blockHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "logIndex": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "confirmations": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "canonical": {
+                  "type": "boolean"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "eventName": {
+                  "type": "string",
+                  "const": "OrderPaid"
+                },
+                "fields": {
+                  "type": "object",
+                  "properties": {
+                    "orderKey": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    },
+                    "merchantOnchainId": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]*$"
+                    },
+                    "productOnchainId": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]*$"
+                    },
+                    "payer": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{40}$"
+                    },
+                    "recipient": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{40}$"
+                    },
+                    "token": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{40}$"
+                    },
+                    "quantity": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]*$"
+                    },
+                    "amountBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "platformFeeBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "intentDigest": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    },
+                    "passTokenId": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]*$"
+                    },
+                    "refundDeadline": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": [
+                    "orderKey",
+                    "merchantOnchainId",
+                    "productOnchainId",
+                    "payer",
+                    "recipient",
+                    "token",
+                    "quantity",
+                    "amountBaseUnits",
+                    "platformFeeBaseUnits",
+                    "intentDigest",
+                    "passTokenId",
+                    "refundDeadline"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "chainId",
+                "contractAddress",
+                "transactionHash",
+                "blockNumber",
+                "blockHash",
+                "logIndex",
+                "confirmations",
+                "canonical",
+                "observedAt",
+                "eventName",
+                "fields"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "chainId": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "contractAddress": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "transactionHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "blockNumber": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "blockHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "logIndex": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "confirmations": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "canonical": {
+                  "type": "boolean"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "eventName": {
+                  "type": "string",
+                  "const": "OrderRefunded"
+                },
+                "fields": {
+                  "type": "object",
+                  "properties": {
+                    "orderKey": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    },
+                    "amountBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "cumulativeRefundedBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": ["orderKey", "amountBaseUnits", "cumulativeRefundedBaseUnits"],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "chainId",
+                "contractAddress",
+                "transactionHash",
+                "blockNumber",
+                "blockHash",
+                "logIndex",
+                "confirmations",
+                "canonical",
+                "observedAt",
+                "eventName",
+                "fields"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "chainId": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "contractAddress": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "transactionHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "blockNumber": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "blockHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "logIndex": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "confirmations": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "canonical": {
+                  "type": "boolean"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "eventName": {
+                  "type": "string",
+                  "const": "OrderFinalized"
+                },
+                "fields": {
+                  "type": "object",
+                  "properties": {
+                    "orderKey": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    },
+                    "merchantOnchainId": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]*$"
+                    },
+                    "merchantCreditBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "platformCreditBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": [
+                    "orderKey",
+                    "merchantOnchainId",
+                    "merchantCreditBaseUnits",
+                    "platformCreditBaseUnits"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "chainId",
+                "contractAddress",
+                "transactionHash",
+                "blockNumber",
+                "blockHash",
+                "logIndex",
+                "confirmations",
+                "canonical",
+                "observedAt",
+                "eventName",
+                "fields"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "chainId": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "contractAddress": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "transactionHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "blockNumber": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "blockHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "logIndex": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "confirmations": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "canonical": {
+                  "type": "boolean"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "eventName": {
+                  "type": "string",
+                  "const": "MerchantWithdrawal"
+                },
+                "fields": {
+                  "type": "object",
+                  "properties": {
+                    "merchantOnchainId": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]*$"
+                    },
+                    "recipient": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{40}$"
+                    },
+                    "amountBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  },
+                  "required": ["merchantOnchainId", "recipient", "amountBaseUnits"],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "chainId",
+                "contractAddress",
+                "transactionHash",
+                "blockNumber",
+                "blockHash",
+                "logIndex",
+                "confirmations",
+                "canonical",
+                "observedAt",
+                "eventName",
+                "fields"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "chainId": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "contractAddress": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "transactionHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "blockNumber": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "blockHash": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{64}$"
+                },
+                "logIndex": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "confirmations": {
+                  "type": "string",
+                  "pattern": "^(0|[1-9][0-9]*)$"
+                },
+                "canonical": {
+                  "type": "boolean"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "eventName": {
+                  "type": "string",
+                  "const": "SplitReimbursed"
+                },
+                "fields": {
+                  "type": "object",
+                  "properties": {
+                    "paymentKey": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    },
+                    "splitDigest": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    },
+                    "originalOrderKey": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    },
+                    "payer": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{40}$"
+                    },
+                    "beneficiary": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{40}$"
+                    },
+                    "token": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{40}$"
+                    },
+                    "amountBaseUnits": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    },
+                    "intentDigest": {
+                      "type": "string",
+                      "pattern": "^0x[0-9a-fA-F]{64}$"
+                    }
+                  },
+                  "required": [
+                    "paymentKey",
+                    "splitDigest",
+                    "originalOrderKey",
+                    "payer",
+                    "beneficiary",
+                    "token",
+                    "amountBaseUnits",
+                    "intentDigest"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "chainId",
+                "contractAddress",
+                "transactionHash",
+                "blockNumber",
+                "blockHash",
+                "logIndex",
+                "confirmations",
+                "canonical",
+                "observedAt",
+                "eventName",
+                "fields"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "chainId",
+        "checkoutAddress",
+        "passAddress",
+        "tokenAddress",
+        "amountBaseUnits",
+        "receiptId",
+        "passTokenId",
+        "event"
+      ],
+      "additionalProperties": false
+    },
+    "recovery": {
+      "type": "object",
+      "properties": {
+        "submissionPersistedBeforeWait": {
+          "type": "boolean"
+        },
+        "submissionPersistenceEvidence": {
+          "default": "not_evidenced",
+          "type": "string",
+          "enum": ["evidenced", "not_evidenced", "deterministic_fixture"]
+        },
+        "reloadRecovered": {
+          "type": "boolean"
+        },
+        "reloadRecoveryEvidence": {
+          "default": "not_evidenced",
+          "type": "string",
+          "enum": ["evidenced", "not_evidenced", "deterministic_fixture"]
+        },
+        "duplicatePrevented": {
+          "type": "boolean"
+        },
+        "duplicatePreventionEvidence": {
+          "default": "not_evidenced",
+          "type": "string",
+          "enum": ["evidenced", "not_evidenced", "deterministic_fixture"]
+        },
+        "timing": {
+          "type": "object",
+          "properties": {
+            "authenticationMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "delegationMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "routePreparationMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "submissionToCanonicalMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "recoveryVerificationMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            },
+            "totalDurationMs": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$"
+            }
+          },
+          "required": ["totalDurationMs"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "submissionPersistedBeforeWait",
+        "submissionPersistenceEvidence",
+        "reloadRecovered",
+        "reloadRecoveryEvidence",
+        "duplicatePrevented",
+        "duplicatePreventionEvidence",
+        "timing"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "evidenceId",
+    "orderId",
+    "provenance",
+    "environment",
+    "capturedAt",
+    "refreshedAt",
+    "versions",
+    "account",
+    "particle",
+    "settlement",
+    "recovery"
+  ],
+  "additionalProperties": false,
+  "$id": "https://opentab.example/schemas/public-judge-proof.schema.json",
+  "title": "OpenTab Public Judge Proof"
+}

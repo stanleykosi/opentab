@@ -1,0 +1,7 @@
+* @project-owner
+/packages/contracts/ @project-owner
+/packages/integrations/ @project-owner
+/packages/db/ @project-owner
+/apps/indexer/ @project-owner
+/.github/workflows/ @project-owner
+/docs/06-quality/SECURITY_THREAT_MODEL.md @project-owner

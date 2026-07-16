@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 960" role="img" aria-labelledby="title description">
+  <title id="title">Sunday Table event artwork</title>
+  <desc id="description">An abstract sunlit courtyard table with plates, leaves, and a record.</desc>
+  <rect width="960" height="960" fill="#dce8df"/>
+  <circle cx="742" cy="190" r="220" fill="#efc87c"/>
+  <path d="M0 612 960 390v570H0z" fill="#527365"/>
+  <path d="M78 550h804l-74 284H152z" fill="#f6f0e4"/>
+  <ellipse cx="310" cy="643" rx="118" ry="72" fill="#fff" stroke="#b7c3bb" stroke-width="13"/>
+  <ellipse cx="650" cy="574" rx="105" ry="66" fill="#fff" stroke="#b7c3bb" stroke-width="13"/>
+  <circle cx="310" cy="643" r="36" fill="#d77e57"/>
+  <circle cx="650" cy="574" r="32" fill="#e7b84f"/>
+  <circle cx="502" cy="718" r="92" fill="#15231e"/>
+  <circle cx="502" cy="718" r="33" fill="#efc87c"/>
+  <path d="M120 90c112 88 132 230 82 346M880 206c-128 62-184 174-166 316" fill="none" stroke="#1c5a43" stroke-width="28" stroke-linecap="round"/>
+  <path d="M140 176c-76 2-106-42-110-92 74-2 111 29 110 92Zm47 92c76-11 105 30 115 78-72 15-113-10-115-78ZM828 286c72-24 108 11 126 56-68 27-112 9-126-56Z" fill="#39a47e"/>
+</svg>

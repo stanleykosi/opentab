@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opentab.example/schemas/arbitrum-deployment.schema.json",
+  "title": "OpenTab Arbitrum deployment manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationVersion",
+    "gitCommit",
+    "deployedAt",
+    "chain",
+    "deploymentBlock",
+    "settlementToken",
+    "contracts",
+    "roles",
+    "configuration",
+    "foundryReceipt",
+    "verification"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "applicationVersion": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "gitCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "deployedAt": { "type": "string", "format": "date-time" },
+    "chain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "explorerBaseUrl", "rpcProviders"],
+      "properties": {
+        "id": { "const": "42161" },
+        "name": { "const": "Arbitrum One" },
+        "explorerBaseUrl": { "const": "https://arbiscan.io" },
+        "rpcProviders": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+        }
+      }
+    },
+    "deploymentBlock": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+    "settlementToken": { "const": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkout", "pass", "split"],
+      "properties": {
+        "checkout": { "$ref": "#/$defs/contract" },
+        "pass": { "$ref": "#/$defs/contract" },
+        "split": { "$ref": "#/$defs/contract" }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "required": [
+        "deployer",
+        "defaultAdmin",
+        "pauser",
+        "feeManager",
+        "merchantManager",
+        "orderSigner",
+        "splitSigner",
+        "sponsorSigner",
+        "feeRecipient"
+      ],
+      "properties": {
+        "deployer": { "$ref": "#/$defs/role" },
+        "defaultAdmin": { "$ref": "#/$defs/role" },
+        "pauser": { "$ref": "#/$defs/role" },
+        "feeManager": { "$ref": "#/$defs/role" },
+        "merchantManager": { "$ref": "#/$defs/role" },
+        "orderSigner": { "$ref": "#/$defs/role" },
+        "splitSigner": { "$ref": "#/$defs/role" },
+        "sponsorSigner": { "$ref": "#/$defs/role" },
+        "feeRecipient": { "$ref": "#/$defs/role" }
+      },
+      "additionalProperties": { "$ref": "#/$defs/role" }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platformFeeBps",
+        "adminDelaySeconds",
+        "pendingDefaultAdminTransfers",
+        "pendingDefaultAdminDelayChanges",
+        "checkoutPaused",
+        "splitPaused",
+        "passBoundToCheckout",
+        "passBindingTransaction"
+      ],
+      "properties": {
+        "platformFeeBps": { "type": "integer", "minimum": 0, "maximum": 500 },
+        "adminDelaySeconds": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "pendingDefaultAdminTransfers": { "const": false },
+        "pendingDefaultAdminDelayChanges": { "const": false },
+        "checkoutPaused": { "const": false },
+        "splitPaused": { "const": false },
+        "passBoundToCheckout": { "const": true },
+        "passBindingTransaction": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "foundryReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "packages/contracts/deployments/42161.json" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compilerVersion", "optimizerRuns", "viaIR", "evmVersion", "foundryVersion"],
+      "properties": {
+        "compilerVersion": { "const": "0.8.36" },
+        "optimizerRuns": { "const": 200 },
+        "viaIR": { "const": true },
+        "evmVersion": { "const": "cancun" },
+        "foundryVersion": {
+          "type": "string",
+          "pattern": "(^|[^0-9])1\\.7\\.1([^0-9]|$)",
+          "maxLength": 80
+        }
+      }
+    }
+  },
+  "$defs": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x(?!0{40}$)[0-9a-fA-F]{40}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "deploymentTransaction", "bytecodeHash", "verificationUrl"],
+      "properties": {
+        "address": { "$ref": "#/$defs/address" },
+        "deploymentTransaction": { "$ref": "#/$defs/hash" },
+        "bytecodeHash": { "$ref": "#/$defs/hash" },
+        "verificationUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://arbiscan\\.io/"
+        }
+      }
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["holder", "purpose"],
+      "properties": {
+        "holder": { "$ref": "#/$defs/address" },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@opentab/indexer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit && node build/build.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src tests --no-errors-on-unmatched",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests",
+    "test:packaged": "pnpm build && node scripts/verify-packaged-runtime.mjs",
+    "test:live": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@opentab/application": "workspace:*",
+    "@opentab/config": "workspace:*",
+    "@opentab/db": "workspace:*",
+    "@opentab/integrations": "workspace:*",
+    "@opentab/observability": "workspace:*",
+    "@opentab/shared": "workspace:*",
+    "bullmq": "5.80.1",
+    "ioredis": "5.11.1",
+    "pino": "10.3.1",
+    "viem": "2.55.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "tsx": "4.23.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

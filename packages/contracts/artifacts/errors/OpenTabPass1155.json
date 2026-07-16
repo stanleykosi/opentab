@@ -1,0 +1,21 @@
+{
+  "AccessControlBadConfirmation()": "6697b232",
+  "AccessControlEnforcedDefaultAdminDelay(uint48)": "19ca5ebb",
+  "AccessControlEnforcedDefaultAdminRules()": "3fc3c27a",
+  "AccessControlInvalidDefaultAdmin(address)": "c22c8022",
+  "AccessControlUnauthorizedAccount(address,bytes32)": "e2517d3f",
+  "CheckoutAlreadyBound(address)": "26f63ba4",
+  "ERC1155InsufficientBalance(address,uint256,uint256,uint256)": "03dee4c5",
+  "ERC1155InvalidApprover(address)": "3e31884e",
+  "ERC1155InvalidArrayLength(uint256,uint256)": "5b059991",
+  "ERC1155InvalidOperator(address)": "ced3e100",
+  "ERC1155InvalidReceiver(address)": "57f447ce",
+  "ERC1155InvalidSender(address)": "01a83514",
+  "ERC1155MissingApprovalForAll(address,address)": "e237d922",
+  "InvalidProductId()": "15393ee9",
+  "InvalidQuantity()": "524f409b",
+  "PassNonTransferable()": "e6fbb9c9",
+  "SafeCastOverflowedUintDowncast(uint8,uint256)": "6dfcc650",
+  "UnauthorizedBootstrap(address)": "d3e03f24",
+  "ZeroAddress()": "d92e233d"
+}

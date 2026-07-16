@@ -1,0 +1,106 @@
+import { PublicJudgeProofSchema } from '@opentab/shared';
+
+const suffix = '0'.repeat(26);
+const bytes = (digit: string) => `0x${digit.repeat(64)}` as const;
+
+/** Complete public-safe proof used at the mapper, transport, and component boundaries. */
+export const recordedPublicJudgeProof = PublicJudgeProofSchema.parse({
+  evidenceId: `evd_${suffix}`,
+  orderId: `ord_${suffix}`,
+  provenance: 'recorded_live',
+  environment: 'staging',
+  capturedAt: '2026-07-14T01:00:00.000Z',
+  refreshedAt: '2026-07-14T01:01:00.000Z',
+  versions: {
+    application: 'live-test',
+    particleSdk: '2.0.3',
+    magicSdk: '33.9.0',
+    contracts: 'test',
+  },
+  account: {
+    magicEoaBefore: '0x1111111111111111111111111111111111111111',
+    magicEoaAfter: '0x1111111111111111111111111111111111111111',
+    addressContinuous: true,
+    continuityEvidence: 'evidenced',
+    authMethod: 'google',
+    delegationTarget: '0x5555555555555555555555555555555555555555',
+    delegationTransactionHash: bytes('1'),
+  },
+  particle: {
+    eip7702Enabled: true,
+    eip7702Evidence: 'evidenced',
+    universalAccountAddress: '0x1111111111111111111111111111111111111111',
+    routeEvidence: 'evidenced',
+    totalUsd: '20.00',
+    sourceSummary: [{ chainId: '8453', symbol: 'USDC', amount: '20.00', amountUsd: '19.98' }],
+    estimatedFeeUsd: '0.04',
+    slippageBps: '75',
+    quoteObservedAt: '2026-07-14T00:59:20.000Z',
+    previewDigest: bytes('2'),
+    operationId: 'particle-operation-recorded-1',
+    activityUrl: 'https://universalx.app/activity/particle-operation-recorded-1',
+  },
+  settlement: {
+    chainId: '421614',
+    checkoutAddress: '0x2222222222222222222222222222222222222222',
+    passAddress: '0x3333333333333333333333333333333333333333',
+    tokenAddress: '0x4444444444444444444444444444444444444444',
+    amountBaseUnits: '20000000',
+    receiptId: `rcp_${suffix}`,
+    passTokenId: '17',
+    event: {
+      eventName: 'OrderPaid',
+      chainId: '421614',
+      contractAddress: '0x2222222222222222222222222222222222222222',
+      transactionHash: bytes('3'),
+      blockNumber: '9876543',
+      blockHash: bytes('4'),
+      logIndex: '2',
+      confirmations: '8',
+      canonical: true,
+      observedAt: '2026-07-14T01:00:42.000Z',
+      fields: {
+        orderKey: bytes('5'),
+        merchantOnchainId: '7',
+        productOnchainId: '19',
+        payer: '0x1111111111111111111111111111111111111111',
+        recipient: '0x6666666666666666666666666666666666666666',
+        token: '0x4444444444444444444444444444444444444444',
+        quantity: '1',
+        amountBaseUnits: '20000000',
+        platformFeeBaseUnits: '100000',
+        intentDigest: bytes('6'),
+        passTokenId: '17',
+        refundDeadline: '1784000000',
+      },
+    },
+  },
+  recovery: {
+    submissionPersistedBeforeWait: true,
+    submissionPersistenceEvidence: 'evidenced',
+    reloadRecovered: true,
+    reloadRecoveryEvidence: 'evidenced',
+    duplicatePrevented: true,
+    duplicatePreventionEvidence: 'evidenced',
+    timing: {
+      authenticationMs: '900',
+      delegationMs: '4200',
+      routePreparationMs: '1800',
+      submissionToCanonicalMs: '7200',
+      recoveryVerificationMs: '650',
+      totalDurationMs: '14750',
+    },
+  },
+});
+
+export const unrecordedRoutePublicJudgeProof = PublicJudgeProofSchema.parse({
+  ...recordedPublicJudgeProof,
+  evidenceId: `evd_${'1'.repeat(26)}`,
+  particle: {
+    eip7702Enabled: true,
+    eip7702Evidence: 'not_evidenced',
+    universalAccountAddress: recordedPublicJudgeProof.particle.universalAccountAddress,
+    routeEvidence: 'not_evidenced',
+    sourceSummary: [],
+  },
+});

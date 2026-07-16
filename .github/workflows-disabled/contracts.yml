@@ -1,0 +1,58 @@
+# Temporarily disabled. Move back to .github/workflows/ to reactivate.
+name: Contracts
+
+on:
+  pull_request:
+    paths:
+      - "packages/contracts/**"
+      - ".github/workflows/contracts.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/contracts/**"
+      - ".github/workflows/contracts.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: packages/contracts
+    env:
+      FOUNDRY_PROFILE: ci
+    steps:
+      - name: Check out source and pinned submodules
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install pinned Foundry
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1
+        with:
+          version: v1.7.1
+      - run: forge --version
+      - run: forge fmt --check
+      - run: forge lint src --force
+      - run: forge build --sizes
+      - name: Run unit, negative, fuzz, invariant, and deployment tests
+        run: forge test --no-match-path 'test/fork/*' -vvv
+      - name: Verify committed gas snapshot
+        run: forge snapshot --check
+      - name: Upload contract build evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: contracts-${{ github.sha }}
+          path: |
+            packages/contracts/.gas-snapshot
+            packages/contracts/out
+          if-no-files-found: warn
+          retention-days: 14

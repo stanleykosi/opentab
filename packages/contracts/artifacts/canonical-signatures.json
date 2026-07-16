@@ -1,0 +1,26 @@
+{
+  "events": {
+    "OrderPaid": {
+      "topic0": "0xfc0c20fe4986bd4a7a812e5db464f1cdf6b923c4bf93db63e0afa17be81b6f56"
+    },
+    "SplitReimbursed": {
+      "topic0": "0x9b1542461e234b6634256b0ab99e3f2ead64cf216038841919f007713ec72a87"
+    }
+  },
+  "orderIntent": {
+    "domain": {
+      "name": "OpenTab Order Intent",
+      "version": "1"
+    },
+    "type": "OrderIntent(bytes32 orderKey,address payer,address recipient,uint256 merchantId,uint256 productId,uint64 productVersion,address token,uint256 amount,uint16 platformFeeBps,uint256 platformFee,uint64 quantity,uint64 validAfter,uint64 validUntil,uint64 refundDeadline,bytes32 metadataHash)",
+    "typehash": "0xe61a4059100ec8b9bf8dc8dc7efc03b0cc5b0e11c22435b978393832ca943dea"
+  },
+  "splitIntent": {
+    "domain": {
+      "name": "OpenTab Split Reimbursement",
+      "version": "1"
+    },
+    "type": "SplitIntent(bytes32 paymentKey,bytes32 splitDigest,bytes32 originalOrderKey,address payer,address beneficiary,address token,uint256 amount,uint64 validAfter,uint64 validUntil,bytes32 metadataHash)",
+    "typehash": "0x4ad89f55309e16f590928ac0a81cbcd202a181833d15f19873217166d6ab9e19"
+  }
+}

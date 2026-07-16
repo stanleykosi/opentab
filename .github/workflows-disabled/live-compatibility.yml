@@ -1,0 +1,184 @@
+# Temporarily disabled. Move back to .github/workflows/ to reactivate.
+name: Protected Live Compatibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type I_ACKNOWLEDGE_TINY_ARBITRUM_MAINNET_SPEND
+        required: true
+        type: string
+      max_usdc_base_units:
+        description: Maximum source value in USDC base units (1-1000000)
+        required: true
+        default: "10000"
+        type: string
+      source_chain_id:
+        description: Supported non-Arbitrum source chain ID
+        required: true
+        type: string
+      auth_method:
+        description: Interactive Magic login method for the disposable acceptance account
+        required: true
+        default: google
+        type: choice
+        options:
+          - google
+          - email_otp
+      enable_bootstrap_sponsor:
+        description: Enable the allowlisted one-time bootstrap sponsor for this run
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: live-compatibility-demo-mainnet
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Tiny guarded Magic/Particle/Arbitrum acceptance
+    if: inputs.confirmation == 'I_ACKNOWLEDGE_TINY_ARBITRUM_MAINNET_SPEND'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: demo-mainnet
+    env:
+      CI: "true"
+      APP_ENV: demo-mainnet
+      NEXT_PUBLIC_APP_ENV: demo-mainnet
+      NEXT_PUBLIC_APP_ORIGIN: ${{ vars.NEXT_PUBLIC_APP_ORIGIN }}
+      LOG_LEVEL: info
+      PROVIDER_MODE: live
+      DETERMINISTIC_DEMO_ENABLED: "false"
+      PAYMENTS_ENABLED: "true"
+      PARTICLE_LIVE_ENABLED: "true"
+      BOOTSTRAP_SPONSOR_ENABLED: ${{ inputs.enable_bootstrap_sponsor && 'true' || 'false' }}
+      BOOTSTRAP_SPONSOR_ALLOWLIST_ONLY: "true"
+      JUDGE_MODE_ENABLED: "true"
+      MERCHANT_MUTATIONS_ENABLED: "false"
+      REFUNDS_ENABLED: "false"
+      WITHDRAWALS_ENABLED: "false"
+      SPLITS_ENABLED: "false"
+      INDEXER_ENABLED: "true"
+      INDEXER_WRITES_ENABLED: "true"
+      NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_PARTICLE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_PARTICLE_PROJECT_ID }}
+      NEXT_PUBLIC_PARTICLE_CLIENT_KEY: ${{ vars.NEXT_PUBLIC_PARTICLE_CLIENT_KEY }}
+      NEXT_PUBLIC_PARTICLE_APP_UUID: ${{ vars.NEXT_PUBLIC_PARTICLE_APP_UUID }}
+      PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS: ${{ vars.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS }}
+      PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH: ${{ vars.PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH }}
+      PARTICLE_RESPONSE_PROFILE_ID: ${{ vars.PARTICLE_RESPONSE_PROFILE_ID }}
+      PARTICLE_RESPONSE_PROFILE_PROVENANCE: recorded_live
+      PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST: ${{ vars.PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST }}
+      PARTICLE_AUTH_FIXTURE_DIGEST: ${{ vars.PARTICLE_AUTH_FIXTURE_DIGEST }}
+      PARTICLE_SUBMISSION_FIXTURE_DIGEST: ${{ vars.PARTICLE_SUBMISSION_FIXTURE_DIGEST }}
+      PARTICLE_STATUS_FIXTURE_DIGEST: ${{ vars.PARTICLE_STATUS_FIXTURE_DIGEST }}
+      PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET: ${{ vars.PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET }}
+      PARTICLE_DELEGATION_PLAN_TTL_SECONDS: ${{ vars.PARTICLE_DELEGATION_PLAN_TTL_SECONDS }}
+      PARTICLE_ALLOWED_SOURCE_CHAIN_IDS: ${{ vars.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS }}
+      PARTICLE_ALLOWED_SOURCE_ASSETS: ${{ vars.PARTICLE_ALLOWED_SOURCE_ASSETS }}
+      PARTICLE_ALLOWED_SOURCE_TOKENS: ${{ vars.PARTICLE_ALLOWED_SOURCE_TOKENS }}
+      PARTICLE_SOURCE_CALL_PROFILES_JSON: ${{ vars.PARTICLE_SOURCE_CALL_PROFILES_JSON }}
+      PRODUCT_MEDIA_ALLOWED_ORIGINS: ${{ vars.PRODUCT_MEDIA_ALLOWED_ORIGINS }}
+      NEXT_PUBLIC_ARBITRUM_CHAIN_ID: "42161"
+      NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL: ${{ vars.NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL }}
+      NEXT_PUBLIC_USDC_ADDRESS: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+      NEXT_PUBLIC_CHECKOUT_ADDRESS: ${{ vars.NEXT_PUBLIC_CHECKOUT_ADDRESS }}
+      NEXT_PUBLIC_PASS_ADDRESS: ${{ vars.NEXT_PUBLIC_PASS_ADDRESS }}
+      NEXT_PUBLIC_SPLIT_ADDRESS: ${{ vars.NEXT_PUBLIC_SPLIT_ADDRESS }}
+      NEXT_PUBLIC_EXPLORER_BASE_URL: https://arbiscan.io
+      CONFIRMATION_DEPTH: ${{ vars.CONFIRMATION_DEPTH }}
+      REORG_WINDOW_BLOCKS: ${{ vars.REORG_WINDOW_BLOCKS }}
+      INDEXER_DEPLOYMENT_BLOCK: ${{ vars.INDEXER_DEPLOYMENT_BLOCK }}
+      PLATFORM_FEE_BPS: ${{ vars.PLATFORM_FEE_BPS }}
+      ORDER_SIGNER_MODE: ${{ vars.ORDER_SIGNER_MODE }}
+      ORDER_SIGNER_ADDRESS: ${{ vars.ORDER_SIGNER_ADDRESS }}
+      AWS_KMS_REGION: ${{ vars.AWS_KMS_REGION }}
+      VERCEL_AWS_ROLE_ARN: ${{ vars.VERCEL_AWS_ROLE_ARN }}
+      SPLIT_SIGNER_MODE: disabled
+      SPONSOR_SIGNER_MODE: ${{ inputs.enable_bootstrap_sponsor && vars.SPONSOR_SIGNER_MODE || 'disabled' }}
+      SPONSOR_SIGNER_ADDRESS: ${{ inputs.enable_bootstrap_sponsor && vars.SPONSOR_SIGNER_ADDRESS || '' }}
+      SPONSOR_MAX_FEE_PER_GAS_WEI: ${{ vars.SPONSOR_MAX_FEE_PER_GAS_WEI || '0' }}
+      SPONSOR_MIN_GRANT_WEI: ${{ vars.SPONSOR_MIN_GRANT_WEI || '0' }}
+      SPONSOR_TARGET_BALANCE_WEI: ${{ vars.SPONSOR_TARGET_BALANCE_WEI || '0' }}
+      SPONSOR_PER_GRANT_CAP_WEI: ${{ vars.SPONSOR_PER_GRANT_CAP_WEI || '0' }}
+      SPONSOR_PER_ADDRESS_DAILY_CAP_WEI: ${{ vars.SPONSOR_PER_ADDRESS_DAILY_CAP_WEI || '0' }}
+      SPONSOR_PER_USER_DAILY_CAP_WEI: ${{ vars.SPONSOR_PER_USER_DAILY_CAP_WEI || '0' }}
+      SPONSOR_PER_IP_DAILY_CAP_WEI: ${{ vars.SPONSOR_PER_IP_DAILY_CAP_WEI || '0' }}
+      SPONSOR_PER_DEVICE_DAILY_CAP_WEI: ${{ vars.SPONSOR_PER_DEVICE_DAILY_CAP_WEI || '0' }}
+      SPONSOR_GLOBAL_DAILY_CAP_WEI: ${{ vars.SPONSOR_GLOBAL_DAILY_CAP_WEI || '0' }}
+      SPONSOR_LOW_BALANCE_ALERT_WEI: ${{ vars.SPONSOR_LOW_BALANCE_ALERT_WEI || '0' }}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+      RUN_TINY_LIVE_TESTS: "true"
+      LIVE_TRANSACTION_CONFIRMATION: I_ACKNOWLEDGE_TINY_ARBITRUM_MAINNET_SPEND
+      LIVE_ACCEPTANCE_SOURCE_CHAIN_ID: ${{ inputs.source_chain_id }}
+      LIVE_ACCEPTANCE_MAX_USDC_BASE_UNITS: ${{ inputs.max_usdc_base_units }}
+      LIVE_ACCEPTANCE_PRODUCT_ID: ${{ vars.LIVE_ACCEPTANCE_PRODUCT_ID }}
+      LIVE_ACCEPTANCE_AUTH_METHOD: ${{ inputs.auth_method }}
+      LIVE_ACCEPTANCE_CDP_URL: ${{ vars.LIVE_ACCEPTANCE_CDP_URL }}
+      LIVE_ACCEPTANCE_DRIVER_MODULE: ${{ vars.LIVE_ACCEPTANCE_DRIVER_MODULE }}
+    steps:
+      - name: Check out fixed source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install pnpm 9.15.1
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 9.15.1
+      - name: Install Node 25.0.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 25.0.0
+          cache: pnpm
+      - name: Verify exact toolchain
+        run: |
+          test "$(node --version)" = "v25.0.0"
+          test "$(pnpm --version)" = "9.15.1"
+      - run: pnpm install --frozen-lockfile
+      - name: Fail closed on incomplete live configuration
+        run: pnpm env:check
+        env: &live-secrets
+          MAGIC_SECRET_KEY: ${{ secrets.MAGIC_SECRET_KEY }}
+          MAGIC_CLIENT_ID: ${{ secrets.MAGIC_CLIENT_ID }}
+          PARTICLE_RPC_URL: ${{ secrets.PARTICLE_RPC_URL }}
+          ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
+          ARBITRUM_FALLBACK_RPC_URL: ${{ secrets.ARBITRUM_FALLBACK_RPC_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_EVIDENCE_WRITER: ${{ secrets.DATABASE_URL_EVIDENCE_WRITER }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          SESSION_HASH_PEPPER: ${{ secrets.SESSION_HASH_PEPPER }}
+          CSRF_SECRET: ${{ secrets.CSRF_SECRET }}
+          CAPABILITY_TOKEN_PEPPER: ${{ secrets.CAPABILITY_TOKEN_PEPPER }}
+          PRIVACY_SUBJECT_HASH_SECRET: ${{ secrets.PRIVACY_SUBJECT_HASH_SECRET }}
+          JUDGE_SHARE_TOKEN_SECRET: ${{ secrets.JUDGE_SHARE_TOKEN_SECRET }}
+          LIVE_ACCEPTANCE_ATTESTATION_SECRET: ${{ secrets.LIVE_ACCEPTANCE_ATTESTATION_SECRET }}
+          ORDER_SIGNER_KMS_KEY_ID: ${{ secrets.ORDER_SIGNER_KMS_KEY_ID }}
+          SPONSOR_KMS_KEY_ID: ${{ inputs.enable_bootstrap_sponsor && secrets.SPONSOR_KMS_KEY_ID || '' }}
+          SPONSOR_ALLOWED_ADDRESSES: ${{ secrets.SPONSOR_ALLOWED_ADDRESSES }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          LIVE_ACCEPTANCE_EMAIL: ${{ inputs.auth_method == 'email_otp' && secrets.LIVE_ACCEPTANCE_EMAIL || '' }}
+      - name: Obtain short-lived managed-signer credentials
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_KMS_REGION }}
+          role-session-name: opentab-live-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: Run only the guarded tiny-value acceptance harness
+        run: pnpm --filter @opentab/cross-chain-checkout-spike test:live
+        env: *live-secrets
+      - name: Upload sanitized live evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: live-compatibility-${{ github.sha }}
+          path: |
+            artifacts/autonomous-build/evidence/live-acceptance*.json
+            evidence/live-spike/*.json
+          if-no-files-found: warn
+          retention-days: 30

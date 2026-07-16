@@ -1,0 +1,31 @@
+{
+  "name": "@opentab/cross-chain-checkout-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src tests --no-errors-on-unmatched",
+    "evidence:promote": "tsx src/promote-evidence-cli.ts",
+    "evidence:retire": "tsx src/retire-completion-cli.ts",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests",
+    "test:live": "vitest run --config vitest.live.config.ts --passWithNoTests"
+  },
+  "dependencies": {
+    "@opentab/integrations": "workspace:*",
+    "@opentab/shared": "workspace:*",
+    "postgres": "3.4.9",
+    "viem": "2.55.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "25.9.5",
+    "esbuild": "0.28.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

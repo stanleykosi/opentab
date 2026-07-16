@@ -1,0 +1,5 @@
+GitHub Actions workflows are temporarily disabled because GitHub only discovers
+YAML workflow files inside .github/workflows/.
+
+To reactivate them, move the five .yml files from this directory back into
+.github/workflows/ and commit the change.

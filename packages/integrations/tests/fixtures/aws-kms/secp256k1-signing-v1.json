@@ -1,0 +1,13 @@
+{
+  "profileId": "aws-kms-secp256k1-signing-v1",
+  "provenance": "generated-public-test-vector",
+  "keySpec": "ECC_SECG_P256K1",
+  "keyUsage": "SIGN_VERIFY",
+  "signingAlgorithm": "ECDSA_SHA_256",
+  "resolvedKeyId": "arn:aws:kms:eu-west-1:000000000000:key/fixture-public-only",
+  "spkiBase64": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAExjFzxdXd8hSfPy3P9SFz07bLGrfDfbpVPOeckxcDJVYhMeIfNrfLAd550jMOl/PozT2gC2lWblcpasbH3a3b5A==",
+  "address": "0x673f9446544b59F99B1408852B3AFc176dd70d1D",
+  "digest": "0x1e827a87055d568f43f48ecceff9e4cdc206a3e9400983f1d3a48d42fa786e63",
+  "derLowBase64": "MEUCIQCv+2lcMr+CzaD9Bqc3Zz3nEXh09R3c8mm1WofgmHcVzgIgV8b5V3FjB7F9LM9VD6Dy1scjH+2l1FHUA1p5TOCoWOw=",
+  "derHighBase64": "MEYCIQCv+2lcMr+CzaD9Bqc3Zz3nEXh09R3c8mm1WofgmHcVzgIhAKg5BqiOnPhOgtMwqvBfDSfzi7z5CXROZ7x35T/vjehV"
+}

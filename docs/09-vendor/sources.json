@@ -1,0 +1,132 @@
+{
+  "generatedAt": "2026-07-14",
+  "policy": "official-primary-sources-only",
+  "sources": [
+    {
+      "vendor": "Particle Network",
+      "title": "Developer docs",
+      "url": "https://developers.particle.network/",
+      "purpose": "root documentation"
+    },
+    {
+      "vendor": "Particle Network",
+      "title": "Universal Accounts overview",
+      "url": "https://developers.particle.network/universal-accounts/overview",
+      "purpose": "concepts"
+    },
+    {
+      "vendor": "Particle Network",
+      "title": "Web quickstart",
+      "url": "https://developers.particle.network/universal-accounts/web-quickstart",
+      "purpose": "SDK flow"
+    },
+    {
+      "vendor": "Particle Network",
+      "title": "EIP-7702 wallets",
+      "url": "https://developers.particle.network/universal-accounts/ua-reference/web/eip7702-wallets",
+      "purpose": "authorization/delegation"
+    },
+    {
+      "vendor": "Particle Network",
+      "title": "Supported chains",
+      "url": "https://developers.particle.network/universal-accounts/chains",
+      "purpose": "chain/token support"
+    },
+    {
+      "vendor": "Magic",
+      "title": "Embedded wallets",
+      "url": "https://docs.magic.link/embedded-wallets/introduction",
+      "purpose": "wallet/auth overview"
+    },
+    {
+      "vendor": "Magic",
+      "title": "EIP-7702",
+      "url": "https://docs.magic.link/embedded-wallets/wallets/features/eip-7702",
+      "purpose": "authorization/type-4 methods"
+    },
+    {
+      "vendor": "Magic",
+      "title": "Node Admin SDK",
+      "url": "https://docs.magic.link/embedded-wallets/sdk/server-side-sdks/node",
+      "purpose": "DID/server verification"
+    },
+    {
+      "vendor": "AWS",
+      "title": "KMS GetPublicKey SDK reference",
+      "url": "https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-kms/Interface/GetPublicKeyCommandOutput",
+      "purpose": "SPKI key metadata and address verification"
+    },
+    {
+      "vendor": "AWS",
+      "title": "KMS Sign SDK reference",
+      "url": "https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-kms/Class/SignCommand/",
+      "purpose": "digest signing and DER signature response"
+    },
+    {
+      "vendor": "AWS",
+      "title": "KMS asymmetric key specs",
+      "url": "https://docs.aws.amazon.com/kms/latest/developerguide/symm-asymm-choose-key-spec.html",
+      "purpose": "ECC_SECG_P256K1 and ECDSA_SHA_256 compatibility"
+    },
+    {
+      "vendor": "Arbitrum",
+      "title": "Developer docs",
+      "url": "https://docs.arbitrum.io/",
+      "purpose": "network/build/deploy"
+    },
+    {
+      "vendor": "Circle",
+      "title": "USDC contract addresses",
+      "url": "https://developers.circle.com/stablecoins/usdc-contract-addresses",
+      "purpose": "native USDC addresses"
+    },
+    {
+      "vendor": "OpenZeppelin",
+      "title": "Contracts docs",
+      "url": "https://docs.openzeppelin.com/contracts/",
+      "purpose": "secure primitives"
+    },
+    {
+      "vendor": "Foundry",
+      "title": "Foundry Book",
+      "url": "https://book.getfoundry.sh/",
+      "purpose": "contract tooling"
+    },
+    {
+      "vendor": "OpenAI",
+      "title": "Codex docs",
+      "url": "https://developers.openai.com/codex/",
+      "purpose": "agent repository setup"
+    },
+    {
+      "vendor": "Arbitrum",
+      "title": "ArbOS 51 Dia",
+      "url": "https://docs.arbitrum.io/run-arbitrum-node/arbos-releases/arbos51",
+      "purpose": "current EIP-7702 behavior and network release baseline"
+    },
+    {
+      "vendor": "Arbitrum",
+      "title": "ArbOS 40 Callisto",
+      "url": "https://docs.arbitrum.io/run-arbitrum-node/arbos-releases/arbos40",
+      "purpose": "Prague and EIP-7702 introduction"
+    },
+    {
+      "vendor": "Solidity",
+      "title": "Solidity 0.8.36 release",
+      "url": "https://www.soliditylang.org/blog/2026/07/09/solidity-0.8.36-release-announcement/",
+      "purpose": "compiler security fixes and version pin"
+    },
+    {
+      "vendor": "Foundry",
+      "title": "Foundry v1.7.1 release",
+      "url": "https://github.com/foundry-rs/foundry/releases/tag/v1.7.1",
+      "purpose": "pinned contract toolchain"
+    },
+    {
+      "vendor": "Slither",
+      "title": "Slither 0.11.5 release",
+      "url": "https://github.com/crytic/slither/releases/tag/0.11.5",
+      "purpose": "pinned Solidity static-analysis toolchain"
+    }
+  ]
+}

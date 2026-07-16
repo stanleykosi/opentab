@@ -1,0 +1,1499 @@
+openapi: 3.1.0
+info:
+  title: OpenTab API
+  version: 1.0.0-rc.1
+  description: >-
+    Release-candidate API for walletless checkout, secure Magic sessions, Particle UA workflows,
+    Arbitrum settlement projections, merchant operations, and public-safe judge evidence.
+  license:
+    name: UNLICENSED
+servers:
+  - url: https://opentab.example/api/v1
+    description: Production deployment origin (replace the example host during deployment)
+  - url: http://localhost:3000/api/v1
+    description: Local
+security:
+  - sessionCookie: []
+tags:
+  - name: Auth
+  - name: Public
+  - name: Checkout
+  - name: Wallet
+  - name: Orders
+  - name: Merchant
+  - name: Judge
+paths:
+  /auth/session:
+    post:
+      tags: [Auth]
+      summary: Exchange a short-lived Magic DID token for an OpenTab session
+      security: []
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '200':
+          description: Session created; Secure HttpOnly cookie is set
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      tags: [Auth]
+      summary: Revoke the current OpenTab session
+      operationId: deleteSession
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204': { description: Revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /me:
+    get:
+      tags: [Auth]
+      summary: Current user and safe feature context
+      operationId: getMe
+      responses:
+        '200':
+          description: Authenticated identity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /merchants/{merchantSlug}:
+    get:
+      tags: [Public]
+      security: []
+      summary: Public merchant storefront
+      operationId: getMerchantStorefront
+      parameters:
+        - name: merchantSlug
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Slug' }
+      responses:
+        '200':
+          description: Storefront
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MerchantStorefront' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /products/{productId}:
+    get:
+      tags: [Public]
+      security: []
+      summary: Public product and fresh availability
+      operationId: getProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /checkout-sessions:
+    post:
+      tags: [Checkout]
+      security: []
+      summary: Create an expiring server-authoritative checkout session
+      operationId: createCheckoutSession
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCheckoutSessionRequest' }
+      responses:
+        '201':
+          description: Checkout session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutSession' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /checkout-sessions/{checkoutSessionId}:
+    get:
+      tags: [Checkout]
+      security: []
+      summary: Retrieve safe checkout/workflow state
+      operationId: getCheckoutSession
+      parameters:
+        - $ref: '#/components/parameters/CheckoutSessionId'
+        - $ref: '#/components/parameters/CheckoutCapability'
+      responses:
+        '200':
+          description: Checkout state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutSession' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /checkout-sessions/{checkoutSessionId}/bind:
+    post:
+      tags: [Checkout]
+      summary: Bind an authenticated Magic EOA to a checkout
+      operationId: bindCheckoutSession
+      parameters:
+        - $ref: '#/components/parameters/CheckoutSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BindCheckoutRequest' }
+      responses:
+        '200':
+          description: Bound checkout
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /checkout-sessions/{checkoutSessionId}/payment-attempts:
+    post:
+      tags: [Checkout]
+      summary: Create a server-bound payment attempt
+      operationId: createPaymentAttempt
+      parameters:
+        - $ref: '#/components/parameters/CheckoutSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '201':
+          description: Exact checkout binding for verified Particle preparation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentAttemptPreparation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /payment-attempts/{paymentAttemptId}/prepared:
+    post:
+      tags: [Checkout]
+      summary: Persist and verify a sanitized Particle preview digest
+      operationId: recordPreparedPayment
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreparedPaymentRecord' }
+      responses:
+        '200':
+          description: Prepared attempt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentAttempt' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /payment-attempts/{paymentAttemptId}/submission:
+    post:
+      tags: [Checkout]
+      summary: Attach the Particle transaction ID after one submission
+      description: >-
+        This crosses an irreversible boundary. A timeout/conflict must be reconciled before any
+        new payment is allowed. Signatures are not accepted or persisted by this endpoint.
+      operationId: recordPaymentSubmission
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentSubmissionRequest' }
+      responses:
+        '200':
+          description: Submitted attempt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentAttempt' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /payment-attempts/{paymentAttemptId}:
+    get:
+      tags: [Checkout]
+      summary: Normalized Particle/Arbitrum workflow state
+      operationId: getPaymentAttempt
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+      responses:
+        '200':
+          description: Payment workflow
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentAttempt' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /wallet/readiness:
+    get:
+      tags: [Wallet]
+      summary: Safe Magic/UA/delegation/balance readiness
+      operationId: getWalletReadiness
+      responses:
+        '200':
+          description: Readiness
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletReadiness' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /wallet/delegation-evidence:
+    post:
+      tags: [Wallet]
+      summary: Verify and store confirmed Arbitrum delegation evidence
+      description: Requires one canonical Arbitrum EIP-7702 Type-4 authorization whose transaction sender and recovered authority are the authenticated Magic EOA, whose chain is 42161, and whose delegate/code hash match trusted configuration. The supplied plan digest is only a bound input to a new server-derived proof digest.
+      operationId: recordDelegationEvidence
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DelegationEvidenceRequest' }
+      responses:
+        '200':
+          description: Verified readiness
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletReadiness' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /wallet/bootstrap-gas/eligibility:
+    post:
+      tags: [Wallet]
+      summary: Evaluate narrow first-delegation gas eligibility
+      operationId: evaluateBootstrapGas
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200':
+          description: Decision without private risk internals
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BootstrapEligibility' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /wallet/bootstrap-gas/grants:
+    post:
+      tags: [Wallet]
+      summary: Create an exact capped native-gas grant to the authenticated EOA
+      operationId: createBootstrapGrant
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                challengeToken: { type: string, maxLength: 4096 }
+      responses:
+        '201':
+          description: Grant workflow
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BootstrapGrant' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /wallet/bootstrap-gas/grants/{grantId}:
+    get:
+      tags: [Wallet]
+      summary: Get own bootstrap grant status
+      operationId: getBootstrapGrant
+      parameters:
+        - name: grantId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ResourceId' }
+      responses:
+        '200':
+          description: Grant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BootstrapGrant' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Customer/merchant-authorized receipt
+      operationId: getOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Confirmed or pending order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /merchant/summary:
+    get:
+      tags: [Merchant]
+      summary: Confirmed merchant dashboard summary
+      operationId: getMerchantSummary
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MerchantSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /merchant/orders:
+    get:
+      tags: [Merchant]
+      summary: Cursor-paginated merchant orders
+      operationId: listMerchantOrders
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OrderStatus' }
+      responses:
+        '200':
+          description: Orders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageInfo'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Order' }
+  /merchant/products:
+    get:
+      tags: [Merchant]
+      summary: Merchant products
+      operationId: listMerchantProducts
+      responses:
+        '200':
+          description: Products
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Product' } }
+    post:
+      tags: [Merchant]
+      summary: Begin an authorized onchain product-creation workflow
+      operationId: createMerchantProduct
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProductRequest' }
+      responses:
+        '202':
+          description: Product workflow accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /merchant/orders/{orderId}/refunds:
+    post:
+      tags: [Merchant]
+      summary: Begin a merchant-authorized contract refund
+      operationId: refundOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amountBaseUnits]
+              properties:
+                amountBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+      responses:
+        '202':
+          description: Refund workflow
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /judge/orders/{orderId}/proof:
+    get:
+      tags: [Judge]
+      security: []
+      summary: Public-safe technical proof for one order
+      operationId: getJudgeProof
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/JudgeCapability'
+      responses:
+        '200':
+          description: Redacted evidence
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JudgeProofResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /health:
+    get:
+      tags: [Public]
+      security: []
+      summary: Process liveness health
+      operationId: getHealth
+      responses:
+        '200': { description: Healthy, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /ready:
+    get:
+      tags: [Public]
+      security: []
+      summary: Database and Redis readiness
+      operationId: getReadiness
+      responses:
+        '200': { description: Ready, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /config/public:
+    get:
+      tags: [Public]
+      security: []
+      summary: Public-safe client configuration and feature flags
+      operationId: getPublicConfig
+      responses:
+        '200': { description: Public configuration, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /auth/continuations:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Issue a short-lived OAuth continuation cookie
+      operationId: createAuthContinuation
+      responses:
+        '200': { description: Continuation issued, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/session/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate an authenticated application session
+      operationId: refreshSession
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Rotated session, content: { application/json: { schema: { $ref: '#/components/schemas/SessionResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current authenticated user
+      operationId: getAuthenticatedUser
+      responses:
+        '200': { description: Current user, content: { application/json: { schema: { $ref: '#/components/schemas/MeResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /account/orders:
+    get:
+      tags: [Orders]
+      summary: Cursor-paginated customer order history
+      operationId: listCustomerOrders
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Customer orders, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /checkout-links/{reference}:
+    get:
+      tags: [Checkout]
+      security: []
+      summary: Resolve a bounded checkout capability
+      operationId: getCheckoutLink
+      parameters:
+        - $ref: '#/components/parameters/Reference'
+      responses:
+        '200': { description: Checkout link, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /checkout-sessions/{checkoutSessionId}/quote-refresh:
+    post:
+      tags: [Checkout]
+      summary: Refresh an unsubmitted checkout preview
+      description: >-
+        Returns a constrained, non-spending policy preview when Particle live
+        reads are enabled. With payments disabled it never includes a signed
+        order intent, authorized operation plan, signature, or submit-capable
+        calldata.
+      operationId: refreshCheckoutQuote
+      parameters:
+        - $ref: '#/components/parameters/CheckoutSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Protected checkout preview, content: { application/json: { schema: { $ref: '#/components/schemas/CheckoutQuoteRefreshResponse' } } } }
+  /payment-attempts/{paymentAttemptId}/submission/start:
+    post:
+      tags: [Checkout]
+      summary: Persist the irreversible submission boundary before provider broadcast
+      operationId: startPaymentSubmission
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Submission started, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentAttempt' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /payment-attempts/{paymentAttemptId}/recovery:
+    get:
+      tags: [Checkout]
+      summary: Recover persisted payment workflow state
+      operationId: getPaymentRecovery
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+      responses:
+        '200': { description: Recovery state, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentAttempt' } } } }
+    post:
+      tags: [Checkout]
+      summary: Request bounded server reconciliation
+      operationId: recoverPaymentAttempt
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Reconciled state, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentAttempt' } } } }
+  /contract-operations/{operationId}:
+    get:
+      tags: [Checkout]
+      summary: Recover a server-bound contract operation
+      operationId: getContractOperation
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200': { description: Contract operation, content: { application/json: { schema: { $ref: '#/components/schemas/ContractOperation' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /contract-operations/{operationId}/submission:
+    post:
+      tags: [Checkout]
+      summary: Persist monotonic browser-owned operation submission state
+      operationId: registerContractOperationSubmission
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Persisted operation, content: { application/json: { schema: { $ref: '#/components/schemas/ContractOperation' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /wallet/balance:
+    get:
+      tags: [Wallet]
+      summary: Unified spendable balance and exact source breakdown
+      operationId: getWalletBalance
+      responses:
+        '200': { description: Unified balance, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/membership:
+    get:
+      tags: [Merchant]
+      summary: Current merchant memberships and roles
+      operationId: getMerchantMembership
+      responses:
+        '200': { description: Memberships, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/onboarding:
+    post:
+      tags: [Merchant]
+      summary: Begin server-verified merchant onboarding
+      operationId: onboardMerchant
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Onboarding status, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/profile:
+    get:
+      tags: [Merchant]
+      summary: Current merchant profile and canonical sync state
+      operationId: getMerchantProfile
+      responses:
+        '200': { description: Merchant profile, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+    post:
+      tags: [Merchant]
+      summary: Create a merchant and exact contract registration operation
+      operationId: createMerchantProfile
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '202': { description: Merchant registration prepared, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+    patch:
+      tags: [Merchant]
+      summary: Update profile fields or prepare an owner-bound payout operation
+      operationId: updateMerchantProfile
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Merchant profile updated, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/products/{productId}:
+    get:
+      tags: [Merchant]
+      summary: Product revision, optimistic version, and operation recovery
+      operationId: getMerchantProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200': { description: Merchant product, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+    patch:
+      tags: [Merchant]
+      summary: Prepare an exact canonical product update
+      operationId: updateMerchantProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '200': { description: Product update prepared, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/products/{productId}/publish:
+    post:
+      tags: [Merchant]
+      summary: Prepare canonical product activation
+      operationId: publishMerchantProduct
+      parameters: [{ $ref: '#/components/parameters/ProductId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Activation prepared, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/products/{productId}/pause:
+    post:
+      tags: [Merchant]
+      summary: Prepare canonical product pause
+      operationId: pauseMerchantProduct
+      parameters: [{ $ref: '#/components/parameters/ProductId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Pause prepared, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/products/{productId}/archive:
+    post:
+      tags: [Merchant]
+      summary: Prepare product archival
+      operationId: archiveMerchantProduct
+      parameters: [{ $ref: '#/components/parameters/ProductId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Archive prepared, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/checkout-links:
+    post:
+      tags: [Merchant]
+      summary: Create a shareable bounded checkout link
+      operationId: createMerchantCheckoutLink
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '201': { description: Checkout link, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/settlement:
+    get:
+      tags: [Merchant]
+      summary: Exact canonical settlement and pending withdrawal state
+      operationId: getMerchantSettlement
+      responses:
+        '200': { description: Settlement, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/withdrawals:
+    post:
+      tags: [Merchant]
+      summary: Prepare an exact merchant withdrawal operation
+      operationId: prepareMerchantWithdrawal
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '202': { description: Withdrawal prepared, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /withdrawals/{withdrawalId}:
+    get:
+      tags: [Merchant]
+      summary: Recover withdrawal and canonical operation state
+      operationId: getWithdrawal
+      parameters: [{ $ref: '#/components/parameters/WithdrawalId' }]
+      responses:
+        '200': { description: Withdrawal state, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /withdrawals/{withdrawalId}/submission:
+    post:
+      tags: [Merchant]
+      summary: Persist withdrawal submission state
+      operationId: registerWithdrawalSubmission
+      parameters: [{ $ref: '#/components/parameters/WithdrawalId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Withdrawal submission, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /refunds/{refundId}:
+    get:
+      tags: [Merchant]
+      summary: Recover refund and canonical operation state
+      operationId: getRefund
+      parameters: [{ $ref: '#/components/parameters/RefundId' }]
+      responses:
+        '200': { description: Refund state, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /refunds/{refundId}/submission:
+    post:
+      tags: [Merchant]
+      summary: Persist refund submission state
+      operationId: registerRefundSubmission
+      parameters: [{ $ref: '#/components/parameters/RefundId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Refund submission, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/loyalty:
+    get:
+      tags: [Merchant]
+      summary: Merchant loyalty configuration
+      operationId: getMerchantLoyalty
+      responses:
+        '200': { description: Loyalty configuration, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+    patch:
+      tags: [Merchant]
+      summary: Update threshold-based contract-authoritative loyalty
+      operationId: updateMerchantLoyalty
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Loyalty configuration updated, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /loyalty/status:
+    get:
+      tags: [Orders]
+      summary: Authenticated loyalty awards and balances
+      operationId: getLoyaltyStatus
+      responses:
+        '200': { description: Loyalty status, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /orders/{orderId}/splits:
+    post:
+      tags: [Orders]
+      summary: Create an immutable reimbursement split for a confirmed order
+      operationId: createSplit
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '201': { description: Split created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /splits/{splitId}/invitations:
+    post:
+      tags: [Orders]
+      summary: Issue private expiring split invitations
+      operationId: createSplitInvitations
+      parameters: [{ $ref: '#/components/parameters/SplitId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '201': { description: Invitations issued, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /splits/{splitId}/payment-attempts:
+    post:
+      tags: [Orders]
+      summary: Prepare a signed exact split reimbursement operation
+      operationId: prepareSplitPayment
+      parameters: [{ $ref: '#/components/parameters/SplitId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '202': { description: Split payment prepared, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /splits/{splitId}/revoke:
+    post:
+      tags: [Orders]
+      summary: Revoke unissued links immediately or submit managed canonical key revocations
+      operationId: revokeSplit
+      parameters: [{ $ref: '#/components/parameters/SplitId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Revoked or canonically reconciling, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /split-links/{reference}:
+    get:
+      tags: [Public]
+      security: []
+      summary: Resolve a private split capability without exposing personal email
+      operationId: getSplitLink
+      parameters: [{ $ref: '#/components/parameters/Reference' }]
+      responses:
+        '200': { description: Split invitation, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /split-payment-attempts/{splitPaymentAttemptId}:
+    get:
+      tags: [Orders]
+      summary: Recover split payment state
+      operationId: getSplitPaymentAttempt
+      parameters: [{ $ref: '#/components/parameters/SplitPaymentAttemptId' }]
+      responses:
+        '200': { description: Split payment, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /split-payment-attempts/{splitPaymentAttemptId}/submission:
+    post:
+      tags: [Orders]
+      summary: Persist split reimbursement provider submission
+      operationId: registerSplitPaymentSubmission
+      parameters: [{ $ref: '#/components/parameters/SplitPaymentAttemptId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Split payment submission, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /receipts/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Authenticated receipt/pass lookup
+      operationId: getReceipt
+      parameters: [{ $ref: '#/components/parameters/OrderId' }]
+      responses:
+        '200': { description: Receipt/pass, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchant/orders/{orderId}/judge-evidence:
+    post:
+      tags: [Judge]
+      summary: Materialize public-safe canonical Judge evidence
+      operationId: materializeJudgeEvidence
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '201': { description: Unpublished evidence, content: { application/json: { schema: { $ref: '#/components/schemas/JudgeMaterializationResponse' } } } }
+    patch:
+      tags: [Judge]
+      summary: Publish protected or unprotected Judge evidence
+      operationId: publishJudgeEvidence
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Evidence published, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+    delete:
+      tags: [Judge]
+      summary: Revoke published Judge evidence and its capability
+      operationId: revokeJudgeEvidence
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/CsrfToken' }]
+      responses:
+        '200': { description: Evidence revoked, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+  /merchants/{merchantSlug}/products/{productSlug}:
+    get:
+      tags: [Public]
+      security: []
+      summary: Resolve a public product by merchant and product slug
+      operationId: getProductBySlugs
+      parameters:
+        - $ref: '#/components/parameters/MerchantSlug'
+        - $ref: '#/components/parameters/ProductSlug'
+      responses:
+        '200': { description: Public product, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /metadata/products/{productId}:
+    get:
+      tags: [Public]
+      security: []
+      summary: Canonical hash-bound receipt/pass metadata JSON
+      operationId: getProductPassMetadata
+      parameters: [{ $ref: '#/components/parameters/ProductId' }]
+      responses:
+        '200': { description: Exact metadata body, content: { application/json: { schema: { $ref: '#/components/schemas/ApiObject' } } } }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-opentab_session
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 128 }
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 512 }
+    CheckoutCapability:
+      name: X-Checkout-Capability
+      in: header
+      required: false
+      schema: { type: string, minLength: 16, maxLength: 256 }
+    JudgeCapability:
+      name: X-OpenTab-Judge-Token
+      in: header
+      required: false
+      description: Optional private share capability; every query string is rejected on this endpoint.
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
+        pattern: '^[A-Za-z0-9_-]+$'
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    CheckoutSessionId:
+      name: checkoutSessionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    PaymentAttemptId:
+      name: paymentAttemptId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^cop_[0-9A-HJKMNP-TV-Z]{26}$' }
+    RefundId:
+      name: refundId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    WithdrawalId:
+      name: withdrawalId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    SplitId:
+      name: splitId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ResourceId' }
+    SplitPaymentAttemptId:
+      name: splitPaymentAttemptId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Reference:
+      name: reference
+      in: path
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 401 }
+    MerchantSlug:
+      name: merchantSlug
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Slug' }
+    ProductSlug:
+      name: productSlug
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Slug' }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+  responses:
+    BadRequest:
+      description: Invalid request shape
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Unauthorized:
+      description: Missing, invalid, expired, or revoked session/auth proof
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Forbidden:
+      description: Authenticated but not permitted
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    NotFound:
+      description: Resource not found or not visible
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Conflict:
+      description: State or idempotency conflict
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Unprocessable:
+      description: Domain-valid request cannot execute
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    RateLimited:
+      description: Rate limited
+      headers:
+        Retry-After: { schema: { type: integer, minimum: 1 } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Unavailable:
+      description: Required database, Redis, provider, or indexer dependency is unavailable
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+  schemas:
+    ApiObject:
+      type: object
+      description: A route-specific JSON object; concrete financial objects use the schemas below.
+      additionalProperties: true
+    CheckoutQuoteRefreshResponse:
+      type: object
+      additionalProperties: false
+      required: [checkoutSessionId, refreshVersion, expiresAt, protectedPreview, requestId]
+      properties:
+        checkoutSessionId: { $ref: '#/components/schemas/ResourceId' }
+        refreshVersion: { type: string, minLength: 1, maxLength: 128 }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+        protectedPreview: { $ref: '#/components/schemas/ProtectedCheckoutPreview' }
+        requestId: { type: string, pattern: '^req_[0-9a-fA-F-]{36}$' }
+    ProtectedCheckoutPreview:
+      type: object
+      additionalProperties: false
+      required: [kind, providerMode, particleLiveEnabled, eip7702, destinationChainId, destinationContract, tokenAddress, maxSlippageBps, maxFeeUsdMicros, allowedSourceChainIds, allowedSourceAssets, signedOrderIntentIssued, operationPlanAuthorized, submissionAuthorized, submissionEndpointEnabled]
+      properties:
+        kind: { type: string, const: non_spending_policy_preview }
+        providerMode: { type: string, enum: [deterministic, live] }
+        particleLiveEnabled: { type: boolean }
+        eip7702: { type: boolean, const: true }
+        destinationChainId: { type: string, const: '42161' }
+        destinationContract: { $ref: '#/components/schemas/EvmAddress' }
+        tokenAddress: { $ref: '#/components/schemas/EvmAddress' }
+        maxSlippageBps: { type: integer, minimum: 0, maximum: 10000 }
+        maxFeeUsdMicros: { $ref: '#/components/schemas/BaseUnitAmount' }
+        allowedSourceChainIds:
+          type: array
+          maxItems: 32
+          items: { type: string, pattern: '^[1-9][0-9]*$' }
+        allowedSourceAssets:
+          type: array
+          maxItems: 3
+          items: { type: string, enum: [USDC, USDT, ETH] }
+        signedOrderIntentIssued: { type: boolean, const: false }
+        operationPlanAuthorized: { type: boolean, const: false }
+        submissionAuthorized: { type: boolean, const: false }
+        submissionEndpointEnabled: { type: boolean }
+    ContractOperation:
+      type: object
+      additionalProperties: false
+      required: [id, kind, aggregateType, aggregateId, binding, template, bindingDigest, status, expiresAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, pattern: '^cop_[0-9A-HJKMNP-TV-Z]{26}$' }
+        kind:
+          type: string
+          enum: [merchant_mutation, product_mutation, refund, withdrawal, split_reimbursement, split_revocation]
+        aggregateType:
+          type: string
+          enum: [merchant, product, refund, withdrawal, split_payment, split]
+        aggregateId: { type: string, minLength: 1, maxLength: 128 }
+        binding: { type: object, additionalProperties: true }
+        template:
+          type: object
+          additionalProperties: false
+          required: [kind, ownerAddress, chainId, calls, bindingDigest, expiresAt]
+          properties:
+            kind: { type: string, enum: [checkout, product_mutation, refund, withdrawal, split_reimbursement, split_revocation] }
+            ownerAddress: { $ref: '#/components/schemas/EvmAddress' }
+            chainId: { type: string, const: '42161' }
+            calls:
+              type: array
+              minItems: 1
+              maxItems: 3
+              items:
+                type: object
+                additionalProperties: false
+                required: [to, data, valueWei]
+                properties:
+                  to: { $ref: '#/components/schemas/EvmAddress' }
+                  data: { type: string, pattern: '^0x[a-fA-F0-9]*$' }
+                  valueWei: { $ref: '#/components/schemas/BaseUnitAmount' }
+            bindingDigest: { $ref: '#/components/schemas/Hex32' }
+            expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+        bindingDigest: { $ref: '#/components/schemas/Hex32' }
+        status:
+          type: string
+          enum: [prepared, submission_started, submitted, submitted_unknown, confirming, confirmed, failed, orphaned]
+        providerOperationId: { type: string, minLength: 1, maxLength: 256 }
+        transactionHash: { $ref: '#/components/schemas/TransactionHash' }
+        canonicalEventName: { type: string, minLength: 1, maxLength: 80 }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+        updatedAt: { $ref: '#/components/schemas/IsoDateTime' }
+    ResourceId:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{1,20}_[A-Za-z0-9_-]{10,64}$'
+    Slug:
+      type: string
+      pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+      minLength: 2
+      maxLength: 80
+    EvmAddress:
+      type: string
+      pattern: '^0x[a-fA-F0-9]{40}$'
+    Hex32:
+      type: string
+      pattern: '^0x[a-fA-F0-9]{64}$'
+    TransactionHash:
+      $ref: '#/components/schemas/Hex32'
+    BaseUnitAmount:
+      type: string
+      pattern: '^(0|[1-9][0-9]{0,77})$'
+    DecimalAmount:
+      type: string
+      pattern: '^(0|[1-9][0-9]*)(\\.[0-9]+)?$'
+    IsoDateTime:
+      type: string
+      format: date-time
+    RequestMeta:
+      type: object
+      required: [requestId]
+      properties:
+        requestId: { type: string }
+    ErrorCode:
+      type: string
+      enum:
+        - AUTH_REQUIRED
+        - AUTH_DID_INVALID
+        - SESSION_EXPIRED
+        - CSRF_INVALID
+        - ORIGIN_INVALID
+        - WALLET_ADDRESS_MISMATCH
+        - DELEGATION_STATUS_UNKNOWN
+        - BOOTSTRAP_NOT_ELIGIBLE
+        - BOOTSTRAP_BUDGET_EXHAUSTED
+        - PRODUCT_NOT_FOUND
+        - PRODUCT_INACTIVE
+        - PRODUCT_SOLD_OUT
+        - CHECKOUT_EXPIRED
+        - ORDER_ALREADY_PAID
+        - UA_INSUFFICIENT_BALANCE
+        - UA_ROUTE_UNAVAILABLE
+        - UA_QUOTE_EXPIRED
+        - UA_STATUS_UNKNOWN
+        - RPC_UNAVAILABLE
+        - TX_REVERTED
+        - ORDER_EVENT_NOT_FOUND
+        - RATE_LIMITED
+        - IDEMPOTENCY_CONFLICT
+        - INTERNAL_ERROR
+        - FEATURE_DISABLED
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable, doNotRetryPayment, requestId]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string, maxLength: 500 }
+            retryable: { type: boolean }
+            doNotRetryPayment: { type: boolean }
+            requestId: { type: string }
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [didToken]
+      properties:
+        didToken: { type: string, minLength: 20, maxLength: 16384, writeOnly: true }
+        continuationId: { type: string, maxLength: 128 }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, walletAddress, status]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        walletAddress: { $ref: '#/components/schemas/EvmAddress' }
+        displayEmail: { type: [string, 'null'], maxLength: 320 }
+        status: { type: string, enum: [active, suspended] }
+    SessionResponse:
+      allOf:
+        - $ref: '#/components/schemas/RequestMeta'
+        - type: object
+          required: [user, expiresAt]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+    MeResponse:
+      allOf:
+        - $ref: '#/components/schemas/SessionResponse'
+        - type: object
+          required: [roles, features]
+          properties:
+            roles: { type: array, items: { type: string, enum: [customer, merchant, admin] } }
+            features: { type: object, additionalProperties: { type: boolean } }
+    Merchant:
+      type: object
+      additionalProperties: false
+      required: [id, slug, displayName, payoutAddress, status]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        onchainMerchantId: { type: [string, 'null'], pattern: '^[0-9]+$' }
+        slug: { $ref: '#/components/schemas/Slug' }
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 1000 }
+        supportContact: { type: string, maxLength: 320 }
+        payoutAddress: { $ref: '#/components/schemas/EvmAddress' }
+        status: { type: string, enum: [draft, active, paused, archived] }
+    MerchantStorefront:
+      type: object
+      required: [merchant, products]
+      properties:
+        merchant: { $ref: '#/components/schemas/Merchant' }
+        products: { type: array, items: { $ref: '#/components/schemas/Product' } }
+    ProductStatus:
+      type: string
+      enum: [draft, publishing, active, paused, archived, sold_out, ended]
+    Product:
+      type: object
+      additionalProperties: false
+      required:
+        [id, merchantId, title, unitPriceBaseUnits, unitPriceDisplay, currency, status, sold, maxSupply, loyaltyPoints]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        onchainProductId: { type: [string, 'null'], pattern: '^[0-9]+$' }
+        merchantId: { $ref: '#/components/schemas/ResourceId' }
+        version: { type: integer, minimum: 1 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 3000 }
+        imageUrl: { type: [string, 'null'], format: uri }
+        unitPriceBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        unitPriceDisplay: { $ref: '#/components/schemas/DecimalAmount' }
+        currency: { type: string, const: USDC }
+        status: { $ref: '#/components/schemas/ProductStatus' }
+        startsAt: { type: [string, 'null'], format: date-time }
+        endsAt: { type: [string, 'null'], format: date-time }
+        sold: { type: string, pattern: '^[0-9]+$' }
+        maxSupply: { type: [string, 'null'], pattern: '^[0-9]+$' }
+        loyaltyPoints: { type: integer, minimum: 0 }
+        availabilityBlockNumber: { type: [string, 'null'], pattern: '^[0-9]+$' }
+    CreateProductRequest:
+      type: object
+      additionalProperties: false
+      required: [title, slug, unitPriceBaseUnits, loyaltyPoints]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        description: { type: string, maxLength: 3000 }
+        imageUrl: { type: string, format: uri }
+        unitPriceBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        startsAt: { type: [string, 'null'], format: date-time }
+        endsAt: { type: [string, 'null'], format: date-time }
+        maxSupply: { type: [string, 'null'], pattern: '^[0-9]+$' }
+        loyaltyPoints: { type: integer, minimum: 0, maximum: 1000000 }
+    CreateCheckoutSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [productId, quantity]
+      properties:
+        productId: { $ref: '#/components/schemas/ResourceId' }
+        quantity: { type: string, pattern: '^[1-9][0-9]{0,5}$' }
+        receiptRecipient: { $ref: '#/components/schemas/EvmAddress' }
+        clientContext:
+          type: object
+          additionalProperties: false
+          properties:
+            campaign: { type: string, maxLength: 100 }
+    BindCheckoutRequest:
+      type: object
+      additionalProperties: false
+      required: [receiptRecipient]
+      properties:
+        receiptRecipient: { $ref: '#/components/schemas/EvmAddress' }
+    CheckoutStatus:
+      type: string
+      enum: [active, bound, consumed, expired, cancelled]
+    CheckoutSession:
+      type: object
+      additionalProperties: false
+      required:
+        [id, product, quantity, amountBaseUnits, amountDisplay, currency, orderKey, status, expiresAt]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        product: { $ref: '#/components/schemas/Product' }
+        quantity: { type: string, pattern: '^[1-9][0-9]*$' }
+        amountBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        amountDisplay: { $ref: '#/components/schemas/DecimalAmount' }
+        currency: { type: string, const: USDC }
+        orderKey: { $ref: '#/components/schemas/Hex32' }
+        receiptRecipient: { type: [string, 'null'], pattern: '^0x[a-fA-F0-9]{40}$' }
+        status: { $ref: '#/components/schemas/CheckoutStatus' }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+        activePaymentAttemptId: { type: [string, 'null'] }
+        orderId: { type: [string, 'null'] }
+    CheckoutBinding:
+      type: object
+      additionalProperties: false
+      required:
+        [attemptId, orderKey, chainId, usdcAddress, checkoutAddress, productId, quantity, amountBaseUnits, receiptRecipient, expiresAt, bindingDigest]
+      properties:
+        attemptId: { $ref: '#/components/schemas/ResourceId' }
+        orderKey: { $ref: '#/components/schemas/Hex32' }
+        chainId: { type: integer, const: 42161 }
+        usdcAddress: { $ref: '#/components/schemas/EvmAddress' }
+        checkoutAddress: { $ref: '#/components/schemas/EvmAddress' }
+        productId: { type: string, pattern: '^[0-9]+$' }
+        quantity: { type: string, pattern: '^[1-9][0-9]*$' }
+        amountBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        receiptRecipient: { $ref: '#/components/schemas/EvmAddress' }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+        bindingDigest: { $ref: '#/components/schemas/Hex32' }
+    PaymentAttemptPreparation:
+      type: object
+      required: [attempt, binding]
+      properties:
+        attempt: { $ref: '#/components/schemas/PaymentAttempt' }
+        binding: { $ref: '#/components/schemas/CheckoutBinding' }
+    PreparedPaymentRecord:
+      type: object
+      additionalProperties: false
+      required: [rootHashDigest, preparedDigest, quoteExpiresAt, expectedAmountBaseUnits, sourceChainCount]
+      properties:
+        rootHashDigest: { $ref: '#/components/schemas/Hex32' }
+        preparedDigest: { $ref: '#/components/schemas/Hex32' }
+        quoteExpiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+        expectedAmountBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        feeUsdDisplay: { type: [string, 'null'], pattern: '^(0|[1-9][0-9]*)(\\.[0-9]+)?$' }
+        sourceChainCount: { type: integer, minimum: 1, maximum: 20 }
+    PaymentSubmissionRequest:
+      type: object
+      additionalProperties: false
+      required: [particleTransactionId]
+      properties:
+        particleTransactionId: { type: string, minLength: 1, maxLength: 256 }
+    PaymentAttemptStatus:
+      type: string
+      enum:
+        [created, prepared, submission_started, submitted, executing, paid, failed_confirmed, submission_unknown, refunding, refunded]
+    PaymentAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, checkoutSessionId, status, doNotRetryPayment, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        checkoutSessionId: { $ref: '#/components/schemas/ResourceId' }
+        orderId: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/PaymentAttemptStatus' }
+        particleTransactionId: { type: [string, 'null'] }
+        particleStatus: { type: [string, 'null'] }
+        destinationTransactionHash: { type: [string, 'null'], pattern: '^0x[a-fA-F0-9]{64}$' }
+        errorCode: { anyOf: [{ $ref: '#/components/schemas/ErrorCode' }, { type: 'null' }] }
+        retryable: { type: boolean, default: false }
+        doNotRetryPayment: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+        submittedAt: { type: [string, 'null'], format: date-time }
+        confirmedAt: { type: [string, 'null'], format: date-time }
+    DelegationStatus:
+      type: object
+      additionalProperties: false
+      required: [chainId, ownerAddress, delegated, evidence]
+      properties:
+        chainId: { type: string, const: '42161' }
+        ownerAddress: { $ref: '#/components/schemas/EvmAddress' }
+        delegated: { type: boolean }
+        implementationAddress: { $ref: '#/components/schemas/EvmAddress' }
+        implementationCodeHash: { $ref: '#/components/schemas/Hex32' }
+        transactionHash: { $ref: '#/components/schemas/TransactionHash' }
+        evidence: { $ref: '#/components/schemas/ApiObject' }
+    DelegationEvidenceRequest:
+      type: object
+      additionalProperties: false
+      required: [transactionHash, evidenceDigest]
+      properties:
+        transactionHash: { $ref: '#/components/schemas/TransactionHash' }
+        evidenceDigest:
+          allOf: [{ $ref: '#/components/schemas/Hex32' }]
+          description: Untrusted prior delegation-plan binding; the server binds it into a new canonical proof digest and never treats it as chain evidence by itself.
+    UnifiedAsset:
+      type: object
+      required: [tokenType, amount, amountUsd, chains]
+      properties:
+        tokenType: { type: string, enum: [usdc, usdt, eth, sol, bnb] }
+        amount: { $ref: '#/components/schemas/DecimalAmount' }
+        amountUsd: { $ref: '#/components/schemas/DecimalAmount' }
+        chains:
+          type: array
+          items:
+            type: object
+            required: [chainId, symbol, amount, amountUsd]
+            properties:
+              chainId: { type: integer }
+              symbol: { type: string, maxLength: 20 }
+              amount: { $ref: '#/components/schemas/DecimalAmount' }
+              amountUsd: { $ref: '#/components/schemas/DecimalAmount' }
+    WalletReadiness:
+      type: object
+      additionalProperties: false
+      required: [ownerAddress, universalAccountAddress, ownerMatches, delegation, ready, blockers, observedAt]
+      properties:
+        ownerAddress: { $ref: '#/components/schemas/EvmAddress' }
+        universalAccountAddress: { $ref: '#/components/schemas/EvmAddress' }
+        ownerMatches: { type: boolean }
+        delegation: { $ref: '#/components/schemas/DelegationStatus' }
+        ready: { type: boolean }
+        blockers:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [owner_mismatch, delegation_required, delegation_target_mismatch, balance_unavailable]
+        observedAt: { $ref: '#/components/schemas/IsoDateTime' }
+    BootstrapEligibility:
+      type: object
+      additionalProperties: false
+      required: [eligible, reason, delegationMissing]
+      properties:
+        eligible: { type: boolean }
+        reason:
+          type: string
+          enum: [eligible, already_delegated, sufficient_balance, rate_limited, budget_exhausted, feature_disabled, risk_denied, pending_grant, dependency_unavailable]
+        delegationMissing: { type: boolean }
+        currentBalanceBucket: { type: string, enum: [zero, below_target, sufficient, unknown] }
+    BootstrapGrant:
+      type: object
+      additionalProperties: false
+      required: [id, recipientAddress, amountWei, status, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        recipientAddress: { $ref: '#/components/schemas/EvmAddress' }
+        amountWei: { $ref: '#/components/schemas/BaseUnitAmount' }
+        status: { type: string, enum: [created, submitted, confirmed, failed, replaced] }
+        transactionHash: { type: [string, 'null'], pattern: '^0x[a-fA-F0-9]{64}$' }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+        confirmedAt: { type: [string, 'null'], format: date-time }
+    OrderStatus:
+      type: string
+      enum: [created, submitted, executing, paid, partially_refunded, refunded, failed]
+    Order:
+      type: object
+      additionalProperties: false
+      required: [id, orderKey, product, merchant, payer, recipient, quantity, paidAmountBaseUnits, refundedAmountBaseUnits, status]
+      properties:
+        id: { $ref: '#/components/schemas/ResourceId' }
+        orderKey: { $ref: '#/components/schemas/Hex32' }
+        product: { $ref: '#/components/schemas/Product' }
+        merchant: { $ref: '#/components/schemas/Merchant' }
+        payer: { $ref: '#/components/schemas/EvmAddress' }
+        recipient: { $ref: '#/components/schemas/EvmAddress' }
+        quantity: { type: string, pattern: '^[1-9][0-9]*$' }
+        paidAmountBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        refundedAmountBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        transactionHash: { type: [string, 'null'], pattern: '^0x[a-fA-F0-9]{64}$' }
+        blockNumber: { type: [string, 'null'], pattern: '^[0-9]+$' }
+        confirmedAt: { type: [string, 'null'], format: date-time }
+        passTokenId: { type: [string, 'null'], pattern: '^[0-9]+$' }
+        loyaltyPoints: { type: integer, minimum: 0 }
+    MerchantSummary:
+      type: object
+      required: [merchantId, confirmedOrderCount, grossBaseUnits, refundedBaseUnits, availableBaseUnits, currency, projectionBlockNumber]
+      properties:
+        merchantId: { $ref: '#/components/schemas/ResourceId' }
+        confirmedOrderCount: { type: integer, minimum: 0 }
+        grossBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        refundedBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        availableBaseUnits: { $ref: '#/components/schemas/BaseUnitAmount' }
+        currency: { type: string, const: USDC }
+        projectionBlockNumber: { type: string, pattern: '^[0-9]+$' }
+        indexerLagBlocks: { type: integer, minimum: 0 }
+    PageInfo:
+      type: object
+      required: [nextCursor]
+      properties:
+        nextCursor: { type: [string, 'null'] }
+    JudgeProof:
+      $ref: './schemas/public-judge-proof.schema.json'
+    JudgeProofResponse:
+      type: object
+      additionalProperties: false
+      required: [proof, requestId]
+      properties:
+        proof: { $ref: '#/components/schemas/JudgeProof' }
+        requestId: { type: string, pattern: '^req_[0-9a-fA-F-]{36}$' }
+    JudgeMaterializationResponse:
+      type: object
+      additionalProperties: false
+      required: [proof, status, requestId]
+      properties:
+        proof: { $ref: '#/components/schemas/JudgeProof' }
+        status: { type: string, const: unpublished }
+        requestId: { type: string, pattern: '^req_[0-9a-fA-F-]{36}$' }

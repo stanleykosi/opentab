@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 960" role="img" aria-labelledby="title description">
+  <title id="title">OpenTab offer</title>
+  <desc id="description">Abstract warm shapes representing a merchant offer.</desc>
+  <rect width="960" height="960" fill="#f3ede2"/>
+  <circle cx="730" cy="210" r="210" fill="#e3b66d"/>
+  <path d="M0 720C180 560 340 520 500 620s280 120 460-20v360H0Z" fill="#173f38"/>
+  <path d="M120 610c95-170 235-255 420-255 65 0 127 11 185 34-128 28-229 106-303 235-92 160-197 236-316 229 5-83 10-164 14-243Z" fill="#fff9ed" opacity=".92"/>
+</svg>

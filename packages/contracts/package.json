@@ -1,0 +1,23 @@
+{
+  "name": "@opentab/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "forge build --sizes",
+    "typecheck": "forge build --sizes",
+    "lint": "forge fmt --check && forge lint src --force",
+    "test": "forge test -vvv",
+    "test:unit": "forge test --match-path 'test/unit/*' -vvv",
+    "test:fuzz": "forge test --match-path 'test/fuzz/*' -vv",
+    "test:invariant": "forge test --match-path 'test/invariant/*' -vv",
+    "test:deployment": "forge test --match-path 'test/deployment/*' -vv",
+    "test:integration": "forge test --no-match-path 'test/fork/*' -vvv",
+    "test:live": "forge test --match-path 'test/fork/*' -vvv",
+    "security": "bash scripts/run-slither.sh",
+    "artifacts": "bash scripts/generate-artifacts.sh",
+    "evidence:summary": "node scripts/generate-verification-summary.mjs",
+    "snapshot:write": "forge snapshot",
+    "snapshot": "forge snapshot --check",
+    "coverage": "forge coverage --ir-minimum --report summary --no-match-path 'test/fork/*'"
+  }
+}

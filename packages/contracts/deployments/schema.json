@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opentab.example/schemas/contract-deployment-manifest.json",
+  "title": "OpenTab contract deployment manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "chainId",
+    "network",
+    "deploymentBlock",
+    "deploymentTimestamp",
+    "repositoryCommit",
+    "compiler",
+    "addresses",
+    "runtimeCodeHashes",
+    "transactions",
+    "verified"
+  ],
+  "properties": {
+    "chainId": { "enum": [42161, 421614] },
+    "network": { "enum": ["arbitrum-one", "arbitrum-sepolia"] },
+    "deploymentBlock": { "$ref": "#/$defs/uintString" },
+    "deploymentTimestamp": { "type": "string", "format": "date-time" },
+    "repositoryCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "compiler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["solc", "optimizerRuns", "viaIR", "evmVersion"],
+      "properties": {
+        "solc": { "const": "0.8.36" },
+        "optimizerRuns": { "const": 200 },
+        "viaIR": { "const": true },
+        "evmVersion": { "const": "cancun" }
+      }
+    },
+    "addresses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usdc", "checkout", "pass", "splitReimbursement"],
+      "properties": {
+        "usdc": { "$ref": "#/$defs/address" },
+        "checkout": { "$ref": "#/$defs/address" },
+        "pass": { "$ref": "#/$defs/address" },
+        "splitReimbursement": { "$ref": "#/$defs/address" }
+      }
+    },
+    "runtimeCodeHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkout", "pass", "splitReimbursement"],
+      "properties": {
+        "checkout": { "$ref": "#/$defs/hash" },
+        "pass": { "$ref": "#/$defs/hash" },
+        "splitReimbursement": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "transactions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passDeployment", "checkoutDeployment", "passBinding", "splitDeployment"],
+      "properties": {
+        "passDeployment": { "$ref": "#/$defs/hash" },
+        "checkoutDeployment": { "$ref": "#/$defs/hash" },
+        "passBinding": { "$ref": "#/$defs/hash" },
+        "splitDeployment": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "verified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkout", "pass", "splitReimbursement"],
+      "properties": {
+        "checkout": { "type": "boolean" },
+        "pass": { "type": "boolean" },
+        "splitReimbursement": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "address": { "type": "string", "pattern": "^0x[0-9a-fA-F]{40}$" },
+    "hash": { "type": "string", "pattern": "^0x[0-9a-fA-F]{64}$" },
+    "uintString": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+  }
+}

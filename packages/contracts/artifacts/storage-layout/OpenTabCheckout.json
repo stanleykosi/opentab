@@ -1,0 +1,658 @@
+{
+  "storage": [
+    {
+      "astId": 26,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_roles",
+      "offset": 0,
+      "slot": "0",
+      "type": "t_mapping(t_bytes32,t_struct(RoleData)21_storage)"
+    },
+    {
+      "astId": 402,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_pendingDefaultAdmin",
+      "offset": 0,
+      "slot": "1",
+      "type": "t_address"
+    },
+    {
+      "astId": 404,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_pendingDefaultAdminSchedule",
+      "offset": 20,
+      "slot": "1",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 406,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_currentDelay",
+      "offset": 26,
+      "slot": "1",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 408,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_currentDefaultAdmin",
+      "offset": 0,
+      "slot": "2",
+      "type": "t_address"
+    },
+    {
+      "astId": 410,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_pendingDelay",
+      "offset": 20,
+      "slot": "2",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 412,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_pendingDelaySchedule",
+      "offset": 26,
+      "slot": "2",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 6018,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_paused",
+      "offset": 0,
+      "slot": "3",
+      "type": "t_bool"
+    },
+    {
+      "astId": 8707,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_nameFallback",
+      "offset": 0,
+      "slot": "4",
+      "type": "t_string_storage"
+    },
+    {
+      "astId": 8709,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "_versionFallback",
+      "offset": 0,
+      "slot": "5",
+      "type": "t_string_storage"
+    },
+    {
+      "astId": 13300,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "feeRecipient",
+      "offset": 0,
+      "slot": "6",
+      "type": "t_address"
+    },
+    {
+      "astId": 13302,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "platformFeeBps",
+      "offset": 20,
+      "slot": "6",
+      "type": "t_uint16"
+    },
+    {
+      "astId": 13305,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "nextMerchantId",
+      "offset": 0,
+      "slot": "7",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 13308,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "nextProductId",
+      "offset": 0,
+      "slot": "8",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 13313,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "merchants",
+      "offset": 0,
+      "slot": "9",
+      "type": "t_mapping(t_uint256,t_struct(Merchant)12765_storage)"
+    },
+    {
+      "astId": 13318,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "products",
+      "offset": 0,
+      "slot": "10",
+      "type": "t_mapping(t_uint256,t_struct(Product)12790_storage)"
+    },
+    {
+      "astId": 13323,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "orders",
+      "offset": 0,
+      "slot": "11",
+      "type": "t_mapping(t_bytes32,t_struct(Order)12894_storage)"
+    },
+    {
+      "astId": 13329,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "purchasedByWallet",
+      "offset": 0,
+      "slot": "12",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint64))"
+    },
+    {
+      "astId": 13335,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "loyaltyPoints",
+      "offset": 0,
+      "slot": "13",
+      "type": "t_mapping(t_uint256,t_mapping(t_address,t_uint256))"
+    },
+    {
+      "astId": 13339,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "merchantLocked",
+      "offset": 0,
+      "slot": "14",
+      "type": "t_mapping(t_uint256,t_uint256)"
+    },
+    {
+      "astId": 13343,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "merchantCredit",
+      "offset": 0,
+      "slot": "15",
+      "type": "t_mapping(t_uint256,t_uint256)"
+    },
+    {
+      "astId": 13347,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "merchantWithdrawn",
+      "offset": 0,
+      "slot": "16",
+      "type": "t_mapping(t_uint256,t_uint256)"
+    },
+    {
+      "astId": 13349,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "platformLocked",
+      "offset": 0,
+      "slot": "17",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 13351,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "platformCredit",
+      "offset": 0,
+      "slot": "18",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 13353,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "platformWithdrawn",
+      "offset": 0,
+      "slot": "19",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 13355,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "totalLockedLiability",
+      "offset": 0,
+      "slot": "20",
+      "type": "t_uint256"
+    },
+    {
+      "astId": 13357,
+      "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+      "label": "totalMerchantCredit",
+      "offset": 0,
+      "slot": "21",
+      "type": "t_uint256"
+    }
+  ],
+  "types": {
+    "t_address": {
+      "encoding": "inplace",
+      "label": "address",
+      "numberOfBytes": "20"
+    },
+    "t_bool": {
+      "encoding": "inplace",
+      "label": "bool",
+      "numberOfBytes": "1"
+    },
+    "t_bytes32": {
+      "encoding": "inplace",
+      "label": "bytes32",
+      "numberOfBytes": "32"
+    },
+    "t_mapping(t_address,t_bool)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => bool)",
+      "numberOfBytes": "32",
+      "value": "t_bool"
+    },
+    "t_mapping(t_address,t_uint256)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => uint256)",
+      "numberOfBytes": "32",
+      "value": "t_uint256"
+    },
+    "t_mapping(t_address,t_uint64)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => uint64)",
+      "numberOfBytes": "32",
+      "value": "t_uint64"
+    },
+    "t_mapping(t_bytes32,t_struct(Order)12894_storage)": {
+      "encoding": "mapping",
+      "key": "t_bytes32",
+      "label": "mapping(bytes32 => struct OpenTabCheckout.Order)",
+      "numberOfBytes": "32",
+      "value": "t_struct(Order)12894_storage"
+    },
+    "t_mapping(t_bytes32,t_struct(RoleData)21_storage)": {
+      "encoding": "mapping",
+      "key": "t_bytes32",
+      "label": "mapping(bytes32 => struct AccessControl.RoleData)",
+      "numberOfBytes": "32",
+      "value": "t_struct(RoleData)21_storage"
+    },
+    "t_mapping(t_uint256,t_mapping(t_address,t_uint256))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(address => uint256))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_address,t_uint256)"
+    },
+    "t_mapping(t_uint256,t_mapping(t_address,t_uint64))": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => mapping(address => uint64))",
+      "numberOfBytes": "32",
+      "value": "t_mapping(t_address,t_uint64)"
+    },
+    "t_mapping(t_uint256,t_struct(Merchant)12765_storage)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => struct OpenTabCheckout.Merchant)",
+      "numberOfBytes": "32",
+      "value": "t_struct(Merchant)12765_storage"
+    },
+    "t_mapping(t_uint256,t_struct(Product)12790_storage)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => struct OpenTabCheckout.Product)",
+      "numberOfBytes": "32",
+      "value": "t_struct(Product)12790_storage"
+    },
+    "t_mapping(t_uint256,t_uint256)": {
+      "encoding": "mapping",
+      "key": "t_uint256",
+      "label": "mapping(uint256 => uint256)",
+      "numberOfBytes": "32",
+      "value": "t_uint256"
+    },
+    "t_string_storage": {
+      "encoding": "bytes",
+      "label": "string",
+      "numberOfBytes": "32"
+    },
+    "t_struct(Merchant)12765_storage": {
+      "encoding": "inplace",
+      "label": "struct OpenTabCheckout.Merchant",
+      "members": [
+        {
+          "astId": 12754,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "owner",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_address"
+        },
+        {
+          "astId": 12756,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "payout",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_address"
+        },
+        {
+          "astId": 12758,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "metadataHash",
+          "offset": 0,
+          "slot": "2",
+          "type": "t_bytes32"
+        },
+        {
+          "astId": 12760,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "createdAt",
+          "offset": 0,
+          "slot": "3",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12762,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "active",
+          "offset": 8,
+          "slot": "3",
+          "type": "t_bool"
+        },
+        {
+          "astId": 12764,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "suspended",
+          "offset": 9,
+          "slot": "3",
+          "type": "t_bool"
+        }
+      ],
+      "numberOfBytes": "128"
+    },
+    "t_struct(Order)12894_storage": {
+      "encoding": "inplace",
+      "label": "struct OpenTabCheckout.Order",
+      "members": [
+        {
+          "astId": 12863,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "merchantId",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 12865,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "productId",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 12867,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "payer",
+          "offset": 0,
+          "slot": "2",
+          "type": "t_address"
+        },
+        {
+          "astId": 12869,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "recipient",
+          "offset": 0,
+          "slot": "3",
+          "type": "t_address"
+        },
+        {
+          "astId": 12871,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "grossAmount",
+          "offset": 0,
+          "slot": "4",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12873,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "platformFee",
+          "offset": 16,
+          "slot": "4",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12875,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "refundedAmount",
+          "offset": 0,
+          "slot": "5",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12877,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "merchantRefunded",
+          "offset": 16,
+          "slot": "5",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12879,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "platformRefunded",
+          "offset": 0,
+          "slot": "6",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12881,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "loyaltyAwarded",
+          "offset": 16,
+          "slot": "6",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12883,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "loyaltyRefunded",
+          "offset": 0,
+          "slot": "7",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12885,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "quantity",
+          "offset": 16,
+          "slot": "7",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12887,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "paidAt",
+          "offset": 24,
+          "slot": "7",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12889,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "refundDeadline",
+          "offset": 0,
+          "slot": "8",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12891,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "platformFeeBps",
+          "offset": 8,
+          "slot": "8",
+          "type": "t_uint16"
+        },
+        {
+          "astId": 12893,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "finalized",
+          "offset": 10,
+          "slot": "8",
+          "type": "t_bool"
+        }
+      ],
+      "numberOfBytes": "288"
+    },
+    "t_struct(Product)12790_storage": {
+      "encoding": "inplace",
+      "label": "struct OpenTabCheckout.Product",
+      "members": [
+        {
+          "astId": 12767,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "merchantId",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_uint256"
+        },
+        {
+          "astId": 12769,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "unitPrice",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_uint128"
+        },
+        {
+          "astId": 12771,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "startsAt",
+          "offset": 16,
+          "slot": "1",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12773,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "endsAt",
+          "offset": 24,
+          "slot": "1",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12775,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "maxSupply",
+          "offset": 0,
+          "slot": "2",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12777,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "sold",
+          "offset": 8,
+          "slot": "2",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12779,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "maxPerWallet",
+          "offset": 16,
+          "slot": "2",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12781,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "version",
+          "offset": 24,
+          "slot": "2",
+          "type": "t_uint64"
+        },
+        {
+          "astId": 12783,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "loyaltyPoints",
+          "offset": 0,
+          "slot": "3",
+          "type": "t_uint32"
+        },
+        {
+          "astId": 12785,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "refundWindow",
+          "offset": 4,
+          "slot": "3",
+          "type": "t_uint32"
+        },
+        {
+          "astId": 12787,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "active",
+          "offset": 8,
+          "slot": "3",
+          "type": "t_bool"
+        },
+        {
+          "astId": 12789,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "metadataHash",
+          "offset": 0,
+          "slot": "4",
+          "type": "t_bytes32"
+        }
+      ],
+      "numberOfBytes": "160"
+    },
+    "t_struct(RoleData)21_storage": {
+      "encoding": "inplace",
+      "label": "struct AccessControl.RoleData",
+      "members": [
+        {
+          "astId": 18,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "hasRole",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_mapping(t_address,t_bool)"
+        },
+        {
+          "astId": 20,
+          "contract": "src/OpenTabCheckout.sol:OpenTabCheckout",
+          "label": "adminRole",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_bytes32"
+        }
+      ],
+      "numberOfBytes": "64"
+    },
+    "t_uint128": {
+      "encoding": "inplace",
+      "label": "uint128",
+      "numberOfBytes": "16"
+    },
+    "t_uint16": {
+      "encoding": "inplace",
+      "label": "uint16",
+      "numberOfBytes": "2"
+    },
+    "t_uint256": {
+      "encoding": "inplace",
+      "label": "uint256",
+      "numberOfBytes": "32"
+    },
+    "t_uint32": {
+      "encoding": "inplace",
+      "label": "uint32",
+      "numberOfBytes": "4"
+    },
+    "t_uint48": {
+      "encoding": "inplace",
+      "label": "uint48",
+      "numberOfBytes": "6"
+    },
+    "t_uint64": {
+      "encoding": "inplace",
+      "label": "uint64",
+      "numberOfBytes": "8"
+    }
+  }
+}

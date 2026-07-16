@@ -1,0 +1,163 @@
+{
+  "storage": [
+    {
+      "astId": 26,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_roles",
+      "offset": 0,
+      "slot": "0",
+      "type": "t_mapping(t_bytes32,t_struct(RoleData)21_storage)"
+    },
+    {
+      "astId": 402,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_pendingDefaultAdmin",
+      "offset": 0,
+      "slot": "1",
+      "type": "t_address"
+    },
+    {
+      "astId": 404,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_pendingDefaultAdminSchedule",
+      "offset": 20,
+      "slot": "1",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 406,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_currentDelay",
+      "offset": 26,
+      "slot": "1",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 408,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_currentDefaultAdmin",
+      "offset": 0,
+      "slot": "2",
+      "type": "t_address"
+    },
+    {
+      "astId": 410,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_pendingDelay",
+      "offset": 20,
+      "slot": "2",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 412,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_pendingDelaySchedule",
+      "offset": 26,
+      "slot": "2",
+      "type": "t_uint48"
+    },
+    {
+      "astId": 6018,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_paused",
+      "offset": 0,
+      "slot": "3",
+      "type": "t_bool"
+    },
+    {
+      "astId": 8707,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_nameFallback",
+      "offset": 0,
+      "slot": "4",
+      "type": "t_string_storage"
+    },
+    {
+      "astId": 8709,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "_versionFallback",
+      "offset": 0,
+      "slot": "5",
+      "type": "t_string_storage"
+    },
+    {
+      "astId": 16458,
+      "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+      "label": "paymentKeyUsed",
+      "offset": 0,
+      "slot": "6",
+      "type": "t_mapping(t_bytes32,t_bool)"
+    }
+  ],
+  "types": {
+    "t_address": {
+      "encoding": "inplace",
+      "label": "address",
+      "numberOfBytes": "20"
+    },
+    "t_bool": {
+      "encoding": "inplace",
+      "label": "bool",
+      "numberOfBytes": "1"
+    },
+    "t_bytes32": {
+      "encoding": "inplace",
+      "label": "bytes32",
+      "numberOfBytes": "32"
+    },
+    "t_mapping(t_address,t_bool)": {
+      "encoding": "mapping",
+      "key": "t_address",
+      "label": "mapping(address => bool)",
+      "numberOfBytes": "32",
+      "value": "t_bool"
+    },
+    "t_mapping(t_bytes32,t_bool)": {
+      "encoding": "mapping",
+      "key": "t_bytes32",
+      "label": "mapping(bytes32 => bool)",
+      "numberOfBytes": "32",
+      "value": "t_bool"
+    },
+    "t_mapping(t_bytes32,t_struct(RoleData)21_storage)": {
+      "encoding": "mapping",
+      "key": "t_bytes32",
+      "label": "mapping(bytes32 => struct AccessControl.RoleData)",
+      "numberOfBytes": "32",
+      "value": "t_struct(RoleData)21_storage"
+    },
+    "t_string_storage": {
+      "encoding": "bytes",
+      "label": "string",
+      "numberOfBytes": "32"
+    },
+    "t_struct(RoleData)21_storage": {
+      "encoding": "inplace",
+      "label": "struct AccessControl.RoleData",
+      "members": [
+        {
+          "astId": 18,
+          "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+          "label": "hasRole",
+          "offset": 0,
+          "slot": "0",
+          "type": "t_mapping(t_address,t_bool)"
+        },
+        {
+          "astId": 20,
+          "contract": "src/OpenTabSplitReimbursement.sol:OpenTabSplitReimbursement",
+          "label": "adminRole",
+          "offset": 0,
+          "slot": "1",
+          "type": "t_bytes32"
+        }
+      ],
+      "numberOfBytes": "64"
+    },
+    "t_uint48": {
+      "encoding": "inplace",
+      "label": "uint48",
+      "numberOfBytes": "6"
+    }
+  }
+}
