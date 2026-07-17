@@ -154,6 +154,12 @@ and block `484866936` are source defaults documented in
 [`42161.public.env`](packages/contracts/deployments/42161.public.env); they are
 not additional mandatory Railway variables.
 
+Railway's deployment health check uses `/health/live`, because a newly started
+worker is alive while it catches up from the deployment block. During that
+catch-up, `/health/ready` correctly returns HTTP 503 with reason `starting` or
+`lagging`; enable reconciliation only after it returns HTTP 200 with
+`"ready": true`.
+
 After the scanner is healthy and the recorded-live Particle profile is
 reviewed, switch `APP_ENV=production`, set
 `INDEXER_RECONCILIATION_ENABLED=true` and `PARTICLE_LIVE_ENABLED=true`, then

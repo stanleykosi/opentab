@@ -2,7 +2,7 @@ import type { ArbitrumReadPort } from '@opentab/application';
 import { ARBITRUM_ONE_CHAIN_ID, EvmAddressSchema, TransactionHashSchema } from '@opentab/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FailoverArbitrumReadPort } from '../src/failover.js';
-import { IndexerHealthTracker } from '../src/health.js';
+import { createIndexerHealthServer, IndexerHealthTracker } from '../src/health.js';
 
 const address = EvmAddressSchema.parse(`0x${'1'.repeat(40)}`);
 const delegate = EvmAddressSchema.parse(`0x${'2'.repeat(40)}`);
@@ -159,6 +159,37 @@ describe('RPC failover', () => {
 });
 
 describe('indexer health readiness', () => {
+  it('keeps liveness healthy while readiness waits for the first successful scan', async () => {
+    const tracker = new IndexerHealthTracker({
+      maxReadyLagBlocks: 3n,
+      staleAfterMs: 1_000,
+      maxConsecutiveFailures: 2,
+    });
+    const health = createIndexerHealthServer({ tracker, host: '127.0.0.1', port: 0 });
+    await health.listen();
+    const address = health.server.address();
+    if (address === null || typeof address === 'string') throw new Error('Health port unavailable.');
+
+    try {
+      const origin = `http://127.0.0.1:${address.port}`;
+      const [live, ready] = await Promise.all([
+        fetch(`${origin}/health/live`),
+        fetch(`${origin}/health/ready`),
+      ]);
+
+      expect(live.status).toBe(200);
+      await expect(live.json()).resolves.toEqual({ live: true, draining: false });
+      expect(ready.status).toBe(503);
+      await expect(ready.json()).resolves.toMatchObject({
+        live: true,
+        ready: false,
+        reason: 'starting',
+      });
+    } finally {
+      await health.close();
+    }
+  });
+
   it('distinguishes starting, ready, stale, failing, lagging, and draining states', () => {
     let current = new Date('2026-07-14T00:00:00.000Z');
     const tracker = new IndexerHealthTracker({

@@ -124,8 +124,8 @@ expect(
   'Railway must use apps/indexer/Dockerfile.',
 );
 expect(
-  railway.deploy?.healthcheckPath === '/health/ready',
-  'Railway deploy health must use indexer readiness.',
+  railway.deploy?.healthcheckPath === '/health/live',
+  'Railway deploy health must use liveness so initial chain catch-up is not killed.',
 );
 expect(
   railway.deploy?.restartPolicyType === 'ON_FAILURE',
