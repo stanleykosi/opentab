@@ -17,6 +17,16 @@ export const ARBITRUM_ONE_CHAIN_ID = ChainIdSchema.parse('42161');
 export const ARBITRUM_ONE_USDC = EvmAddressSchema.parse(
   '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
 );
+export const ARBITRUM_ONE_OPENTAB_CHECKOUT = EvmAddressSchema.parse(
+  '0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91',
+);
+export const ARBITRUM_ONE_OPENTAB_PASS = EvmAddressSchema.parse(
+  '0x56CCBeC6D08f561eCF117964FAB385CBf90A568B',
+);
+export const ARBITRUM_ONE_OPENTAB_SPLIT = EvmAddressSchema.parse(
+  '0x7EF7efa8a53530dEa3F077691422AAbEB183049c',
+);
+export const ARBITRUM_ONE_OPENTAB_DEPLOYMENT_BLOCK = 484_866_936n;
 
 export type EvmAddress = z.infer<typeof EvmAddressSchema>;
 export type EvmAddressLower = z.infer<typeof EvmAddressLowerSchema>;

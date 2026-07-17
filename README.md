@@ -91,9 +91,8 @@ pnpm verify:release
 ```
 
 The default browser command runs 22 Chromium desktop/mobile checks. Focused
-Firefox and WebKit projects are documented in
-[the test strategy](docs/06-quality/TEST_STRATEGY.md); WebKit currently needs
-the host libraries recorded in [BLOCKERS.md](BLOCKERS.md).
+Firefox and WebKit projects are also configured; WebKit currently needs host
+libraries unavailable on the validated workstation.
 
 Contract-only checks are available through `pnpm contracts:build`,
 `pnpm contracts:test`, `pnpm contracts:coverage`, and
@@ -110,10 +109,75 @@ Contract-only checks are available through `pnpm contracts:build`,
 - One authenticated TLS Redis endpoint is shared by Vercel and Railway; Upstash
   Redis is the default documented choice.
 
-Validate configured Supabase URLs with `pnpm supabase:check:target`. The full
-copy-pasteable sequence is in [the deployment handoff](03_DEPLOYMENT_AFTER_BUILD.md)
-and the database-specific controls are in
-[the Supabase guide](docs/07-operations/SUPABASE_POSTGRES.md).
+Paste [`SUPABASE_SQL_EDITOR_SETUP.sql`](SUPABASE_SQL_EDITOR_SETUP.sql) into the
+Supabase SQL Editor, then validate configured URLs with
+`pnpm supabase:check:target`. Vercel must use the generated `opentab_runtime`
+transaction-pooler URL on port `6543`; Railway must use the separate
+`opentab_indexer` session-pooler URL on port `5432`.
+
+## Arbitrum One deployment
+
+The reviewed non-upgradeable contracts are deployed on Arbitrum One (`42161`)
+from canonical indexer block `484866936`:
+
+- Checkout: `0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91`
+- Pass: `0x56CCBeC6D08f561eCF117964FAB385CBf90A568B`
+- Split reimbursement: `0x7EF7efa8a53530dEa3F077691422AAbEB183049c`
+- Native USDC: `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`
+
+All four deployment/binding receipts succeeded. Infura and PublicNode both
+passed the keyless deployment assertions, and all three contracts have
+creation/runtime `exact_match` source on Sourcify. Public runtime defaults are
+recorded in
+[`packages/contracts/deployments/42161.public.env`](packages/contracts/deployments/42161.public.env).
+This is deployment evidence, not a payment claim: the Particle cross-chain
+canary has not run and the money-moving flags remain disabled.
+
+### Railway dashboard handoff
+
+Create the indexer from the GitHub repository with config path
+`/railway.indexer.json`, one replica, and no public domain. First deploy the
+safe chain scanner with:
+
+```text
+APP_ENV=demo-mainnet
+INDEXER_ENABLED=true
+INDEXER_WRITES_ENABLED=true
+INDEXER_RECONCILIATION_ENABLED=false
+DATABASE_URL_INDEXER=<Supabase opentab_indexer session/direct URL>
+REDIS_URL=<shared authenticated rediss:// URL>
+ARBITRUM_RPC_URL=<authenticated Arbitrum One primary RPC>
+```
+
+Chain `42161`, native USDC, checkout/pass/split addresses, PublicNode fallback,
+and block `484866936` are source defaults documented in
+[`42161.public.env`](packages/contracts/deployments/42161.public.env); they are
+not additional mandatory Railway variables.
+
+After the scanner is healthy and the recorded-live Particle profile is
+reviewed, switch `APP_ENV=production`, set
+`INDEXER_RECONCILIATION_ENABLED=true` and `PARTICLE_LIVE_ENABLED=true`, then
+add:
+
+```text
+NEXT_PUBLIC_PARTICLE_PROJECT_ID=<Particle project ID>
+NEXT_PUBLIC_PARTICLE_CLIENT_KEY=<Particle client key>
+NEXT_PUBLIC_PARTICLE_APP_UUID=<Particle app UUID>
+PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS=<reviewed address>
+PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH=<reviewed code hash>
+PARTICLE_RESPONSE_PROFILE_ID=<recorded-live profile ID>
+PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST=<sha256 digest>
+PARTICLE_AUTH_FIXTURE_DIGEST=<sha256 digest>
+PARTICLE_SUBMISSION_FIXTURE_DIGEST=<sha256 digest>
+PARTICLE_STATUS_FIXTURE_DIGEST=<sha256 digest>
+PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET=<verified integer>
+PARTICLE_DELEGATION_PLAN_TTL_SECONDS=<reviewed seconds>
+PARTICLE_ALLOWED_SOURCE_TOKENS=<exact chain:asset:token entries>
+PARTICLE_SOURCE_CALL_PROFILES_JSON=<reviewed compact JSON>
+```
+
+No Magic secret, DID token, KMS credential/identifier, private key, session
+secret, or Vercel OIDC credential belongs in the Railway indexer.
 
 ## Live-provider safety
 
@@ -138,9 +202,14 @@ cross-chain harness additionally requires an explicit tiny-spend acknowledgement
 and an exact maximum USDC amount. Deterministic tests are not represented as
 live-chain proof.
 
-See [BLOCKERS.md](BLOCKERS.md) for external gates and
-[docs/03-integrations/CROSS_CHAIN_CHECKOUT_SPIKE.md](docs/03-integrations/CROSS_CHAIN_CHECKOUT_SPIKE.md)
-for the guarded acceptance procedure.
+The deployment-time order signer
+`0x03981bA2a287b173A16b2c0a04088aB33AA98526` is a temporary local encrypted
+EOA. It must be rotated to the reviewed AWS KMS signer before
+`PAYMENTS_ENABLED=true`.
+
+The local release bundle records the remaining external gates and guarded
+acceptance procedure. It is intentionally excluded from Git by the owner's
+Markdown policy.
 
 ## Contracts and payment truth
 
@@ -158,15 +227,10 @@ checkout contract can make the paid projection authoritative.
 
 ## Documentation and release
 
-- [Architecture](ARCHITECTURE.md)
-- [Technical specification](TECHNICAL_SPECIFICATION.md)
-- [API specification](docs/05-backend/API_SPECIFICATION.md)
-- [Environment variables](docs/07-operations/ENVIRONMENT_VARIABLES.md)
-- [Security threat model](docs/06-quality/SECURITY_THREAT_MODEL.md)
-- [Deployment handoff](03_DEPLOYMENT_AFTER_BUILD.md)
-- [Final build report](FINAL_BUILD_REPORT.md)
-- [Evidence matrix](docs/08-submission/EVIDENCE_MATRIX.md)
-
-The implementation is original to OpenTab. Dependency licenses and materially
-adapted references are recorded in [LICENSE_NOTES.md](LICENSE_NOTES.md) and the
-generated [third-party notices](THIRD_PARTY_NOTICES.md).
+The local working tree retains the architecture, technical specification, API
+contract, threat model, deployment handoff, final report, blocker ledger,
+evidence matrix, license notes, and third-party notices. They are intentionally
+excluded from Git because this repository's owner policy permits only this
+Markdown file on GitHub. The implementation is original to OpenTab; runtime
+manifests, migrations, ABIs, tests, and deployment evidence remain tracked in
+their non-Markdown formats.

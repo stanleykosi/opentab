@@ -16,8 +16,7 @@ RUN npm install --global "pnpm@${PNPM_VERSION}" \
 FROM toolchain AS build
 
 COPY . .
-RUN --mount=type=cache,id=opentab-pnpm-store,target=/pnpm/store \
-  pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @opentab/indexer build \
   && pnpm --offline --package-import-method=hardlink --filter @opentab/indexer deploy --prod .deploy/indexer
 

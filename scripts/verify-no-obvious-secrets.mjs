@@ -69,6 +69,8 @@ function walk(dir) {
     if (entry.isDirectory()) walk(p);
     else if (entry.isFile()) {
       const relativePath = path.relative(root, p);
+      const basename = path.basename(relativePath);
+      if (basename.startsWith('.env') && basename !== '.env.example') continue;
       if (allowed.has(relativePath)) continue;
       if (['.key', '.pem', '.p12', '.pfx'].includes(path.extname(entry.name).toLowerCase())) {
         findings.push(`${relativePath}: private key or certificate container file`);

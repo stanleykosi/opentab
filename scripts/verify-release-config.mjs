@@ -57,6 +57,10 @@ const dockerfile = read('apps/indexer/Dockerfile');
 expect(dockerfile.includes('ARG NODE_VERSION=25.0.0'), 'Indexer Dockerfile must pin Node 25.0.0.');
 expect(dockerfile.includes('ARG PNPM_VERSION=9.15.1'), 'Indexer Dockerfile must pin pnpm 9.15.1.');
 expect(
+  !dockerfile.includes('--mount=type=cache'),
+  'Railway Dockerfile cache mounts require a deployment-specific service ID and must stay disabled.',
+);
+expect(
   dockerfile.includes('pnpm --offline --package-import-method=hardlink') &&
     dockerfile.includes('--filter @opentab/indexer deploy --prod'),
   'Indexer Docker packaging must consume the frozen local store without registry resolution.',
@@ -540,10 +544,11 @@ for (const name of releaseAttestations) {
       const verificationUrl = new URL(contract?.verificationUrl);
       expect(
         verificationUrl.protocol === 'https:' &&
-          verificationUrl.hostname === 'arbiscan.io' &&
+          verificationUrl.hostname === 'repo.sourcify.dev' &&
+          verificationUrl.pathname.toLowerCase() === `/42161/${contract.address}`.toLowerCase() &&
           !verificationUrl.username &&
           !verificationUrl.password,
-        `${relativeAttestationPath} ${contractName} verification URL must be public Arbiscan.`,
+        `${relativeAttestationPath} ${contractName} verification URL must be the exact public Sourcify contract URL.`,
       );
     } catch {
       expect(false, `${relativeAttestationPath} ${contractName} verification URL is invalid.`);

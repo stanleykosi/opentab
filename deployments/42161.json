@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "1.0.0",
+  "gitCommit": "04a816592a855982d7577a85b7c515a5149806dc",
+  "deployedAt": "2026-07-17T16:59:37.000Z",
+  "chain": {
+    "id": "42161",
+    "name": "Arbitrum One",
+    "explorerBaseUrl": "https://arbiscan.io",
+    "rpcProviders": ["Infura", "PublicNode"]
+  },
+  "deploymentBlock": "484866936",
+  "settlementToken": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+  "contracts": {
+    "checkout": {
+      "address": "0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91",
+      "deploymentTransaction": "0xa8c3d9c057799d0a4f865767cc95baa889e046800e35b3448578ecaa5cf7e953",
+      "bytecodeHash": "0xaa39a54db02e8845b25d768e66e92095187925c49acb73b28f77ca883f6131b2",
+      "verificationUrl": "https://repo.sourcify.dev/42161/0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91"
+    },
+    "pass": {
+      "address": "0x56CCBeC6D08f561eCF117964FAB385CBf90A568B",
+      "deploymentTransaction": "0x57b6786c9fbf31f8df596a2f7364ffe5fb3150509a694f834534ba69615bd2b2",
+      "bytecodeHash": "0xbc2a00a5bd9fe146d0fc51c42e6d1cacc2227e7d7b0171bc01dfbae3c2793dda",
+      "verificationUrl": "https://repo.sourcify.dev/42161/0x56CCBeC6D08f561eCF117964FAB385CBf90A568B"
+    },
+    "split": {
+      "address": "0x7EF7efa8a53530dEa3F077691422AAbEB183049c",
+      "deploymentTransaction": "0x0ec3b357a9e6f5bacaa2ffc2c25a92b244c416c84fd6b72c0afaa11befde7b16",
+      "bytecodeHash": "0x04687b0c64b2007091d31c3a364212a34723b6576a48da60cd6ba8f47fc92d1a",
+      "verificationUrl": "https://repo.sourcify.dev/42161/0x7EF7efa8a53530dEa3F077691422AAbEB183049c"
+    }
+  },
+  "roles": {
+    "deployer": {
+      "holder": "0x8CF2C30DAD7423D9bb7C29008fF308D5fa003626",
+      "purpose": "One-time deployment wallet; no contract role after deployment."
+    },
+    "defaultAdmin": {
+      "holder": "0xA64BC5b6C39fcc58e887fcc3bee70c996c9a6C01",
+      "purpose": "Delayed default administration and future role rotation."
+    },
+    "pauser": {
+      "holder": "0xf727B7A018ca59635B0851c074973BD88f442389",
+      "purpose": "Emergency pause authority for checkout and split contracts."
+    },
+    "feeManager": {
+      "holder": "0x13CE463391b01B1309e1114908Fe900FD5013B92",
+      "purpose": "Platform fee configuration within the permanent 500 bps cap."
+    },
+    "merchantManager": {
+      "holder": "0x3d1fBDE70CE24135e3025a59a8a92A635D44B339",
+      "purpose": "Merchant registry and payout-account administration."
+    },
+    "orderSigner": {
+      "holder": "0x03981bA2a287b173A16b2c0a04088aB33AA98526",
+      "purpose": "Temporary encrypted local signer for EIP-712 order intents; rotate to AWS KMS before live payments."
+    },
+    "splitSigner": {
+      "holder": "0x7d17BfcB1d63ed7772D7705FD6ddc0ddEb60294b",
+      "purpose": "Temporary encrypted local signer for EIP-712 split reimbursements; rotate before enabling splits."
+    },
+    "sponsorSigner": {
+      "holder": "0x11020638950005053DC3b78dc3F33D855d305d5C",
+      "purpose": "Dedicated bootstrap sponsor identity with no contract privileges."
+    },
+    "feeRecipient": {
+      "holder": "0xD0697BA83F35428fe8B78dDfa5D04E675C3733a6",
+      "purpose": "Receives protocol fees after explicit enablement; launch fee is zero."
+    }
+  },
+  "configuration": {
+    "platformFeeBps": 0,
+    "adminDelaySeconds": "172800",
+    "pendingDefaultAdminTransfers": false,
+    "pendingDefaultAdminDelayChanges": false,
+    "checkoutPaused": false,
+    "splitPaused": false,
+    "passBoundToCheckout": true,
+    "passBindingTransaction": "0xeb3c6e94c70e77a51f19f50cc4b23b08b9a150caef569a0f40e2cffeb09323bf"
+  },
+  "foundryReceipt": {
+    "path": "packages/contracts/deployments/42161.json",
+    "sha256": "16b239cb56e446db851a234baf39cecd1a2ad100ea417e2be6d9b0be060eec45"
+  },
+  "verification": {
+    "compilerVersion": "0.8.36",
+    "optimizerRuns": 200,
+    "viaIR": true,
+    "evmVersion": "cancun",
+    "foundryVersion": "forge 1.7.1"
+  }
+}

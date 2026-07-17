@@ -263,10 +263,7 @@ export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
         toBlock,
         address: input.addresses.map((entry) => getAddress(entry)),
       });
-      return z
-        .array(z.unknown())
-        .parse(raw)
-        .map(toRawLog);
+      return z.array(z.unknown()).parse(raw).map(toRawLog);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw mapRpcError(error);
@@ -735,7 +732,12 @@ export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
 
   async #assertRemoteChain(): Promise<void> {
     if (this.#remoteChainVerified) return;
-    const remoteChainId = z.number().int().positive().safe().parse(await this.client.getChainId());
+    const remoteChainId = z
+      .number()
+      .int()
+      .positive()
+      .safe()
+      .parse(await this.client.getChainId());
     if (remoteChainId !== Number(ARBITRUM_ONE_CHAIN_ID)) {
       throw new AppError(
         'RPC_INCONSISTENT',

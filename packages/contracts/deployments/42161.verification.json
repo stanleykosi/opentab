@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "chainId": 42161,
+  "verifiedAt": "2026-07-17T17:04:32.000Z",
+  "rpcProviders": [
+    {
+      "name": "configured-primary",
+      "chainId": 42161,
+      "receiptsSuccessful": 4,
+      "keylessVerificationPassed": true
+    },
+    {
+      "name": "PublicNode",
+      "chainId": 42161,
+      "receiptsSuccessful": 4,
+      "keylessVerificationPassed": true
+    }
+  ],
+  "contracts": {
+    "pass": {
+      "address": "0x56CCBeC6D08f561eCF117964FAB385CBf90A568B",
+      "deploymentTransaction": "0x57b6786c9fbf31f8df596a2f7364ffe5fb3150509a694f834534ba69615bd2b2",
+      "blockNumber": "484866936",
+      "blockHash": "0x66c586578d780ae694012679c568cb119b287ce8b59a91df8b3787fd88acd918",
+      "runtimeCodeHash": "0xbc2a00a5bd9fe146d0fc51c42e6d1cacc2227e7d7b0171bc01dfbae3c2793dda",
+      "sourceVerification": {
+        "provider": "Sourcify",
+        "match": "exact_match",
+        "creationMatch": "exact_match",
+        "runtimeMatch": "exact_match",
+        "verifiedAt": "2026-07-17T17:03:45.000Z",
+        "matchId": "42519028",
+        "url": "https://repo.sourcify.dev/42161/0x56CCBeC6D08f561eCF117964FAB385CBf90A568B"
+      }
+    },
+    "checkout": {
+      "address": "0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91",
+      "deploymentTransaction": "0xa8c3d9c057799d0a4f865767cc95baa889e046800e35b3448578ecaa5cf7e953",
+      "blockNumber": "484866952",
+      "blockHash": "0x79641672b768a3adc135ee91cbdab7cfdb9c52c7d102c4144a8e93f12ddef004",
+      "runtimeCodeHash": "0xaa39a54db02e8845b25d768e66e92095187925c49acb73b28f77ca883f6131b2",
+      "sourceVerification": {
+        "provider": "Sourcify",
+        "match": "exact_match",
+        "creationMatch": "exact_match",
+        "runtimeMatch": "exact_match",
+        "verifiedAt": "2026-07-17T17:04:32.000Z",
+        "matchId": "42519062",
+        "url": "https://repo.sourcify.dev/42161/0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91"
+      }
+    },
+    "split": {
+      "address": "0x7EF7efa8a53530dEa3F077691422AAbEB183049c",
+      "deploymentTransaction": "0x0ec3b357a9e6f5bacaa2ffc2c25a92b244c416c84fd6b72c0afaa11befde7b16",
+      "blockNumber": "484866965",
+      "blockHash": "0xa9f3977c2f4673c1d1284212c1ceea8bf316266c45f1efa842773e9a755ad12d",
+      "runtimeCodeHash": "0x04687b0c64b2007091d31c3a364212a34723b6576a48da60cd6ba8f47fc92d1a",
+      "sourceVerification": {
+        "provider": "Sourcify",
+        "match": "exact_match",
+        "creationMatch": "exact_match",
+        "runtimeMatch": "exact_match",
+        "verifiedAt": "2026-07-17T17:04:31.000Z",
+        "matchId": "42519061",
+        "url": "https://repo.sourcify.dev/42161/0x7EF7efa8a53530dEa3F077691422AAbEB183049c"
+      }
+    }
+  },
+  "passBinding": {
+    "transaction": "0xeb3c6e94c70e77a51f19f50cc4b23b08b9a150caef569a0f40e2cffeb09323bf",
+    "blockNumber": "484866972",
+    "blockHash": "0x45f935c13f56af659741dd0976c0fa4076344d0bce27c76b514c7c33462ed2df",
+    "status": "success"
+  }
+}

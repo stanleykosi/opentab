@@ -1,5 +1,9 @@
 import {
   ARBITRUM_ONE_CHAIN_ID,
+  ARBITRUM_ONE_OPENTAB_CHECKOUT,
+  ARBITRUM_ONE_OPENTAB_DEPLOYMENT_BLOCK,
+  ARBITRUM_ONE_OPENTAB_PASS,
+  ARBITRUM_ONE_OPENTAB_SPLIT,
   ARBITRUM_ONE_USDC,
   Bytes32Schema,
   ChainIdSchema,
@@ -13,20 +17,13 @@ const unsignedBigInt = z
   .regex(/^(0|[1-9][0-9]*)$/)
   .transform((value) => BigInt(value));
 const unsignedBigIntWithDefault = (fallback: bigint) =>
-  z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    unsignedBigInt.default(fallback),
-  );
+  z.preprocess((value) => (value === '' ? undefined : value), unsignedBigInt.default(fallback));
 const stringWithDefault = (fallback: string) =>
-  z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().min(1).default(fallback),
-  );
+  z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).default(fallback));
+const urlWithDefault = (fallback: string) =>
+  z.preprocess((value) => (value === '' ? undefined : value), z.string().url().default(fallback));
 const addressWithDefault = (fallback: ReturnType<typeof EvmAddressSchema.parse>) =>
-  z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    EvmAddressSchema.default(fallback),
-  );
+  z.preprocess((value) => (value === '' ? undefined : value), EvmAddressSchema.default(fallback));
 const optionalString = z.preprocess(
   (value) => (value === '' ? undefined : value),
   z.string().optional(),
@@ -404,15 +401,9 @@ export const PublicEnvironmentSchema = z.object({
   NEXT_PUBLIC_ARBITRUM_CHAIN_ID: ChainIdSchema.default(ARBITRUM_ONE_CHAIN_ID),
   NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL: z.string().url().default('https://arb1.arbitrum.io/rpc'),
   NEXT_PUBLIC_USDC_ADDRESS: EvmAddressSchema.default(ARBITRUM_ONE_USDC),
-  NEXT_PUBLIC_CHECKOUT_ADDRESS: addressWithDefault(
-    EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
-  ),
-  NEXT_PUBLIC_PASS_ADDRESS: addressWithDefault(
-    EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
-  ),
-  NEXT_PUBLIC_SPLIT_ADDRESS: addressWithDefault(
-    EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
-  ),
+  NEXT_PUBLIC_CHECKOUT_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_CHECKOUT),
+  NEXT_PUBLIC_PASS_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_PASS),
+  NEXT_PUBLIC_SPLIT_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_SPLIT),
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: optionalString,
 });
 
@@ -433,10 +424,10 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   MAGIC_SECRET_KEY: optionalString,
   PARTICLE_RPC_URL: optionalUrl,
   ARBITRUM_RPC_URL: optionalUrl,
-  ARBITRUM_FALLBACK_RPC_URL: optionalUrl,
+  ARBITRUM_FALLBACK_RPC_URL: urlWithDefault('https://arbitrum-one-rpc.publicnode.com'),
   CONFIRMATION_DEPTH: z.coerce.number().int().min(1).max(100).default(2),
   REORG_WINDOW_BLOCKS: z.coerce.number().int().min(16).max(100_000).default(512),
-  INDEXER_DEPLOYMENT_BLOCK: unsignedBigIntWithDefault(0n),
+  INDEXER_DEPLOYMENT_BLOCK: unsignedBigIntWithDefault(ARBITRUM_ONE_OPENTAB_DEPLOYMENT_BLOCK),
   DATABASE_URL: optionalString,
   REDIS_URL: optionalUrl,
   OPENTAB_SECRET_ROOT: optionalString,
@@ -1189,20 +1180,14 @@ export const IndexerEnvironmentSchema = z
     DATABASE_URL_INDEXER: optionalString,
     REDIS_URL: optionalUrl,
     ARBITRUM_RPC_URL: optionalUrl,
-    ARBITRUM_FALLBACK_RPC_URL: optionalUrl,
+    ARBITRUM_FALLBACK_RPC_URL: urlWithDefault('https://arbitrum-one-rpc.publicnode.com'),
     NEXT_PUBLIC_ARBITRUM_CHAIN_ID: ChainIdSchema.default(ARBITRUM_ONE_CHAIN_ID),
-    NEXT_PUBLIC_CHECKOUT_ADDRESS: addressWithDefault(
-      EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
-    ),
-    NEXT_PUBLIC_PASS_ADDRESS: addressWithDefault(
-      EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
-    ),
-    NEXT_PUBLIC_SPLIT_ADDRESS: addressWithDefault(
-      EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
-    ),
+    NEXT_PUBLIC_CHECKOUT_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_CHECKOUT),
+    NEXT_PUBLIC_PASS_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_PASS),
+    NEXT_PUBLIC_SPLIT_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_SPLIT),
     CONFIRMATION_DEPTH: z.coerce.number().int().min(1).max(100).default(2),
     REORG_WINDOW_BLOCKS: z.coerce.number().int().min(16).max(100_000).default(512),
-    INDEXER_DEPLOYMENT_BLOCK: unsignedBigIntWithDefault(0n),
+    INDEXER_DEPLOYMENT_BLOCK: unsignedBigIntWithDefault(ARBITRUM_ONE_OPENTAB_DEPLOYMENT_BLOCK),
     PARTICLE_LIVE_ENABLED: strictBoolean.default(false),
     NEXT_PUBLIC_PARTICLE_PROJECT_ID: stringWithDefault('REPLACE_ME'),
     NEXT_PUBLIC_PARTICLE_CLIENT_KEY: stringWithDefault('REPLACE_ME'),

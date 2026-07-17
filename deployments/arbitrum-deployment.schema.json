@@ -147,7 +147,7 @@
         "verificationUrl": {
           "type": "string",
           "format": "uri",
-          "pattern": "^https://arbiscan\\.io/"
+          "pattern": "^https://repo\\.sourcify\\.dev/42161/0x[0-9a-fA-F]{40}$"
         }
       }
     },

@@ -1,0 +1,35 @@
+{
+  "chainId": 42161,
+  "network": "arbitrum-one",
+  "deploymentBlock": "484866936",
+  "deploymentTimestamp": "2026-07-17T16:59:37.000Z",
+  "repositoryCommit": "04a816592a855982d7577a85b7c515a5149806dc",
+  "compiler": {
+    "solc": "0.8.36",
+    "optimizerRuns": 200,
+    "viaIR": true,
+    "evmVersion": "cancun"
+  },
+  "addresses": {
+    "usdc": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "checkout": "0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91",
+    "pass": "0x56CCBeC6D08f561eCF117964FAB385CBf90A568B",
+    "splitReimbursement": "0x7EF7efa8a53530dEa3F077691422AAbEB183049c"
+  },
+  "runtimeCodeHashes": {
+    "checkout": "0xaa39a54db02e8845b25d768e66e92095187925c49acb73b28f77ca883f6131b2",
+    "pass": "0xbc2a00a5bd9fe146d0fc51c42e6d1cacc2227e7d7b0171bc01dfbae3c2793dda",
+    "splitReimbursement": "0x04687b0c64b2007091d31c3a364212a34723b6576a48da60cd6ba8f47fc92d1a"
+  },
+  "transactions": {
+    "passDeployment": "0x57b6786c9fbf31f8df596a2f7364ffe5fb3150509a694f834534ba69615bd2b2",
+    "checkoutDeployment": "0xa8c3d9c057799d0a4f865767cc95baa889e046800e35b3448578ecaa5cf7e953",
+    "passBinding": "0xeb3c6e94c70e77a51f19f50cc4b23b08b9a150caef569a0f40e2cffeb09323bf",
+    "splitDeployment": "0x0ec3b357a9e6f5bacaa2ffc2c25a92b244c416c84fd6b72c0afaa11befde7b16"
+  },
+  "verified": {
+    "checkout": true,
+    "pass": true,
+    "splitReimbursement": true
+  }
+}

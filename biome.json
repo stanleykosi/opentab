@@ -11,6 +11,7 @@
       "!**/lib",
       "!**/out",
       "!**/cache",
+      "!**/broadcast",
       "!**/artifacts",
       "!**/test-results",
       "!**/playwright-report",
