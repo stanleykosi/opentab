@@ -18,7 +18,7 @@ FROM toolchain AS build
 COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @opentab/indexer build \
-  && pnpm --offline --package-import-method=hardlink --filter @opentab/indexer deploy --prod .deploy/indexer
+  && pnpm --prefer-offline --package-import-method=hardlink --filter @opentab/indexer deploy --prod .deploy/indexer
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 

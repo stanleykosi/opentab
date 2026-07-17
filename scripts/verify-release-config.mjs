@@ -61,9 +61,13 @@ expect(
   'Railway Dockerfile cache mounts require a deployment-specific service ID and must stay disabled.',
 );
 expect(
-  dockerfile.includes('pnpm --offline --package-import-method=hardlink') &&
+  dockerfile.includes('pnpm --prefer-offline --package-import-method=hardlink') &&
     dockerfile.includes('--filter @opentab/indexer deploy --prod'),
-  'Indexer Docker packaging must consume the frozen local store without registry resolution.',
+  'Indexer Docker packaging must prefer the local store while allowing missing registry metadata.',
+);
+expect(
+  !dockerfile.includes('pnpm --offline'),
+  'Indexer Docker packaging must not require registry metadata to exist in a fresh Railway cache.',
 );
 expect(dockerfile.includes('USER node'), 'Indexer runtime must run as the non-root node user.');
 expect(dockerfile.includes('ENV PORT=3002'), 'Indexer image must expose Railway health port 3002.');

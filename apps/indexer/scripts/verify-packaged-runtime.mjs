@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(packageRoot));
-const temporaryRoot = await mkdtemp(join(tmpdir(), 'opentab-indexer-packaged-'));
+const smokeRoot = join(repositoryRoot, '.deploy-smoke');
+await mkdir(smokeRoot, { recursive: true, mode: 0o700 });
+const temporaryRoot = await mkdtemp(join(smokeRoot, 'indexer-packaged-'));
 const deploymentRoot = join(temporaryRoot, 'indexer');
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
@@ -40,7 +41,7 @@ try {
   run(
     pnpm,
     [
-      '--offline',
+      '--prefer-offline',
       '--package-import-method=hardlink',
       '--filter',
       '@opentab/indexer',
@@ -48,7 +49,13 @@ try {
       '--prod',
       deploymentRoot,
     ],
-    { timeout: 120_000 },
+    {
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        XDG_CACHE_HOME: join(temporaryRoot, 'empty-metadata-cache'),
+      },
+    },
   );
   const deployedPackage = JSON.parse(await readFile(join(deploymentRoot, 'package.json'), 'utf8'));
   if (deployedPackage.name !== '@opentab/indexer' || deployedPackage.type !== 'module') {
