@@ -20,6 +20,7 @@ interface RuntimePrivilegeSnapshot extends Record<string, unknown> {
   readonly canCreateDatabaseObjects: boolean;
   readonly canCreatePublicSchemaObjects: boolean;
   readonly canCreateTemporaryTables: boolean;
+  readonly hasUsableRowSecurity: boolean;
   readonly canReadOrders: boolean;
   readonly canInsertOrderId: boolean;
   readonly canUpdateOrderStatus: boolean;
@@ -110,6 +111,33 @@ export async function assertRuntimeDatabasePrivileges(db: OpenTabDatabase): Prom
         database.oid,
         'TEMP'
       ) as "canCreateTemporaryTables",
+      not exists(
+        select 1
+        from pg_catalog.pg_class protected_relation
+        where protected_relation.relnamespace = public_namespace.oid
+          and protected_relation.relkind in ('r', 'p')
+          and protected_relation.relrowsecurity
+          and (
+            pg_catalog.has_table_privilege(role.oid, protected_relation.oid, 'SELECT')
+            or pg_catalog.has_table_privilege(role.oid, protected_relation.oid, 'INSERT')
+            or pg_catalog.has_table_privilege(role.oid, protected_relation.oid, 'UPDATE')
+            or pg_catalog.has_table_privilege(role.oid, protected_relation.oid, 'DELETE')
+            or pg_catalog.has_any_column_privilege(role.oid, protected_relation.oid, 'SELECT')
+            or pg_catalog.has_any_column_privilege(role.oid, protected_relation.oid, 'INSERT')
+            or pg_catalog.has_any_column_privilege(role.oid, protected_relation.oid, 'UPDATE')
+          )
+          and not exists(
+            select 1
+            from pg_catalog.pg_policy policy
+            where policy.polrelid = protected_relation.oid
+              and policy.polname = 'opentab_backend_roles'
+              and policy.polcmd = '*'
+              and policy.polpermissive
+              and role.oid = any(policy.polroles)
+              and pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) = 'true'
+              and pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) = 'true'
+          )
+      ) as "hasUsableRowSecurity",
       pg_catalog.has_table_privilege(role.oid, orders_table.oid, 'SELECT') as "canReadOrders",
       pg_catalog.has_column_privilege(
         role.oid,
@@ -328,6 +356,7 @@ export async function assertRuntimeDatabasePrivileges(db: OpenTabDatabase): Prom
     !snapshot.canCreateDatabaseObjects &&
     !snapshot.canCreatePublicSchemaObjects &&
     !snapshot.canCreateTemporaryTables &&
+    snapshot.hasUsableRowSecurity &&
     snapshot.canReadOrders &&
     snapshot.canInsertOrderId &&
     snapshot.canUpdateOrderStatus &&

@@ -12,6 +12,21 @@ const unsignedBigInt = z
   .string()
   .regex(/^(0|[1-9][0-9]*)$/)
   .transform((value) => BigInt(value));
+const unsignedBigIntWithDefault = (fallback: bigint) =>
+  z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    unsignedBigInt.default(fallback),
+  );
+const stringWithDefault = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).default(fallback),
+  );
+const addressWithDefault = (fallback: ReturnType<typeof EvmAddressSchema.parse>) =>
+  z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    EvmAddressSchema.default(fallback),
+  );
 const optionalString = z.preprocess(
   (value) => (value === '' ? undefined : value),
   z.string().optional(),
@@ -384,19 +399,19 @@ export const PublicEnvironmentSchema = z.object({
   NEXT_PUBLIC_APP_ENV: AppEnvironmentSchema.default('local'),
   NEXT_PUBLIC_APP_ORIGIN: exactApplicationOrigin.default('http://localhost:3000'),
   NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY: z.string().min(1).default('pk_live_REPLACE_ME'),
-  NEXT_PUBLIC_PARTICLE_PROJECT_ID: z.string().min(1).default('REPLACE_ME'),
-  NEXT_PUBLIC_PARTICLE_CLIENT_KEY: z.string().min(1).default('REPLACE_ME'),
-  NEXT_PUBLIC_PARTICLE_APP_UUID: z.string().min(1).default('REPLACE_ME'),
+  NEXT_PUBLIC_PARTICLE_PROJECT_ID: stringWithDefault('REPLACE_ME'),
+  NEXT_PUBLIC_PARTICLE_CLIENT_KEY: stringWithDefault('REPLACE_ME'),
+  NEXT_PUBLIC_PARTICLE_APP_UUID: stringWithDefault('REPLACE_ME'),
   NEXT_PUBLIC_ARBITRUM_CHAIN_ID: ChainIdSchema.default(ARBITRUM_ONE_CHAIN_ID),
   NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL: z.string().url().default('https://arb1.arbitrum.io/rpc'),
   NEXT_PUBLIC_USDC_ADDRESS: EvmAddressSchema.default(ARBITRUM_ONE_USDC),
-  NEXT_PUBLIC_CHECKOUT_ADDRESS: EvmAddressSchema.default(
+  NEXT_PUBLIC_CHECKOUT_ADDRESS: addressWithDefault(
     EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
   ),
-  NEXT_PUBLIC_PASS_ADDRESS: EvmAddressSchema.default(
+  NEXT_PUBLIC_PASS_ADDRESS: addressWithDefault(
     EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
   ),
-  NEXT_PUBLIC_SPLIT_ADDRESS: EvmAddressSchema.default(
+  NEXT_PUBLIC_SPLIT_ADDRESS: addressWithDefault(
     EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
   ),
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: optionalString,
@@ -422,7 +437,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   ARBITRUM_FALLBACK_RPC_URL: optionalUrl,
   CONFIRMATION_DEPTH: z.coerce.number().int().min(1).max(100).default(2),
   REORG_WINDOW_BLOCKS: z.coerce.number().int().min(16).max(100_000).default(512),
-  INDEXER_DEPLOYMENT_BLOCK: unsignedBigInt.default(0n),
+  INDEXER_DEPLOYMENT_BLOCK: unsignedBigIntWithDefault(0n),
   DATABASE_URL: optionalString,
   REDIS_URL: optionalUrl,
   OPENTAB_SECRET_ROOT: optionalString,
@@ -438,7 +453,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   PAYMENT_INTENT_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
   PLATFORM_FEE_BPS: optionalPlatformFeeBps,
   PARTICLE_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(500).default(100),
-  PARTICLE_MAX_FEE_USD_MICROS: unsignedBigInt.default(5_000_000n),
+  PARTICLE_MAX_FEE_USD_MICROS: unsignedBigIntWithDefault(5_000_000n),
   PARTICLE_ALLOWED_SOURCE_CHAIN_IDS: z.preprocess(
     (value) => value ?? '1,8453,42161',
     particleSourceChains,
@@ -473,24 +488,24 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   SPLIT_SIGNER_PRIVATE_KEY: optionalString,
   SPLIT_SIGNER_KEY_ID: optionalString,
   SPLIT_SIGNER_EXPECTED_ADDRESS: optionalAddress,
-  SPLIT_REVOCATION_MAX_FEE_PER_GAS_WEI: unsignedBigInt.default(5_000_000_000n),
-  SPLIT_REVOCATION_MAX_GAS_LIMIT: unsignedBigInt.default(200_000n),
+  SPLIT_REVOCATION_MAX_FEE_PER_GAS_WEI: unsignedBigIntWithDefault(5_000_000_000n),
+  SPLIT_REVOCATION_MAX_GAS_LIMIT: unsignedBigIntWithDefault(200_000n),
   AWS_KMS_REGION: awsRegion,
   VERCEL_AWS_ROLE_ARN: optionalAwsRoleArn,
   SPONSOR_SIGNER_MODE: z.enum(['disabled', 'private-key', 'kms']).default('disabled'),
   SPONSOR_PRIVATE_KEY: optionalString,
   SPONSOR_KMS_KEY_ID: optionalString,
   SPONSOR_SIGNER_ADDRESS: optionalAddress,
-  SPONSOR_MAX_FEE_PER_GAS_WEI: unsignedBigInt.default(0n),
-  SPONSOR_MIN_GRANT_WEI: unsignedBigInt.default(0n),
-  SPONSOR_TARGET_BALANCE_WEI: unsignedBigInt.default(0n),
-  SPONSOR_PER_GRANT_CAP_WEI: unsignedBigInt.default(0n),
-  SPONSOR_PER_ADDRESS_DAILY_CAP_WEI: unsignedBigInt.default(0n),
-  SPONSOR_PER_USER_DAILY_CAP_WEI: unsignedBigInt.default(0n),
-  SPONSOR_PER_IP_DAILY_CAP_WEI: unsignedBigInt.default(0n),
-  SPONSOR_PER_DEVICE_DAILY_CAP_WEI: unsignedBigInt.default(0n),
-  SPONSOR_GLOBAL_DAILY_CAP_WEI: unsignedBigInt.default(0n),
-  SPONSOR_LOW_BALANCE_ALERT_WEI: unsignedBigInt.default(0n),
+  SPONSOR_MAX_FEE_PER_GAS_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_MIN_GRANT_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_TARGET_BALANCE_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_PER_GRANT_CAP_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_PER_ADDRESS_DAILY_CAP_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_PER_USER_DAILY_CAP_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_PER_IP_DAILY_CAP_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_PER_DEVICE_DAILY_CAP_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_GLOBAL_DAILY_CAP_WEI: unsignedBigIntWithDefault(0n),
+  SPONSOR_LOW_BALANCE_ALERT_WEI: unsignedBigIntWithDefault(0n),
   SPONSOR_ALLOWED_ADDRESSES: z.string().default(''),
   TURNSTILE_SECRET_KEY: optionalString,
 }).superRefine((config, context) => {
@@ -1177,25 +1192,25 @@ export const IndexerEnvironmentSchema = z
     ARBITRUM_RPC_URL: optionalUrl,
     ARBITRUM_FALLBACK_RPC_URL: optionalUrl,
     NEXT_PUBLIC_ARBITRUM_CHAIN_ID: ChainIdSchema.default(ARBITRUM_ONE_CHAIN_ID),
-    NEXT_PUBLIC_CHECKOUT_ADDRESS: EvmAddressSchema.default(
+    NEXT_PUBLIC_CHECKOUT_ADDRESS: addressWithDefault(
       EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
     ),
-    NEXT_PUBLIC_PASS_ADDRESS: EvmAddressSchema.default(
+    NEXT_PUBLIC_PASS_ADDRESS: addressWithDefault(
       EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
     ),
-    NEXT_PUBLIC_SPLIT_ADDRESS: EvmAddressSchema.default(
+    NEXT_PUBLIC_SPLIT_ADDRESS: addressWithDefault(
       EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
     ),
     CONFIRMATION_DEPTH: z.coerce.number().int().min(1).max(100).default(2),
     REORG_WINDOW_BLOCKS: z.coerce.number().int().min(16).max(100_000).default(512),
-    INDEXER_DEPLOYMENT_BLOCK: unsignedBigInt.default(0n),
+    INDEXER_DEPLOYMENT_BLOCK: unsignedBigIntWithDefault(0n),
     PARTICLE_LIVE_ENABLED: strictBoolean.default(false),
-    NEXT_PUBLIC_PARTICLE_PROJECT_ID: z.string().min(1).default('REPLACE_ME'),
-    NEXT_PUBLIC_PARTICLE_CLIENT_KEY: z.string().min(1).default('REPLACE_ME'),
-    NEXT_PUBLIC_PARTICLE_APP_UUID: z.string().min(1).default('REPLACE_ME'),
+    NEXT_PUBLIC_PARTICLE_PROJECT_ID: stringWithDefault('REPLACE_ME'),
+    NEXT_PUBLIC_PARTICLE_CLIENT_KEY: stringWithDefault('REPLACE_ME'),
+    NEXT_PUBLIC_PARTICLE_APP_UUID: stringWithDefault('REPLACE_ME'),
     PARTICLE_RPC_URL: optionalUrl,
     PARTICLE_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(500).default(100),
-    PARTICLE_MAX_FEE_USD_MICROS: unsignedBigInt.default(5_000_000n),
+    PARTICLE_MAX_FEE_USD_MICROS: unsignedBigIntWithDefault(5_000_000n),
     PARTICLE_ALLOWED_SOURCE_CHAIN_IDS: z.preprocess(
       (value) => value ?? '1,8453,42161',
       particleSourceChains,

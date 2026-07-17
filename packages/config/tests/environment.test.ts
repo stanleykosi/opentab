@@ -109,6 +109,27 @@ it('keeps route fixtures disabled unless the dedicated demo flag is explicit', (
 });
 
 describe('platform environment normalization', () => {
+  it('treats blank disabled live fields as absent in an initial Vercel deployment', () => {
+    const server = parseServerEnvironment({
+      ...PRODUCTION_APPLICATION_ENVIRONMENT,
+      NEXT_PUBLIC_PARTICLE_PROJECT_ID: '',
+      NEXT_PUBLIC_PARTICLE_CLIENT_KEY: '',
+      NEXT_PUBLIC_PARTICLE_APP_UUID: '',
+      NEXT_PUBLIC_CHECKOUT_ADDRESS: '',
+      NEXT_PUBLIC_PASS_ADDRESS: '',
+      NEXT_PUBLIC_SPLIT_ADDRESS: '',
+      INDEXER_DEPLOYMENT_BLOCK: '',
+    });
+
+    expect(server).toMatchObject({
+      PARTICLE_LIVE_ENABLED: false,
+      PAYMENTS_ENABLED: false,
+      NEXT_PUBLIC_PARTICLE_PROJECT_ID: 'REPLACE_ME',
+      NEXT_PUBLIC_CHECKOUT_ADDRESS: '0x0000000000000000000000000000000000000000',
+      INDEXER_DEPLOYMENT_BLOCK: 0n,
+    });
+  });
+
   it('derives production Vercel defaults without overriding explicit deployment inputs', () => {
     const server = parseServerEnvironment(PRODUCTION_APPLICATION_ENVIRONMENT);
     expect(server).toMatchObject({

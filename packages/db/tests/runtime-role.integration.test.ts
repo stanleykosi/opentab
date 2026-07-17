@@ -203,6 +203,34 @@ describe.skipIf(databaseUrl === undefined)('least-privilege web runtime role', (
     await ownerHandle?.close();
   });
 
+  it('fails closed when RLS is enabled without the backend-only policy', async () => {
+    if (ownerHandle === undefined || runtimeHandle === undefined) {
+      throw new Error('Runtime-role test database was not initialized');
+    }
+
+    await ownerHandle.db.execute(
+      sql.raw('alter table public.config_snapshots enable row level security'),
+    );
+    try {
+      await expect(assertRuntimeDatabasePrivileges(runtimeHandle.db)).rejects.toMatchObject({
+        code: 'CONFIGURATION_INVALID',
+      });
+      await ownerHandle.db.execute(
+        sql.raw(
+          `create policy opentab_backend_roles on public.config_snapshots as permissive for all to ${quoteIdentifier(runtimeRole)} using (true) with check (true)`,
+        ),
+      );
+      await expect(assertRuntimeDatabasePrivileges(runtimeHandle.db)).resolves.toBeUndefined();
+    } finally {
+      await ownerHandle.db.execute(
+        sql.raw('drop policy if exists opentab_backend_roles on public.config_snapshots'),
+      );
+      await ownerHandle.db.execute(
+        sql.raw('alter table public.config_snapshots disable row level security'),
+      );
+    }
+  });
+
   it('supports normal Judge materialization while denying attestation and shadow-table writes', async () => {
     if (ownerHandle === undefined || runtimeHandle === undefined) {
       throw new Error('Runtime-role test database was not initialized');

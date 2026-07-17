@@ -29,7 +29,6 @@ function authorizedEnvironment(overrides: Record<string, string | undefined> = {
     LIVE_TRANSACTION_CONFIRMATION,
     NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY: 'pk_live_test_value',
     MAGIC_SECRET_KEY: 'sk_live_test_value',
-    MAGIC_CLIENT_ID: 'magic-client-id',
     NEXT_PUBLIC_PARTICLE_PROJECT_ID: 'particle-project-id',
     NEXT_PUBLIC_PARTICLE_CLIENT_KEY: 'particle-client-key',
     NEXT_PUBLIC_PARTICLE_APP_UUID: 'particle-app-uuid',
