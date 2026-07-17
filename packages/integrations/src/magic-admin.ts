@@ -55,34 +55,29 @@ interface MagicAdminClientLike {
 }
 
 export interface MagicAdminVerifierConfig {
-  readonly expectedAudience: string;
-  readonly expectedApplicationId: string;
   readonly environment: string;
   readonly maxClockSkewSeconds?: number;
   readonly now?: () => Date;
 }
 
 export class MagicAdminIdentityVerifier implements MagicIdentityVerifierPort {
+  readonly audience: string;
+
   constructor(
     private readonly client: MagicAdminClientLike,
     private readonly config: MagicAdminVerifierConfig,
   ) {
-    if (client.clientId !== config.expectedAudience) {
+    const clientId = z.string().min(1).max(256).safeParse(client.clientId);
+    if (!clientId.success) {
       throw new AppError(
         'CONFIGURATION_INVALID',
-        'Magic Admin client ID does not match the configured audience.',
+        'Magic Admin did not resolve an application client ID from the configured secret.',
       );
     }
-    // DIDT 2.8.2 has no independent application-ID claim. The only
-    // cryptographically checked app identifier is `aud` (the Magic client
-    // ID). Treating a second arbitrary configured string as proof would be a
-    // false claim, so both port expectations must name that same verified ID.
-    if (config.expectedApplicationId !== config.expectedAudience) {
-      throw new AppError(
-        'CONFIGURATION_INVALID',
-        'Magic application ID must equal the DID audience/client ID.',
-      );
-    }
+    // Magic.init(secret) resolves this ID from Magic's authenticated admin
+    // endpoint. It is therefore the trusted DID audience/application binding;
+    // operators do not need to copy a separate, dashboard-hidden value.
+    this.audience = clientId.data;
   }
 
   async verifyDidToken(input: {
@@ -90,10 +85,7 @@ export class MagicAdminIdentityVerifier implements MagicIdentityVerifierPort {
     expectedAudience: string;
     expectedApplicationId: string;
   }) {
-    if (
-      input.expectedAudience !== this.config.expectedAudience ||
-      input.expectedApplicationId !== this.config.expectedApplicationId
-    ) {
+    if (input.expectedAudience !== this.audience || input.expectedApplicationId !== this.audience) {
       throw new AppError('AUTH_DID_INVALID', 'The identity proof is for another application.');
     }
     if (input.didToken.length < 16 || input.didToken.length > 16_384) {
@@ -102,7 +94,8 @@ export class MagicAdminIdentityVerifier implements MagicIdentityVerifierPort {
 
     try {
       // Installed Admin SDK 2.8.2 validates synchronously and throws. The
-      // client was created via await Magic.init with an explicit client ID.
+      // client was created via await Magic.init, which resolves the project
+      // client ID from the secret before token validation.
       this.client.token.validate(input.didToken);
       const decoded = this.client.token.decode(input.didToken);
       const claim = DidClaimSchema.parse(decoded[1]);
@@ -110,7 +103,7 @@ export class MagicAdminIdentityVerifier implements MagicIdentityVerifierPort {
       const nowSeconds = Math.floor(now.getTime() / 1_000);
       const skew = this.config.maxClockSkewSeconds ?? 300;
 
-      if (claim.aud !== this.config.expectedAudience) {
+      if (claim.aud !== this.audience) {
         throw new AppError('AUTH_DID_INVALID', 'The identity proof audience is invalid.');
       }
       if (
@@ -169,7 +162,7 @@ export class MagicAdminIdentityVerifier implements MagicIdentityVerifierPort {
         issuedAt: new Date(claim.iat * 1_000).toISOString(),
         expiresAt: new Date(claim.ext * 1_000).toISOString(),
         audience: claim.aud,
-        applicationId: this.config.expectedApplicationId,
+        applicationId: this.audience,
         authMethod,
         evidenceDigest: evidence.evidenceDigest,
       });

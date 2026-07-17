@@ -71,7 +71,6 @@ if (bool('PAYMENTS_ENABLED')) {
   for (const key of [
     'NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY',
     'MAGIC_SECRET_KEY',
-    'MAGIC_CLIENT_ID',
     'NEXT_PUBLIC_PARTICLE_PROJECT_ID',
     'NEXT_PUBLIC_PARTICLE_CLIENT_KEY',
     'NEXT_PUBLIC_PARTICLE_APP_UUID',
@@ -225,7 +224,6 @@ if (appEnvironment === 'production') {
   for (const key of [
     'NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY',
     'MAGIC_SECRET_KEY',
-    'MAGIC_CLIENT_ID',
     'DATABASE_URL',
     'REDIS_URL',
   ]) {

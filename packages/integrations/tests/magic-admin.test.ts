@@ -52,8 +52,6 @@ function client(input: { claim?: unknown; metadata?: unknown; publicAddress?: st
 
 function verifier(fake = client()) {
   return new MagicAdminIdentityVerifier(fake, {
-    expectedAudience: audience,
-    expectedApplicationId: audience,
     environment: 'test',
     now: () => now,
   });
@@ -79,14 +77,14 @@ describe('Magic Admin identity verification', () => {
     expect(JSON.stringify(result)).not.toContain(didToken);
   });
 
-  it('requires application ID to name the same cryptographically checked client ID', () => {
+  it('derives the trusted audience from the client ID resolved by Magic Admin', () => {
+    expect(verifier().audience).toBe(audience);
     expect(
       () =>
-        new MagicAdminIdentityVerifier(client(), {
-          expectedAudience: audience,
-          expectedApplicationId: 'unproven-dashboard-id',
-          environment: 'production',
-        }),
+        new MagicAdminIdentityVerifier(
+          { ...client(), clientId: null },
+          { environment: 'production' },
+        ),
     ).toThrow(expect.objectContaining({ code: 'CONFIGURATION_INVALID' }));
   });
 

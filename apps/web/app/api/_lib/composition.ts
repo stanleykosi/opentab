@@ -886,34 +886,19 @@ export async function createBackendApiRegistry(
     bytes32: () => `0x${randomBytes(32).toString('hex')}` as `0x${string}`,
     secret: randomSecret,
   };
-  const verifier: MagicIdentityVerifierPort =
-    deterministicParts?.verifier ??
-    (await createMagicAdminIdentityVerifier({
-      secretApiKey: requiredSecret(
-        config.MAGIC_SECRET_KEY,
-        'MAGIC_SECRET_KEY',
-        deterministicParts,
-        'privacy',
-      ),
-      config: {
-        expectedAudience: requiredSecret(
-          config.MAGIC_CLIENT_ID,
-          'MAGIC_CLIENT_ID',
-          deterministicParts,
-          'privacy',
-        ),
-        expectedApplicationId: requiredSecret(
-          config.MAGIC_CLIENT_ID,
-          'MAGIC_CLIENT_ID',
-          deterministicParts,
-          'privacy',
-        ),
-        environment: config.APP_ENV,
-      },
-    }));
-  const expectedAudience =
-    deterministicParts?.expectedAudience ??
-    requiredSecret(config.MAGIC_CLIENT_ID, 'MAGIC_CLIENT_ID', deterministicParts, 'privacy');
+  let verifier: MagicIdentityVerifierPort;
+  let expectedAudience: string;
+  if (deterministicParts !== undefined) {
+    verifier = deterministicParts.verifier;
+    expectedAudience = deterministicParts.expectedAudience;
+  } else {
+    const magicVerifier = await createMagicAdminIdentityVerifier({
+      secretApiKey: requireRuntimeValue(config.MAGIC_SECRET_KEY, 'MAGIC_SECRET_KEY'),
+      config: { environment: config.APP_ENV },
+    });
+    verifier = magicVerifier;
+    expectedAudience = magicVerifier.audience;
+  }
 
   const allowedSponsorRecipients = config.SPONSOR_ALLOWED_ADDRESSES.split(',')
     .map((entry) => entry.trim())

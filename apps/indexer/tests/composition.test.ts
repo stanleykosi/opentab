@@ -104,7 +104,6 @@ describe('production indexer composition', () => {
     };
     for (const webOnly of [
       'MAGIC_SECRET_KEY',
-      'MAGIC_CLIENT_ID',
       'SESSION_HASH_PEPPER',
       'CSRF_SECRET',
       'CAPABILITY_TOKEN_PEPPER',

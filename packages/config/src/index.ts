@@ -417,7 +417,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   WITHDRAWALS_ENABLED: strictBoolean.default(false),
   SPLITS_ENABLED: strictBoolean.default(false),
   MAGIC_SECRET_KEY: optionalString,
-  MAGIC_CLIENT_ID: optionalString,
   PARTICLE_RPC_URL: optionalUrl,
   ARBITRUM_RPC_URL: optionalUrl,
   ARBITRUM_FALLBACK_RPC_URL: optionalUrl,
@@ -655,7 +654,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
     for (const name of [
       'NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY',
       'MAGIC_SECRET_KEY',
-      'MAGIC_CLIENT_ID',
       'DATABASE_URL',
       'REDIS_URL',
     ] as const) {
@@ -676,7 +674,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
       ['PARTICLE_LIVE_ENABLED', config.PARTICLE_LIVE_ENABLED],
       ['NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY', config.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY],
       ['MAGIC_SECRET_KEY', config.MAGIC_SECRET_KEY],
-      ['MAGIC_CLIENT_ID', config.MAGIC_CLIENT_ID],
       ['NEXT_PUBLIC_PARTICLE_PROJECT_ID', config.NEXT_PUBLIC_PARTICLE_PROJECT_ID],
       ['NEXT_PUBLIC_PARTICLE_CLIENT_KEY', config.NEXT_PUBLIC_PARTICLE_CLIENT_KEY],
       ['NEXT_PUBLIC_PARTICLE_APP_UUID', config.NEXT_PUBLIC_PARTICLE_APP_UUID],
