@@ -83,6 +83,7 @@ const SHARED_ADMIN_EVENTS = new Set([
   'DefaultAdminTransferScheduled',
   'EIP712DomainChanged',
 ]);
+const BLOCK_HEADER_CONCURRENCY = 16;
 
 function sameAddress(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
@@ -346,26 +347,45 @@ export class IndexerScanner {
   ): Promise<readonly IndexedBlock[]> {
     const blocks: IndexedBlock[] = [];
     let previousHash = cursor.lastProcessedBlockHash;
-    for (let blockNumber = fromBlock; blockNumber <= toBlock; blockNumber += 1n) {
-      const block = await this.source.getBlock(blockNumber.toString());
-      if (parseBlock(block.number) !== blockNumber) {
-        throw new AppError('RPC_INCONSISTENT', 'RPC returned the wrong block header.');
+    for (
+      let chunkStart = fromBlock;
+      chunkStart <= toBlock;
+      chunkStart += BigInt(BLOCK_HEADER_CONCURRENCY)
+    ) {
+      const chunkEnd =
+        chunkStart + BigInt(BLOCK_HEADER_CONCURRENCY - 1) > toBlock
+          ? toBlock
+          : chunkStart + BigInt(BLOCK_HEADER_CONCURRENCY - 1);
+      const requested: bigint[] = [];
+      for (let blockNumber = chunkStart; blockNumber <= chunkEnd; blockNumber += 1n) {
+        requested.push(blockNumber);
       }
-      if (
-        previousHash !== undefined &&
-        block.parentHash.toLowerCase() !== previousHash.toLowerCase()
-      ) {
-        throw new AppError('RPC_INCONSISTENT', 'RPC block headers are not continuous.', {
-          retryable: true,
+      const headers = await Promise.all(
+        requested.map(async (blockNumber) => ({
+          blockNumber,
+          block: await this.source.getBlock(blockNumber.toString()),
+        })),
+      );
+      for (const { blockNumber, block } of headers) {
+        if (parseBlock(block.number) !== blockNumber) {
+          throw new AppError('RPC_INCONSISTENT', 'RPC returned the wrong block header.');
+        }
+        if (
+          previousHash !== undefined &&
+          block.parentHash.toLowerCase() !== previousHash.toLowerCase()
+        ) {
+          throw new AppError('RPC_INCONSISTENT', 'RPC block headers are not continuous.', {
+            retryable: true,
+          });
+        }
+        blocks.push({
+          number: blockNumber,
+          hash: block.hash,
+          parentHash: block.parentHash,
+          observedAt: this.#now(),
         });
+        previousHash = block.hash;
       }
-      blocks.push({
-        number: blockNumber,
-        hash: block.hash,
-        parentHash: block.parentHash,
-        observedAt: this.#now(),
-      });
-      previousHash = block.hash;
     }
     return blocks;
   }

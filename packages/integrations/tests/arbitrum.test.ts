@@ -67,6 +67,7 @@ function orderPaidLog() {
 
 function client(overrides: Record<string, unknown> = {}) {
   return {
+    getChainId: vi.fn(async () => 42_161),
     getBlock: vi.fn(async (_input?: { blockNumber?: bigint }) => ({
       number: 120n,
       hash: blockHash,
@@ -163,6 +164,14 @@ describe('Arbitrum read and payment-proof adapter', () => {
     expect(arbitrumOneChain.name).toBe('Arbitrum One');
     expect(arbitrumOneChain.rpcUrls.default.http).toEqual(['https://arb1.arbitrum.io/rpc']);
     expect(arbitrumOneChain.blockExplorers.default.url).toBe('https://arbiscan.io');
+  });
+
+  it('rejects a wrong-chain RPC before returning a scanner head', async () => {
+    const adapter = new ViemArbitrumReadAdapter(
+      client({ getChainId: vi.fn(async () => 1) }),
+      config({ environment: 'production' }),
+    );
+    await expect(adapter.getLatestBlock()).rejects.toMatchObject({ code: 'RPC_INCONSISTENT' });
   });
   it('requires HTTPS and independent provider hostnames outside local mode', () => {
     expect(

@@ -41,7 +41,7 @@ export const recordedPublicJudgeProof = PublicJudgeProofSchema.parse({
     activityUrl: 'https://universalx.app/activity/particle-operation-recorded-1',
   },
   settlement: {
-    chainId: '421614',
+    chainId: '42161',
     checkoutAddress: '0x2222222222222222222222222222222222222222',
     passAddress: '0x3333333333333333333333333333333333333333',
     tokenAddress: '0x4444444444444444444444444444444444444444',
@@ -50,7 +50,7 @@ export const recordedPublicJudgeProof = PublicJudgeProofSchema.parse({
     passTokenId: '17',
     event: {
       eventName: 'OrderPaid',
-      chainId: '421614',
+      chainId: '42161',
       contractAddress: '0x2222222222222222222222222222222222222222',
       transactionHash: bytes('3'),
       blockNumber: '9876543',

@@ -69,7 +69,6 @@ function IntegrityResult({
 
 function explorerOrigin(chainId: string): string | undefined {
   if (chainId === '42161') return 'https://arbiscan.io';
-  if (chainId === '421614') return 'https://sepolia.arbiscan.io';
   return undefined;
 }
 

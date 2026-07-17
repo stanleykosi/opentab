@@ -42,10 +42,9 @@ export function createProductionIndexerDependencies(
     checkoutAddress: server.NEXT_PUBLIC_CHECKOUT_ADDRESS,
     passAddress: server.NEXT_PUBLIC_PASS_ADDRESS,
     ...(runtime.addresses.length > 2 ? { splitAddress: server.NEXT_PUBLIC_SPLIT_ADDRESS } : {}),
-    expectedDelegationImplementation: required(
-      server.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS,
-      'PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS',
-    ),
+    ...(server.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS === undefined
+      ? {}
+      : { expectedDelegationImplementation: server.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS }),
     deploymentBlock: runtime.startBlock,
     maxLogRange: BigInt(runtime.maxBlockRange),
     maxOrderLookupBlocks: 5_000_000n,

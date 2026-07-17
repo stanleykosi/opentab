@@ -7,12 +7,10 @@ import {OpenTabCheckout} from "../src/OpenTabCheckout.sol";
 import {OpenTabPass1155} from "../src/OpenTabPass1155.sol";
 import {OpenTabSplitReimbursement} from "../src/OpenTabSplitReimbursement.sol";
 
-/// @notice Guarded OpenTab deployment for Arbitrum One or Arbitrum Sepolia.
+/// @notice Guarded OpenTab deployment for canonical Arbitrum One settlement.
 contract DeployOpenTab is Script {
     uint256 public constant ARBITRUM_ONE_CHAIN_ID = 42_161;
-    uint256 public constant ARBITRUM_SEPOLIA_CHAIN_ID = 421_614;
     address public constant ARBITRUM_ONE_USDC = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831;
-    address public constant ARBITRUM_SEPOLIA_USDC = 0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d;
 
     struct DeploymentConfig {
         uint256 expectedChainId;
@@ -58,7 +56,6 @@ contract DeployOpenTab is Script {
 
     function canonicalUsdc(uint256 chainId) public pure returns (address) {
         if (chainId == ARBITRUM_ONE_CHAIN_ID) return ARBITRUM_ONE_USDC;
-        if (chainId == ARBITRUM_SEPOLIA_CHAIN_ID) return ARBITRUM_SEPOLIA_USDC;
         revert("unsupported chain");
     }
 

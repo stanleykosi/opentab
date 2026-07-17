@@ -208,6 +208,31 @@ function options(overrides: Partial<IndexerScannerOptions> = {}): IndexerScanner
 }
 
 describe('IndexerScanner deterministic range processing', () => {
+  it('loads bounded block-header batches concurrently and validates them in order', async () => {
+    const source = new MemorySource();
+    source.latest = 12;
+    let active = 0;
+    let maximumActive = 0;
+    const originalGetBlock = source.getBlock.bind(source);
+    source.getBlock = async (blockNumber: string) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      try {
+        return await originalGetBlock(blockNumber);
+      } finally {
+        active -= 1;
+      }
+    };
+    const store = new MemoryStore();
+
+    await expect(
+      new IndexerScanner(source, store, decoder, options({ maxBlockRange: 12 })).scanOnce(),
+    ).resolves.toMatchObject({ kind: 'processed', processedBlocks: 12 });
+    expect(maximumActive).toBeGreaterThan(1);
+    expect(store.cursor.nextBlock).toBe(13n);
+  });
+
   it('sorts out-of-order logs and keeps duplicate delivery idempotent at the store identity', async () => {
     const source = new MemorySource();
     source.latest = 2;

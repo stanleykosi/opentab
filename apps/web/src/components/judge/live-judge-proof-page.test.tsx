@@ -57,11 +57,11 @@ describe('live Judge proof capability handling', () => {
     );
     expect(screen.getByRole('link', { name: /Open checkout contract/ })).toHaveAttribute(
       'href',
-      `https://sepolia.arbiscan.io/address/${proof.settlement.checkoutAddress}`,
+      `https://arbiscan.io/address/${proof.settlement.checkoutAddress}`,
     );
     expect(screen.getByRole('link', { name: /Open block/ })).toHaveAttribute(
       'href',
-      `https://sepolia.arbiscan.io/block/${event.blockNumber}`,
+      `https://arbiscan.io/block/${event.blockNumber}`,
     );
   });
 

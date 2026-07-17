@@ -322,7 +322,6 @@ function normalizePlatformEnvironment(
     if (railway) {
       normalized.INDEXER_ENABLED ??= 'true';
       normalized.INDEXER_WRITES_ENABLED ??= 'true';
-      normalized.PARTICLE_LIVE_ENABLED ??= 'true';
     }
     return normalized;
   }
@@ -1260,10 +1259,6 @@ export const IndexerEnvironmentSchema = z
     required(
       'ARBITRUM_FALLBACK_RPC_URL',
       'The enabled indexer requires an independent fallback RPC',
-    );
-    required(
-      'PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS',
-      'The enabled indexer requires the reviewed EIP-7702 implementation address',
     );
     if (
       zeroAddressPattern.test(config.NEXT_PUBLIC_CHECKOUT_ADDRESS) ||

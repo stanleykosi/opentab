@@ -108,6 +108,7 @@ const AuthorizationEvidenceTransactionSchema = z.object({
 });
 
 interface PublicClientLike {
+  getChainId(): Promise<number>;
   getBlock(input?: { blockNumber?: bigint }): Promise<unknown>;
   getBlockNumber(): Promise<bigint>;
   getLogs(input: Readonly<Record<string, unknown>>): Promise<unknown>;
@@ -126,7 +127,7 @@ export interface ArbitrumAdapterConfig {
   readonly checkoutAddress: EvmAddress;
   readonly passAddress: EvmAddress;
   readonly splitAddress?: EvmAddress;
-  readonly expectedDelegationImplementation: EvmAddress;
+  readonly expectedDelegationImplementation?: EvmAddress;
   readonly deploymentBlock: bigint;
   readonly maxLogRange: bigint;
   /** Bounded active-recovery lookup; the indexer owns complete history. */
@@ -178,6 +179,7 @@ function toRawLog(raw: unknown): RawContractLog {
 
 export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
   readonly #allowedContracts: ReadonlySet<string>;
+  #remoteChainVerified = false;
 
   constructor(
     private readonly client: PublicClientLike,
@@ -214,18 +216,22 @@ export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
 
   async getLatestBlock(): Promise<ChainBlock> {
     try {
+      await this.#assertRemoteChain();
       return asChainBlock(await this.client.getBlock());
     } catch (error) {
+      if (error instanceof AppError) throw error;
       throw mapRpcError(error);
     }
   }
 
   async getBlock(blockNumber: string): Promise<ChainBlock> {
     try {
+      await this.#assertRemoteChain();
       const number = BigInt(blockNumber);
       if (number < 0n) throw new Error('negative block');
       return asChainBlock(await this.client.getBlock({ blockNumber: number }));
     } catch (error) {
+      if (error instanceof AppError) throw error;
       throw mapRpcError(error);
     }
   }
@@ -251,12 +257,16 @@ export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
       throw new AppError('VALIDATION_FAILED', 'The Arbitrum log address is not allowed.');
     }
     try {
+      await this.#assertRemoteChain();
       const raw = await this.client.getLogs({
         fromBlock,
         toBlock,
         address: input.addresses.map((entry) => getAddress(entry)),
       });
-      return z.array(z.unknown()).parse(raw).map(toRawLog);
+      return z
+        .array(z.unknown())
+        .parse(raw)
+        .map(toRawLog);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw mapRpcError(error);
@@ -535,6 +545,7 @@ export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
 
   async findOrderEvent(orderKey: OrderKey): Promise<CanonicalEventProof | undefined> {
     try {
+      await this.#assertRemoteChain();
       const latest = await this.client.getBlockNumber();
       if (latest < this.config.deploymentBlock) return undefined;
       const boundedFrom = latest - this.config.maxOrderLookupBlocks + 1n;
@@ -656,10 +667,17 @@ export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
 
   /** Mandatory live compatibility check for safe ERC-1155 minting to a delegated EOA. */
   async assertDelegatedErc1155Receiver(address: EvmAddress): Promise<void> {
+    const expectedDelegationImplementation = this.config.expectedDelegationImplementation;
+    if (expectedDelegationImplementation === undefined) {
+      throw new AppError(
+        'CONFIGURATION_INVALID',
+        'Delegated receiver checks require a reviewed EIP-7702 implementation address.',
+      );
+    }
     const evidence = await this.getDelegationCode(address);
     if (
       evidence.implementation === undefined ||
-      !sameAddress(evidence.implementation, this.config.expectedDelegationImplementation)
+      !sameAddress(evidence.implementation, expectedDelegationImplementation)
     ) {
       throw new AppError(
         'UA_DELEGATION_REQUIRED',
@@ -713,6 +731,19 @@ export class ViemArbitrumReadAdapter implements ArbitrumReadPort {
         { cause: error },
       );
     }
+  }
+
+  async #assertRemoteChain(): Promise<void> {
+    if (this.#remoteChainVerified) return;
+    const remoteChainId = z.number().int().positive().safe().parse(await this.client.getChainId());
+    if (remoteChainId !== Number(ARBITRUM_ONE_CHAIN_ID)) {
+      throw new AppError(
+        'RPC_INCONSISTENT',
+        'The Arbitrum RPC endpoint returned an unexpected chain ID.',
+        { retryable: true },
+      );
+    }
+    this.#remoteChainVerified = true;
   }
 }
 

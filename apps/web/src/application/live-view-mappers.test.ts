@@ -184,7 +184,7 @@ describe('public Judge proof view mapping', () => {
     const view = mapPublicJudgeProofToView(recordedPublicJudgeProof);
 
     expect(view.orderId).toBe(recordedPublicJudgeProof.orderId);
-    expect(view.settlement.chainId).toBe('421614');
+    expect(view.settlement.chainId).toBe('42161');
     expect(view.settlement.receiptId).toBe(recordedPublicJudgeProof.settlement.receiptId);
     expect(view.settlement.passTokenId).toBe('17');
     expect(view.settlement.event?.fields).toEqual(recordedPublicJudgeProof.settlement.event.fields);

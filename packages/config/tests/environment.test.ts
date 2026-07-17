@@ -70,6 +70,7 @@ const PRODUCTION_APPLICATION_ENVIRONMENT = {
 const RAILWAY_INDEXER_ENVIRONMENT = {
   RAILWAY_SERVICE_ID: 'service-indexer',
   RAILWAY_ENVIRONMENT_NAME: 'production',
+  PARTICLE_LIVE_ENABLED: 'true',
   DATABASE_URL_INDEXER: 'postgresql://indexer:secret@db.example/opentab?sslmode=verify-full',
   REDIS_URL: 'rediss://default:secret@redis.example:6380',
   ARBITRUM_RPC_URL: LIVE_CANARY_ENVIRONMENT.ARBITRUM_RPC_URL,
@@ -176,7 +177,7 @@ describe('platform environment normalization', () => {
     ).toThrow();
   });
 
-  it('starts a Railway indexer with live defaults while retaining explicit kill switches', () => {
+  it('starts a Railway indexer only with an explicit live Particle profile', () => {
     expect(parseIndexerEnvironment(RAILWAY_INDEXER_ENVIRONMENT)).toMatchObject({
       APP_ENV: 'production',
       INDEXER_ENABLED: true,

@@ -17,8 +17,8 @@
     "verified"
   ],
   "properties": {
-    "chainId": { "enum": [42161, 421614] },
-    "network": { "enum": ["arbitrum-one", "arbitrum-sepolia"] },
+    "chainId": { "const": 42161 },
+    "network": { "const": "arbitrum-one" },
     "deploymentBlock": { "$ref": "#/$defs/uintString" },
     "deploymentTimestamp": { "type": "string", "format": "date-time" },
     "repositoryCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },

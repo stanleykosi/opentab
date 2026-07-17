@@ -603,7 +603,7 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
 
   it('rejects unsupported and unsafe chain IDs against installed SDK runtime support', () => {
     const fake = sdk(template);
-    for (const chainId of ['421614', '999', '9007199254740992']) {
+    for (const chainId of ['10', '999', '9007199254740992']) {
       expect(
         () =>
           new ParticleUniversalAccountAdapter(
@@ -618,7 +618,7 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
     expect(() =>
       createParticleUniversalAccountAdapter(
         config({
-          allowedSourceChainIds: [ARBITRUM_ONE_CHAIN_ID, '421614'],
+          allowedSourceChainIds: [ARBITRUM_ONE_CHAIN_ID, '10'],
           allowedSourceTokens: [],
         }),
       ),

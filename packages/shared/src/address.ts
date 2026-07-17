@@ -14,7 +14,6 @@ export const ChainIdSchema = z
   .brand<'ChainId'>();
 
 export const ARBITRUM_ONE_CHAIN_ID = ChainIdSchema.parse('42161');
-export const ARBITRUM_SEPOLIA_CHAIN_ID = ChainIdSchema.parse('421614');
 export const ARBITRUM_ONE_USDC = EvmAddressSchema.parse(
   '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
 );

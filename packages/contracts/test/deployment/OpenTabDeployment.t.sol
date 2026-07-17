@@ -32,7 +32,7 @@ contract VerifyDeploymentHarness is VerifyDeployment {
 }
 
 contract OpenTabDeploymentTest is Test {
-    address internal constant SEPOLIA_USDC = 0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d;
+    address internal constant ARBITRUM_ONE_USDC = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831;
 
     DeployOpenTabHarness internal deployerScript;
     VerifyDeploymentHarness internal verifierScript;
@@ -40,15 +40,15 @@ contract OpenTabDeploymentTest is Test {
     address internal deployer;
 
     function setUp() public {
-        vm.chainId(421_614);
+        vm.chainId(42_161);
         MockUSDC mock = new MockUSDC();
-        vm.etch(SEPOLIA_USDC, address(mock).code);
+        vm.etch(ARBITRUM_ONE_USDC, address(mock).code);
         deployer = makeAddr("deployment-operator");
         deployerScript = new DeployOpenTabHarness();
         verifierScript = new VerifyDeploymentHarness();
         config = DeployOpenTab.DeploymentConfig({
-            expectedChainId: 421_614,
-            usdc: SEPOLIA_USDC,
+            expectedChainId: 42_161,
+            usdc: ARBITRUM_ONE_USDC,
             admin: makeAddr("safe-admin"),
             adminDelay: 2 days,
             pauser: makeAddr("deployment-pauser"),
@@ -94,8 +94,8 @@ contract OpenTabDeploymentTest is Test {
         (OpenTabCheckout checkout, OpenTabPass1155 pass, OpenTabSplitReimbursement split) =
             deployerScript.deployForTest(config, deployer);
 
-        assertEq(address(checkout.USDC()), SEPOLIA_USDC);
-        assertEq(address(split.USDC()), SEPOLIA_USDC);
+        assertEq(address(checkout.USDC()), ARBITRUM_ONE_USDC);
+        assertEq(address(split.USDC()), ARBITRUM_ONE_USDC);
         assertEq(pass.checkout(), address(checkout));
         assertTrue(checkout.hasRole(checkout.DEFAULT_ADMIN_ROLE(), config.admin));
         assertTrue(pass.hasRole(pass.DEFAULT_ADMIN_ROLE(), config.admin));
@@ -117,7 +117,7 @@ contract OpenTabDeploymentTest is Test {
 
     function testValidationRejectsWrongChainTokenOperatorAndFee() public {
         DeployOpenTab.DeploymentConfig memory candidate = config;
-        candidate.expectedChainId = 42_161;
+        candidate.expectedChainId = 1;
         vm.expectRevert(bytes("unexpected chain"));
         deployerScript.validateForTest(candidate, deployer);
 
