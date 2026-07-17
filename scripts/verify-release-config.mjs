@@ -96,6 +96,15 @@ for (const ignoredPath of ['**/node_modules', '**/.next', '.deploy-smoke', '.env
     `.dockerignore must exclude ${ignoredPath} from the Railway build context.`,
   );
 }
+const indexerDockerignore = read('apps/indexer/Dockerfile.dockerignore');
+expect(
+  !indexerDockerignore.includes('**/*evidence*'),
+  'Indexer Docker context must not exclude production modules whose filenames contain evidence.',
+);
+expect(
+  indexerDockerignore.includes('**/evidence/**'),
+  'Indexer Docker context must still exclude generated evidence directories.',
+);
 
 const contractArtifactGenerator = read('scripts/generate-contract-artifacts.mjs');
 expect(

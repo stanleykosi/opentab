@@ -35,5 +35,5 @@
 **/.env*
 **/*secret*
 **/*credential*
-**/*evidence*
+**/evidence/**
 **/*test-results*
