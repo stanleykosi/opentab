@@ -104,6 +104,38 @@ function requireRuntimeValue<T>(value: T | undefined, name: string): T {
   return value;
 }
 
+type EnabledParticleBrowserConfig = Extract<
+  PublicBrowserConfig['particle'],
+  { readonly enabled: true }
+>;
+
+export function deriveApplicationSecret(
+  root: string | undefined,
+  purpose: string,
+): string | undefined {
+  if (root === undefined) return undefined;
+  return createHmac('sha256', root).update(`opentab:${purpose}:v1`).digest('hex');
+}
+
+function unavailableArbitrumChain(): ArbitrumReadPort {
+  const unavailable = async (): Promise<never> => {
+    throw new AppError(
+      'FEATURE_DISABLED',
+      'Arbitrum reads are disabled until Particle is enabled.',
+    );
+  };
+  return {
+    getLatestBlock: unavailable,
+    getBlock: unavailable,
+    getLogs: unavailable,
+    getNativeBalance: unavailable,
+    getDelegationCode: unavailable,
+    getTransactionReceipt: unavailable,
+    findOrderEvent: unavailable,
+    readProduct: unavailable,
+  };
+}
+
 const ExactGitReleaseIdPattern = /^[0-9a-f]{40}$/;
 
 /** Resolve the exact deployed Git commit without host-specific truncation or ambiguity. */
@@ -150,7 +182,7 @@ export function resolveApplicationReleaseId(
 
 function createLiveArbitrumChain(
   config: ServerEnvironment,
-  browser: PublicBrowserConfig,
+  particle: EnabledParticleBrowserConfig,
 ): ArbitrumReadPort {
   const splitAddress = /^0x0{40}$/i.test(config.NEXT_PUBLIC_SPLIT_ADDRESS)
     ? undefined
@@ -166,7 +198,7 @@ function createLiveArbitrumChain(
     passAddress: config.NEXT_PUBLIC_PASS_ADDRESS,
     ...(splitAddress === undefined ? {} : { splitAddress }),
     expectedDelegationImplementation: EvmAddressSchema.parse(
-      browser.particle.expectedImplementationAddress,
+      particle.expectedImplementationAddress,
     ),
     deploymentBlock: config.INDEXER_DEPLOYMENT_BLOCK,
     maxLogRange: BigInt(Math.min(config.REORG_WINDOW_BLOCKS, 10_000)),
@@ -240,6 +272,37 @@ function publicConfig(
 ): PublicBrowserConfig {
   const deterministic = deterministicParts !== undefined;
   const capabilities = deriveServerFeatureCapabilities(config);
+  if (!deterministic && !config.PARTICLE_LIVE_ENABLED) {
+    return {
+      applicationReleaseId,
+      magic: {
+        publishableKey: config.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY,
+        rpcUrl: config.NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL,
+      },
+      challenge: {
+        ...(config.NEXT_PUBLIC_TURNSTILE_SITE_KEY === undefined
+          ? {}
+          : { turnstileSiteKey: config.NEXT_PUBLIC_TURNSTILE_SITE_KEY }),
+      },
+      particle: { enabled: false },
+      environment: config.APP_ENV,
+      media: {
+        allowedOrigins: [
+          new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
+          ...config.PRODUCT_MEDIA_ALLOWED_ORIGINS.filter(
+            (origin) => origin !== new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
+          ),
+        ],
+      },
+      features: {
+        checkout: capabilities.checkoutSubmission,
+        bootstrapGas: config.BOOTSTRAP_SPONSOR_ENABLED,
+        splits: config.SPLITS_ENABLED,
+        loyalty: config.MERCHANT_MUTATIONS_ENABLED,
+        judgeMode: config.JUDGE_MODE_ENABLED,
+      },
+    };
+  }
   const requiredLive = <T>(value: T | undefined, name: string): T => {
     if (value === undefined) {
       throw new AppError(
@@ -321,6 +384,7 @@ function publicConfig(
         : { turnstileSiteKey: config.NEXT_PUBLIC_TURNSTILE_SITE_KEY }),
     },
     particle: {
+      enabled: true,
       projectId: config.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
       projectClientKey: config.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
       projectAppUuid: config.NEXT_PUBLIC_PARTICLE_APP_UUID,
@@ -398,25 +462,22 @@ function publicConfig(
 
 function operationsFactory(
   config: ServerEnvironment,
-  browser: PublicBrowserConfig,
+  particle: EnabledParticleBrowserConfig,
 ): (actor: CurrentUser) => UniversalOperationPort {
   return (actor) =>
     createParticleUniversalAccountAdapter({
-      projectId: browser.particle.projectId,
-      projectClientKey: browser.particle.projectClientKey,
-      projectAppUuid: browser.particle.projectAppUuid,
+      projectId: particle.projectId,
+      projectClientKey: particle.projectClientKey,
+      projectAppUuid: particle.projectAppUuid,
       ownerAddress: actor.walletAddress,
-      expectedImplementationAddress: EvmAddressSchema.parse(
-        browser.particle.expectedImplementationAddress,
-      ),
-      expectedImplementationCodeHash: browser.particle
-        .expectedImplementationCodeHash as `0x${string}`,
+      expectedImplementationAddress: EvmAddressSchema.parse(particle.expectedImplementationAddress),
+      expectedImplementationCodeHash: particle.expectedImplementationCodeHash as `0x${string}`,
       environment: config.APP_ENV,
-      slippageBps: browser.particle.slippageBps,
-      maxFeeUsdMicros: BigInt(browser.particle.maxFeeUsdMicros),
-      allowedSourceChainIds: browser.particle.allowedSourceChainIds,
-      allowedSourceAssets: browser.particle.allowedSourceAssets,
-      sourceCallProfiles: browser.particle.sourceCallProfiles.map((profile) => ({
+      slippageBps: particle.slippageBps,
+      maxFeeUsdMicros: BigInt(particle.maxFeeUsdMicros),
+      allowedSourceChainIds: particle.allowedSourceChainIds,
+      allowedSourceAssets: particle.allowedSourceAssets,
+      sourceCallProfiles: particle.sourceCallProfiles.map((profile) => ({
         profileId: profile.profileId,
         chainId: profile.chainId,
         asset: profile.asset,
@@ -440,13 +501,12 @@ function operationsFactory(
             })),
           }),
       responseProfile: {
-        ...browser.particle.responseProfile,
-        deploymentsFixtureDigest: browser.particle.responseProfile
+        ...particle.responseProfile,
+        deploymentsFixtureDigest: particle.responseProfile
           .deploymentsFixtureDigest as `0x${string}`,
-        authFixtureDigest: browser.particle.responseProfile.authFixtureDigest as `0x${string}`,
-        submissionFixtureDigest: browser.particle.responseProfile
-          .submissionFixtureDigest as `0x${string}`,
-        statusFixtureDigest: browser.particle.responseProfile.statusFixtureDigest as `0x${string}`,
+        authFixtureDigest: particle.responseProfile.authFixtureDigest as `0x${string}`,
+        submissionFixtureDigest: particle.responseProfile.submissionFixtureDigest as `0x${string}`,
+        statusFixtureDigest: particle.responseProfile.statusFixtureDigest as `0x${string}`,
       },
       ...(config.PARTICLE_RPC_URL === undefined ? {} : { rpcUrl: config.PARTICLE_RPC_URL }),
     });
@@ -639,21 +699,28 @@ export async function createBackendApiRegistry(
   if (databaseUrl === undefined || redisUrl === undefined) {
     throw new AppError('CONFIGURATION_INVALID', 'The backend API requires PostgreSQL and Redis.');
   }
+  const secretRoot = config.OPENTAB_SECRET_ROOT;
   const sessionPepper = requiredSecret(
-    config.SESSION_HASH_PEPPER,
+    config.SESSION_HASH_PEPPER ?? deriveApplicationSecret(secretRoot, 'session-token-hash'),
     'SESSION_HASH_PEPPER',
     deterministicParts,
     'session',
   );
-  const csrfPepper = requiredSecret(config.CSRF_SECRET, 'CSRF_SECRET', deterministicParts, 'csrf');
+  const csrfPepper = requiredSecret(
+    config.CSRF_SECRET ?? deriveApplicationSecret(secretRoot, 'csrf-token-hash'),
+    'CSRF_SECRET',
+    deterministicParts,
+    'csrf',
+  );
   const capabilityPepper = requiredSecret(
-    config.CAPABILITY_TOKEN_PEPPER,
+    config.CAPABILITY_TOKEN_PEPPER ?? deriveApplicationSecret(secretRoot, 'capability-token-hash'),
     'CAPABILITY_TOKEN_PEPPER',
     deterministicParts,
     'capability',
   );
   const privacySecret = requiredSecret(
-    config.PRIVACY_SUBJECT_HASH_SECRET,
+    config.PRIVACY_SUBJECT_HASH_SECRET ??
+      deriveApplicationSecret(secretRoot, 'privacy-subject-hash'),
     'PRIVACY_SUBJECT_HASH_SECRET',
     deterministicParts,
     'privacy',
@@ -735,7 +802,8 @@ export async function createBackendApiRegistry(
     },
   });
   const operationsForActor =
-    deterministicParts?.operationsForActor ?? operationsFactory(config, browser);
+    deterministicParts?.operationsForActor ??
+    (browser.particle.enabled ? operationsFactory(config, browser.particle) : undefined);
   const kmsClient = await managedKmsClient(config, deterministicParts);
   const signer = await orderSigner(config, deterministicParts, kmsClient);
   const split = await splitSigner(config, deterministicParts, kmsClient);
@@ -769,7 +837,11 @@ export async function createBackendApiRegistry(
             client: requireRuntimeValue(kmsClient, 'Vercel OIDC AWS KMS client'),
           })
         : undefined;
-  const chain = deterministicParts?.chain ?? createLiveArbitrumChain(config, browser);
+  const chain =
+    deterministicParts?.chain ??
+    (browser.particle.enabled
+      ? createLiveArbitrumChain(config, browser.particle)
+      : unavailableArbitrumChain());
   const platformFeeBps = (config.PLATFORM_FEE_BPS ?? 0).toString();
   if (config.PAYMENTS_ENABLED) {
     await assertPlatformFeeParity(
@@ -1011,10 +1083,15 @@ export async function createBackendApiRegistry(
     backend,
     ...(judgeEvidence === undefined ? {} : { judgeEvidence }),
     chain,
-    expectedDelegationImplementation: EvmAddressSchema.parse(
-      browser.particle.expectedImplementationAddress,
-    ),
-    expectedDelegationCodeHash: browser.particle.expectedImplementationCodeHash as `0x${string}`,
+    ...(browser.particle.enabled
+      ? {
+          expectedDelegationImplementation: EvmAddressSchema.parse(
+            browser.particle.expectedImplementationAddress,
+          ),
+          expectedDelegationCodeHash: browser.particle
+            .expectedImplementationCodeHash as `0x${string}`,
+        }
+      : {}),
     checkoutAddress: config.NEXT_PUBLIC_CHECKOUT_ADDRESS,
     splitAddress: config.NEXT_PUBLIC_SPLIT_ADDRESS,
     tokenAddress: config.NEXT_PUBLIC_USDC_ADDRESS,
@@ -1070,7 +1147,7 @@ export async function createBackendApiRegistry(
     config: browser,
     queries,
     backend,
-    operationsForActor,
+    ...(operationsForActor === undefined ? {} : { operationsForActor }),
     chain,
     checks: {
       database: () =>

@@ -47,6 +47,13 @@ export class LiveBackendApiResourceQueries implements BackendApiResourceQueryPor
   }
 
   async getWalletReadiness(actor: CurrentUser) {
+    const particle = this.dependencies.config.particle;
+    if (!particle.enabled) {
+      throw new AppError(
+        'FEATURE_DISABLED',
+        'Wallet readiness is disabled until Particle is enabled.',
+      );
+    }
     const operations = this.dependencies.operationsForActor?.(actor);
     if (operations === undefined) {
       throw new AppError('CONFIGURATION_INVALID', 'Wallet readiness adapter is not configured.');
@@ -56,10 +63,9 @@ export class LiveBackendApiResourceQueries implements BackendApiResourceQueryPor
       operations.getDelegation(),
       this.dependencies.chain.getDelegationCode(actor.walletAddress),
     ]);
-    const expectedImplementation = this.dependencies.config.particle
-      .expectedImplementationAddress as CurrentUser['walletAddress'];
-    const expectedImplementationCodeHash =
-      this.dependencies.config.particle.expectedImplementationCodeHash.toLowerCase();
+    const expectedImplementation =
+      particle.expectedImplementationAddress as CurrentUser['walletAddress'];
+    const expectedImplementationCodeHash = particle.expectedImplementationCodeHash.toLowerCase();
     const onchainImplementation =
       onchainDelegation.accountType === 'delegated_eoa'
         ? onchainDelegation.implementation

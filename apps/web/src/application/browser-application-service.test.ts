@@ -37,6 +37,7 @@ function publicConfig(provenance: 'deterministic' | 'recorded_live' = 'recorded_
     magic: { publishableKey: 'pk_live_browser_test', rpcUrl: 'https://arb.example/rpc' },
     challenge: { turnstileSiteKey: 'turnstile-site-key-test' },
     particle: {
+      enabled: true as const,
       projectId: 'particle-project',
       projectClientKey: 'particle-client',
       projectAppUuid: 'particle-app',
@@ -397,7 +398,12 @@ describe('browser application service boundaries', () => {
           requestId: 'req_continuation_test',
         }),
       )
-      .mockResolvedValueOnce(json(publicConfig()));
+      .mockResolvedValueOnce(
+        json({
+          ...publicConfig(),
+          particle: { enabled: false },
+        }),
+      );
     const wallet = magicWallet();
     const loader = vi.fn(async () => ({
       createCheckoutOperationTemplate: () => {
@@ -517,21 +523,12 @@ describe('browser application service boundaries', () => {
 
   it('fails closed when a production-like config omits exact source-token contracts', async () => {
     const config = publicConfig();
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        json({
-          continuationId: 'continuation_missing_token_policy',
-          expiresAt: future,
-          requestId: 'req_continuation_token_policy',
-        }),
-      )
-      .mockResolvedValueOnce(
-        json({
-          ...config,
-          particle: { ...config.particle, allowedSourceTokens: [] },
-        }),
-      );
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      json({
+        ...config,
+        particle: { ...config.particle, allowedSourceTokens: [] },
+      }),
+    );
     const loader = vi.fn();
     const service = new BrowserApplicationService({
       api: new BrowserApiClient({ fetcher }),
@@ -540,7 +537,7 @@ describe('browser application service boundaries', () => {
       origin: () => 'https://opentab.example',
     });
 
-    await expect(service.beginGoogleSignIn('/')).rejects.toMatchObject({
+    await expect(service.getUniversalAccount(owner)).rejects.toMatchObject({
       code: 'CONFIGURATION_INVALID',
     });
     expect(loader).not.toHaveBeenCalled();

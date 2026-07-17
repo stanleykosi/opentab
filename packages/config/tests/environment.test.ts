@@ -3,6 +3,7 @@ import {
   deriveServerFeatureCapabilities,
   parseFrontendFeatureEnvironment,
   parseIndexerEnvironment,
+  parsePublicEnvironment,
   parseServerEnvironment,
   ServerEnvironmentSchema,
 } from '../src/index.js';
@@ -55,6 +56,48 @@ const LIVE_CANARY_ENVIRONMENT = {
   ]),
 } as const;
 
+const PRODUCTION_APPLICATION_ENVIRONMENT = {
+  VERCEL_ENV: 'production',
+  VERCEL_PROJECT_PRODUCTION_URL: 'opentab.example',
+  VERCEL_GIT_COMMIT_SHA: 'a'.repeat(40),
+  NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY: 'pk_live_opentab',
+  MAGIC_SECRET_KEY: 'sk_live_opentab',
+  MAGIC_CLIENT_ID: 'opentab-magic-client',
+  DATABASE_URL: 'postgresql://runtime:secret@db.example/opentab?sslmode=verify-full',
+  REDIS_URL: 'rediss://default:secret@redis.example:6380',
+  OPENTAB_SECRET_ROOT: 'root-secret-material-that-is-at-least-32-bytes',
+} as const;
+
+const RAILWAY_INDEXER_ENVIRONMENT = {
+  RAILWAY_SERVICE_ID: 'service-indexer',
+  RAILWAY_ENVIRONMENT_NAME: 'production',
+  DATABASE_URL_INDEXER: 'postgresql://indexer:secret@db.example/opentab?sslmode=verify-full',
+  REDIS_URL: 'rediss://default:secret@redis.example:6380',
+  ARBITRUM_RPC_URL: LIVE_CANARY_ENVIRONMENT.ARBITRUM_RPC_URL,
+  ARBITRUM_FALLBACK_RPC_URL: LIVE_CANARY_ENVIRONMENT.ARBITRUM_FALLBACK_RPC_URL,
+  NEXT_PUBLIC_CHECKOUT_ADDRESS: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_CHECKOUT_ADDRESS,
+  NEXT_PUBLIC_PASS_ADDRESS: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_PASS_ADDRESS,
+  INDEXER_DEPLOYMENT_BLOCK: '123456789',
+  NEXT_PUBLIC_PARTICLE_PROJECT_ID: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
+  NEXT_PUBLIC_PARTICLE_CLIENT_KEY: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
+  NEXT_PUBLIC_PARTICLE_APP_UUID: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_PARTICLE_APP_UUID,
+  PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS:
+    LIVE_CANARY_ENVIRONMENT.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS,
+  PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH:
+    LIVE_CANARY_ENVIRONMENT.PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH,
+  PARTICLE_RESPONSE_PROFILE_ID: LIVE_CANARY_ENVIRONMENT.PARTICLE_RESPONSE_PROFILE_ID,
+  PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST,
+  PARTICLE_AUTH_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_AUTH_FIXTURE_DIGEST,
+  PARTICLE_SUBMISSION_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_SUBMISSION_FIXTURE_DIGEST,
+  PARTICLE_STATUS_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_STATUS_FIXTURE_DIGEST,
+  PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET:
+    LIVE_CANARY_ENVIRONMENT.PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET,
+  PARTICLE_DELEGATION_PLAN_TTL_SECONDS:
+    LIVE_CANARY_ENVIRONMENT.PARTICLE_DELEGATION_PLAN_TTL_SECONDS,
+  PARTICLE_ALLOWED_SOURCE_TOKENS: LIVE_CANARY_ENVIRONMENT.PARTICLE_ALLOWED_SOURCE_TOKENS,
+  PARTICLE_SOURCE_CALL_PROFILES_JSON: LIVE_CANARY_ENVIRONMENT.PARTICLE_SOURCE_CALL_PROFILES_JSON,
+} as const;
+
 it('keeps route fixtures disabled unless the dedicated demo flag is explicit', () => {
   expect(parseFrontendFeatureEnvironment({})).toMatchObject({
     environment: 'local',
@@ -66,6 +109,115 @@ it('keeps route fixtures disabled unless the dedicated demo flag is explicit', (
   ).toBe(true);
 });
 
+describe('platform environment normalization', () => {
+  it('derives production Vercel defaults without overriding explicit deployment inputs', () => {
+    const server = parseServerEnvironment(PRODUCTION_APPLICATION_ENVIRONMENT);
+    expect(server).toMatchObject({
+      APP_ENV: 'production',
+      NEXT_PUBLIC_APP_ENV: 'production',
+      NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
+      PROVIDER_MODE: 'live',
+      APPLICATION_RELEASE_ID: 'a'.repeat(40),
+    });
+    expect(parsePublicEnvironment(PRODUCTION_APPLICATION_ENVIRONMENT)).toMatchObject({
+      NEXT_PUBLIC_APP_ENV: 'production',
+      NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
+    });
+    expect(parseFrontendFeatureEnvironment(PRODUCTION_APPLICATION_ENVIRONMENT)).toMatchObject({
+      environment: 'production',
+      providerMode: 'live',
+    });
+
+    expect(
+      parseFrontendFeatureEnvironment({
+        VERCEL_ENV: 'production',
+        APP_ENV: 'preview',
+        NEXT_PUBLIC_APP_ENV: 'preview',
+        PROVIDER_MODE: 'deterministic',
+      }),
+    ).toMatchObject({ environment: 'preview', providerMode: 'deterministic' });
+  });
+
+  it('derives the preview origin from the Vercel deployment URL', () => {
+    expect(
+      parsePublicEnvironment({
+        VERCEL_ENV: 'preview',
+        VERCEL_URL: 'opentab-git-feature.example.vercel.app',
+      }),
+    ).toMatchObject({
+      NEXT_PUBLIC_APP_ENV: 'preview',
+      NEXT_PUBLIC_APP_ORIGIN: 'https://opentab-git-feature.example.vercel.app',
+    });
+    expect(() =>
+      parsePublicEnvironment({
+        VERCEL_ENV: 'preview',
+        VERCEL_URL: 'https://opentab.example/path',
+      }),
+    ).toThrow();
+  });
+
+  it('starts a Railway indexer with live defaults while retaining explicit kill switches', () => {
+    expect(parseIndexerEnvironment(RAILWAY_INDEXER_ENVIRONMENT)).toMatchObject({
+      APP_ENV: 'production',
+      INDEXER_ENABLED: true,
+      INDEXER_WRITES_ENABLED: true,
+      PARTICLE_LIVE_ENABLED: true,
+    });
+    expect(
+      parseIndexerEnvironment({
+        RAILWAY_SERVICE_ID: 'service-indexer',
+        RAILWAY_ENVIRONMENT_NAME: 'production',
+        INDEXER_ENABLED: 'false',
+        INDEXER_WRITES_ENABLED: 'false',
+        PARTICLE_LIVE_ENABLED: 'false',
+      }),
+    ).toMatchObject({
+      APP_ENV: 'production',
+      INDEXER_ENABLED: false,
+      INDEXER_WRITES_ENABLED: false,
+      PARTICLE_LIVE_ENABLED: false,
+    });
+  });
+
+  it('uses the reviewed live profile mode and a bounded delegation TTL by default', () => {
+    expect(
+      parseServerEnvironment({
+        ...LIVE_CANARY_ENVIRONMENT,
+        PARTICLE_RESPONSE_PROFILE_PROVENANCE: undefined,
+        PARTICLE_DELEGATION_PLAN_TTL_SECONDS: undefined,
+      }),
+    ).toMatchObject({
+      PARTICLE_RESPONSE_PROFILE_PROVENANCE: 'recorded_live',
+      PARTICLE_DELEGATION_PLAN_TTL_SECONDS: 300,
+    });
+    expect(
+      parseIndexerEnvironment({
+        ...RAILWAY_INDEXER_ENVIRONMENT,
+        PARTICLE_DELEGATION_PLAN_TTL_SECONDS: undefined,
+      }).PARTICLE_DELEGATION_PLAN_TTL_SECONDS,
+    ).toBe(300);
+  });
+
+  it('selects the managed signer automatically for production-like payments', () => {
+    expect(
+      parseServerEnvironment({
+        ...LIVE_CANARY_ENVIRONMENT,
+        PAYMENTS_ENABLED: 'true',
+        MAGIC_SECRET_KEY: 'sk_live_staging_opentab',
+        MAGIC_CLIENT_ID: 'opentab-magic-staging',
+        DATABASE_URL: 'postgresql://runtime:secret@db.example/opentab?sslmode=verify-full',
+        REDIS_URL: 'rediss://default:secret@redis.example:6380',
+        OPENTAB_SECRET_ROOT: 'root-secret-material-that-is-at-least-32-bytes',
+        PLATFORM_FEE_BPS: '0',
+        ORDER_SIGNER_KMS_KEY_ID: 'opentab-order-intents',
+        ORDER_SIGNER_ADDRESS: '0x7777777777777777777777777777777777777777',
+        AWS_KMS_REGION: 'eu-west-1',
+        VERCEL_AWS_ROLE_ARN: 'arn:aws:iam::123456789012:role/opentab-vercel-order-signer',
+      }).ORDER_SIGNER_MODE,
+    ).toBe('kms');
+  });
+});
+
 describe('server environment safety', () => {
   it('keeps deterministic provider capabilities off when the server flag is omitted', () => {
     const config = parseServerEnvironment({});
@@ -74,7 +226,7 @@ describe('server environment safety', () => {
       particleReads: false,
       checkoutPreview: false,
       checkoutSubmission: false,
-      merchantMutations: false,
+      merchantMutations: true,
       refunds: false,
       withdrawals: false,
       splits: false,
@@ -116,18 +268,18 @@ describe('server environment safety', () => {
     ).not.toThrow();
   });
 
-  it('fails merchant mutations closed by default while retaining explicit local opt-in', () => {
+  it('enables ordinary merchant mutations by default while retaining an explicit kill switch', () => {
     expect(
       parseServerEnvironment({ APP_ENV: 'local', NEXT_PUBLIC_APP_ENV: 'local' })
         .MERCHANT_MUTATIONS_ENABLED,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       parseServerEnvironment({
         APP_ENV: 'local',
         NEXT_PUBLIC_APP_ENV: 'local',
-        MERCHANT_MUTATIONS_ENABLED: 'true',
+        MERCHANT_MUTATIONS_ENABLED: 'false',
       }).MERCHANT_MUTATIONS_ENABLED,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('supports the guarded production-like Particle read/preview canary without a signer', () => {
@@ -170,23 +322,21 @@ describe('server environment safety', () => {
     ).not.toThrow();
   });
 
-  it('requires a distinct authenticated TLS role for a configured evidence writer', () => {
-    const runtimeUrl = 'postgresql://runtime:secret@db.example/opentab?sslmode=verify-full';
-    expect(() =>
-      parseServerEnvironment({
-        ...LIVE_CANARY_ENVIRONMENT,
-        DATABASE_URL: runtimeUrl,
-        DATABASE_URL_EVIDENCE_WRITER: runtimeUrl,
-      }),
-    ).toThrow(/distinct from runtime/);
-    expect(() =>
-      parseServerEnvironment({
-        ...LIVE_CANARY_ENVIRONMENT,
-        DATABASE_URL: runtimeUrl,
-        DATABASE_URL_EVIDENCE_WRITER:
-          'postgresql://evidence_writer:secret@db.example/opentab?sslmode=verify-full',
-      }),
-    ).not.toThrow();
+  it('strips deployment-job and unused observability fields from the web contract', () => {
+    const parsed = parseServerEnvironment({
+      APP_ENV: 'local',
+      NEXT_PUBLIC_APP_ENV: 'local',
+      DATABASE_URL_MIGRATIONS: 'not-a-runtime-credential',
+      DATABASE_URL_EVIDENCE_WRITER: 'not-a-runtime-credential',
+      NEXT_PUBLIC_SENTRY_DSN: 'not-a-url',
+      SENTRY_DSN: 'not-a-url',
+      UPSTASH_REDIS_REST_TOKEN: 'unused',
+    });
+    expect(parsed).not.toHaveProperty('DATABASE_URL_MIGRATIONS');
+    expect(parsed).not.toHaveProperty('DATABASE_URL_EVIDENCE_WRITER');
+    expect(parsed).not.toHaveProperty('NEXT_PUBLIC_SENTRY_DSN');
+    expect(parsed).not.toHaveProperty('SENTRY_DSN');
+    expect(parsed).not.toHaveProperty('UPSTASH_REDIS_REST_TOKEN');
   });
 
   it('keeps the documented six-step canary capability order monotonic and fail closed', () => {
@@ -464,6 +614,47 @@ describe('server environment safety', () => {
         SESSION_HASH_PEPPER: 'too-short',
       }),
     ).toThrow();
+  });
+
+  it('accepts one domain-separated root as the production security-secret source', () => {
+    const config = parseServerEnvironment(PRODUCTION_APPLICATION_ENVIRONMENT);
+    expect(config.OPENTAB_SECRET_ROOT).toBe(PRODUCTION_APPLICATION_ENVIRONMENT.OPENTAB_SECRET_ROOT);
+    expect(config.SESSION_HASH_PEPPER).toBeUndefined();
+    expect(config.CSRF_SECRET).toBeUndefined();
+    expect(config.CAPABILITY_TOKEN_PEPPER).toBeUndefined();
+    expect(config.PRIVACY_SUBJECT_HASH_SECRET).toBeUndefined();
+
+    for (const value of ['short', 'REPLACE_WITH_32_PLUS_RANDOM_BYTES']) {
+      expect(() =>
+        parseServerEnvironment({
+          APP_ENV: 'local',
+          NEXT_PUBLIC_APP_ENV: 'local',
+          OPENTAB_SECRET_ROOT: value,
+        }),
+      ).toThrow(/OPENTAB_SECRET_ROOT/);
+    }
+  });
+
+  it('accepts the root substitute at payment, split, and sponsor security boundaries', () => {
+    for (const feature of [
+      { PAYMENTS_ENABLED: 'true' },
+      { SPLITS_ENABLED: 'true' },
+      { BOOTSTRAP_SPONSOR_ENABLED: 'true' },
+    ] as const) {
+      const result = ServerEnvironmentSchema.safeParse({
+        APP_ENV: 'local',
+        NEXT_PUBLIC_APP_ENV: 'local',
+        OPENTAB_SECRET_ROOT: PRODUCTION_APPLICATION_ENVIRONMENT.OPENTAB_SECRET_ROOT,
+        ...feature,
+      });
+      expect(result.success).toBe(false);
+      if (result.success) continue;
+      const paths = result.error.issues.map((issue) => issue.path.join('.'));
+      expect(paths).not.toContain('SESSION_HASH_PEPPER');
+      expect(paths).not.toContain('CSRF_SECRET');
+      expect(paths).not.toContain('CAPABILITY_TOKEN_PEPPER');
+      expect(paths).not.toContain('PRIVACY_SUBJECT_HASH_SECRET');
+    }
   });
 
   it('rejects reused security-domain secrets', () => {

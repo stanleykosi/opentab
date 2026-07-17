@@ -27,6 +27,22 @@ const errors = [];
 const warnings = [];
 const bool = (name) => String(env[name] ?? '').toLowerCase() === 'true';
 const missing = (name) => !env[name] || /REPLACE_ME|REPLACE_WITH/.test(env[name]);
+const appEnvironment =
+  env.APP_ENV ??
+  (env.VERCEL_ENV === 'production'
+    ? 'production'
+    : env.VERCEL_ENV === 'preview'
+      ? 'preview'
+      : 'local');
+const providerMode =
+  env.PROVIDER_MODE ??
+  (env.VERCEL_ENV === 'production' && appEnvironment === 'production' ? 'live' : 'deterministic');
+const productionLike = ['preview', 'staging', 'demo-mainnet', 'production'].includes(
+  appEnvironment,
+);
+const orderSignerMode =
+  env.ORDER_SIGNER_MODE ?? (bool('PAYMENTS_ENABLED') && productionLike ? 'kms' : 'disabled');
+const hasRootSecret = !missing('OPENTAB_SECRET_ROOT');
 const bigint = (name) => {
   const value = String(env[name] ?? '0');
   if (!/^(0|[1-9][0-9]*)$/.test(value)) {
@@ -36,19 +52,13 @@ const bigint = (name) => {
   return BigInt(value);
 };
 
-if (
-  (env.APP_ENV ?? 'local') === 'production' &&
-  env.NEXT_PUBLIC_APP_ORIGIN?.startsWith('http://')
-) {
+if (appEnvironment === 'production' && env.NEXT_PUBLIC_APP_ORIGIN?.startsWith('http://')) {
   errors.push('Production APP origin must use HTTPS.');
 }
-if (
-  (env.APP_ENV ?? 'local') === 'production' &&
-  (env.PROVIDER_MODE ?? 'deterministic') !== 'live'
-) {
+if (appEnvironment === 'production' && providerMode !== 'live') {
   errors.push('Production PROVIDER_MODE must be live.');
 }
-if ((env.APP_ENV ?? 'local') === 'production' && bool('DETERMINISTIC_DEMO_ENABLED')) {
+if (appEnvironment === 'production' && bool('DETERMINISTIC_DEMO_ENABLED')) {
   errors.push('Production cannot enable deterministic demo mode.');
 }
 if (env.APP_ENV && env.NEXT_PUBLIC_APP_ENV && env.APP_ENV !== env.NEXT_PUBLIC_APP_ENV) {
@@ -71,17 +81,22 @@ if (bool('PAYMENTS_ENABLED')) {
     'NEXT_PUBLIC_PASS_ADDRESS',
     'DATABASE_URL',
     'REDIS_URL',
-    'SESSION_HASH_PEPPER',
-    'CSRF_SECRET',
-    'CAPABILITY_TOKEN_PEPPER',
-    'ORDER_SIGNER_MODE',
     'ORDER_SIGNER_ADDRESS',
   ])
     if (missing(key)) errors.push(`PAYMENTS_ENABLED requires ${key}.`);
+  if (!hasRootSecret) {
+    for (const key of [
+      'SESSION_HASH_PEPPER',
+      'CSRF_SECRET',
+      'CAPABILITY_TOKEN_PEPPER',
+      'PRIVACY_SUBJECT_HASH_SECRET',
+    ]) {
+      if (missing(key)) errors.push(`PAYMENTS_ENABLED requires ${key} or OPENTAB_SECRET_ROOT.`);
+    }
+  }
   if (!bool('PARTICLE_LIVE_ENABLED'))
     errors.push('PAYMENTS_ENABLED requires PARTICLE_LIVE_ENABLED=true.');
-  if ((env.PROVIDER_MODE ?? 'deterministic') !== 'live')
-    errors.push('PAYMENTS_ENABLED requires PROVIDER_MODE=live.');
+  if (providerMode !== 'live') errors.push('PAYMENTS_ENABLED requires PROVIDER_MODE=live.');
   if ((env.NEXT_PUBLIC_ARBITRUM_CHAIN_ID ?? '42161') !== '42161')
     errors.push('PAYMENTS_ENABLED requires Arbitrum One chain ID 42161.');
   if (
@@ -91,16 +106,16 @@ if (bool('PAYMENTS_ENABLED')) {
     errors.push('PAYMENTS_ENABLED requires native Arbitrum One USDC.');
   if (env.ARBITRUM_RPC_URL === env.ARBITRUM_FALLBACK_RPC_URL)
     errors.push('Primary and fallback Arbitrum RPC URLs must be independent.');
-  if (env.ORDER_SIGNER_MODE === 'disabled')
+  if (orderSignerMode === 'disabled')
     errors.push('PAYMENTS_ENABLED requires an enabled order signer.');
   if (
-    env.ORDER_SIGNER_MODE === 'private-key' &&
+    orderSignerMode === 'private-key' &&
     !/^0x[0-9a-fA-F]{64}$/.test(env.ORDER_SIGNER_PRIVATE_KEY ?? '')
   )
     errors.push(
       'Private-key order signer mode requires a valid protected ORDER_SIGNER_PRIVATE_KEY.',
     );
-  if (env.ORDER_SIGNER_MODE === 'kms' && missing('ORDER_SIGNER_KMS_KEY_ID'))
+  if (orderSignerMode === 'kms' && missing('ORDER_SIGNER_KMS_KEY_ID'))
     errors.push('KMS order signer mode requires ORDER_SIGNER_KMS_KEY_ID.');
   for (const key of ['NEXT_PUBLIC_CHECKOUT_ADDRESS', 'NEXT_PUBLIC_PASS_ADDRESS']) {
     if (/^0x0{40}$/.test(env[key] ?? ''))
@@ -171,11 +186,12 @@ if (bool('JUDGE_MODE_ENABLED') && missing('JUDGE_SHARE_TOKEN_SECRET'))
   errors.push('JUDGE_MODE_ENABLED requires JUDGE_SHARE_TOKEN_SECRET.');
 if (
   bool('JUDGE_MODE_ENABLED') &&
-  (env.PROVIDER_MODE ?? 'deterministic') === 'live' &&
+  providerMode === 'live' &&
   missing('LIVE_ACCEPTANCE_ATTESTATION_SECRET')
 )
   errors.push('Live JUDGE_MODE_ENABLED requires LIVE_ACCEPTANCE_ATTESTATION_SECRET.');
 for (const key of [
+  'OPENTAB_SECRET_ROOT',
   'SESSION_HASH_PEPPER',
   'CSRF_SECRET',
   'CAPABILITY_TOKEN_PEPPER',
@@ -187,6 +203,7 @@ for (const key of [
     errors.push(`${key} must be at least 32 characters.`);
 }
 const configuredSecuritySecrets = [
+  'OPENTAB_SECRET_ROOT',
   'SESSION_HASH_PEPPER',
   'CSRF_SECRET',
   'CAPABILITY_TOKEN_PEPPER',
@@ -198,28 +215,31 @@ const configuredSecuritySecrets = [
   .filter((value) => value && !/REPLACE_ME|REPLACE_WITH/.test(value));
 if (new Set(configuredSecuritySecrets).size !== configuredSecuritySecrets.length)
   errors.push('Security peppers and Judge/acceptance secrets must all be independent.');
-if (
-  (env.APP_ENV ?? 'local') === 'production' &&
-  ['private-key'].includes(env.SPONSOR_SIGNER_MODE)
-) {
+if (appEnvironment === 'production' && ['private-key'].includes(env.SPONSOR_SIGNER_MODE)) {
   errors.push('Production cannot use private-key sponsor mode.');
 }
-if ((env.APP_ENV ?? 'local') === 'production' && ['private-key'].includes(env.ORDER_SIGNER_MODE)) {
+if (appEnvironment === 'production' && orderSignerMode === 'private-key') {
   errors.push('Production cannot use private-key order signer mode.');
 }
-if ((env.APP_ENV ?? 'local') === 'production') {
+if (appEnvironment === 'production') {
   for (const key of [
     'NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY',
     'MAGIC_SECRET_KEY',
     'MAGIC_CLIENT_ID',
     'DATABASE_URL',
     'REDIS_URL',
-    'SESSION_HASH_PEPPER',
-    'CSRF_SECRET',
-    'CAPABILITY_TOKEN_PEPPER',
-    'PRIVACY_SUBJECT_HASH_SECRET',
   ]) {
     if (missing(key)) errors.push(`Production requires ${key}.`);
+  }
+  if (!hasRootSecret) {
+    for (const key of [
+      'SESSION_HASH_PEPPER',
+      'CSRF_SECRET',
+      'CAPABILITY_TOKEN_PEPPER',
+      'PRIVACY_SUBJECT_HASH_SECRET',
+    ]) {
+      if (missing(key)) errors.push(`Production requires ${key} or OPENTAB_SECRET_ROOT.`);
+    }
   }
   if (bool('INDEXER_ENABLED')) {
     for (const key of ['ARBITRUM_RPC_URL', 'ARBITRUM_FALLBACK_RPC_URL'])

@@ -1073,14 +1073,24 @@ export class BrowserApplicationService {
 
   async #liveConfig(): Promise<
     PublicBrowserConfig & {
-      particle: PublicBrowserConfig['particle'] & {
-        responseProfile: PublicBrowserConfig['particle']['responseProfile'] & {
+      particle: Extract<PublicBrowserConfig['particle'], { enabled: true }> & {
+        responseProfile: Extract<
+          PublicBrowserConfig['particle'],
+          { enabled: true }
+        >['responseProfile'] & {
           provenance: 'recorded_live';
         };
       };
     }
   > {
     const config = await this.#config();
+    if (!config.particle.enabled) {
+      throw new BrowserApiError({
+        code: 'FEATURE_DISABLED',
+        message: 'Cross-chain wallet operations are not enabled yet.',
+        status: 0,
+      });
+    }
     if (config.particle.responseProfile.provenance !== 'recorded_live') {
       throw new BrowserApiError({
         code: 'CONFIGURATION_INVALID',
@@ -1100,8 +1110,11 @@ export class BrowserApplicationService {
       });
     }
     return config as PublicBrowserConfig & {
-      particle: PublicBrowserConfig['particle'] & {
-        responseProfile: PublicBrowserConfig['particle']['responseProfile'] & {
+      particle: Extract<PublicBrowserConfig['particle'], { enabled: true }> & {
+        responseProfile: Extract<
+          PublicBrowserConfig['particle'],
+          { enabled: true }
+        >['responseProfile'] & {
           provenance: 'recorded_live';
         };
       };
@@ -1110,7 +1123,17 @@ export class BrowserApplicationService {
 
   async #wallet(): Promise<MagicWallet> {
     if (this.#walletPromise !== undefined) return this.#walletPromise;
-    this.#walletPromise = this.#liveConfig().then(async (config) => {
+    this.#walletPromise = this.#config().then(async (config) => {
+      if (
+        config.particle.enabled &&
+        config.particle.responseProfile.provenance !== 'recorded_live'
+      ) {
+        throw new BrowserApiError({
+          code: 'CONFIGURATION_INVALID',
+          message: 'Live wallet integrations require a recorded provider profile.',
+          status: 0,
+        });
+      }
       const module = await this.#integrations();
       return module.createMagicBrowserWallet({
         publishableKey: config.magic.publishableKey,

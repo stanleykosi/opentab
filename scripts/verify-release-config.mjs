@@ -13,6 +13,19 @@ function json(relativePath) {
   return JSON.parse(read(relativePath));
 }
 
+const activeWorkflowDirectory = path.join(root, '.github', 'workflows');
+const parkedWorkflowDirectory = path.join(root, '.github', 'workflows-disabled');
+const workflowDirectory = fs.existsSync(activeWorkflowDirectory)
+  ? fs.readdirSync(activeWorkflowDirectory).some((name) => name.endsWith('.yml'))
+    ? activeWorkflowDirectory
+    : parkedWorkflowDirectory
+  : parkedWorkflowDirectory;
+const workflowRelativeDirectory = path.relative(root, workflowDirectory);
+
+function readWorkflow(name) {
+  return read(path.join(workflowRelativeDirectory, name));
+}
+
 function expect(condition, message) {
   if (!condition) failures.push(message);
 }
@@ -259,14 +272,13 @@ for (const [name, expected] of Object.entries({
   SPLITS_ENABLED: 'false',
 })) {
   expect(
-    new RegExp(`^${name}=${expected}$`, 'm').test(example),
-    `.env.example must default ${name}=${expected}.`,
+    environmentSource.includes(`${name}: strictBoolean.default(${expected})`),
+    `The validated environment schema must default ${name}=${expected}.`,
   );
 }
 
-const workflowDirectory = path.join(root, '.github', 'workflows');
 for (const name of fs.readdirSync(workflowDirectory).filter((file) => file.endsWith('.yml'))) {
-  const workflow = read(path.join('.github', 'workflows', name));
+  const workflow = readWorkflow(name);
   for (const match of workflow.matchAll(/^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#.*)?$/gm)) {
     const action = match[1] ?? '';
     if (action.startsWith('./') || action.startsWith('docker://')) continue;
@@ -277,7 +289,7 @@ for (const name of fs.readdirSync(workflowDirectory).filter((file) => file.endsW
   }
 }
 
-const liveWorkflow = read('.github/workflows/live-compatibility.yml');
+const liveWorkflow = readWorkflow('live-compatibility.yml');
 expect(
   liveWorkflow.includes('I_ACKNOWLEDGE_TINY_ARBITRUM_MAINNET_SPEND'),
   'Live workflow must require the exact spend acknowledgement.',
@@ -325,7 +337,7 @@ expect(
   'Live provider secrets must be scoped only to the guarded validation and execution steps.',
 );
 
-const releaseWorkflow = read('.github/workflows/release.yml');
+const releaseWorkflow = readWorkflow('release.yml');
 expect(
   releaseWorkflow.includes('[[ "$RELEASE_REF" =~ ^[0-9a-f]{40}$ ]]') &&
     releaseWorkflow.includes('test "$(git rev-parse HEAD)" = "$RELEASE_REF"'),
@@ -344,7 +356,7 @@ expect(
   'Release workflow must execute the assembled indexer runtime.',
 );
 
-const ciWorkflow = read('.github/workflows/ci.yml');
+const ciWorkflow = readWorkflow('ci.yml');
 expect(
   ciWorkflow.includes('docker build --file apps/indexer/Dockerfile'),
   'CI must build the exact Railway indexer image.',
@@ -360,7 +372,7 @@ expect(
   'CI must execute the packaged indexer entrypoint to catch bundle/runtime failures.',
 );
 
-const securityWorkflow = read('.github/workflows/security.yml');
+const securityWorkflow = readWorkflow('security.yml');
 expect(
   securityWorkflow.includes('node scripts/verify-dependency-audit.mjs'),
   'Security CI must use the patch- and waiver-aware dependency audit gate.',

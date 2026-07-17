@@ -13,6 +13,37 @@ const MAGIC_IFRAME_ORIGIN = 'https://auth.magic.link';
 const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com';
 const PARTICLE_RPC_ORIGIN = 'https://universal-rpc-proxy.particle.network';
 
+function vercelHttpsOrigin(hostname: string | undefined): string | undefined {
+  if (hostname === undefined || hostname.trim() === '') return undefined;
+  try {
+    const url = new URL(`https://${hostname}`);
+    return url.hostname === hostname && url.pathname === '/' ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const inferredPublicEnvironment =
+  process.env.NEXT_PUBLIC_APP_ENV ??
+  (process.env.VERCEL_ENV === 'production'
+    ? 'production'
+    : process.env.VERCEL_ENV === 'preview'
+      ? 'preview'
+      : undefined);
+const inferredPublicOrigin =
+  process.env.NEXT_PUBLIC_APP_ORIGIN ??
+  vercelHttpsOrigin(
+    process.env.VERCEL_ENV === 'production'
+      ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+      : process.env.VERCEL_URL,
+  );
+const platformPublicEnvironment: Record<string, string> = {
+  ...(inferredPublicEnvironment === undefined
+    ? {}
+    : { NEXT_PUBLIC_APP_ENV: inferredPublicEnvironment }),
+  ...(inferredPublicOrigin === undefined ? {} : { NEXT_PUBLIC_APP_ORIGIN: inferredPublicOrigin }),
+};
+
 function browserRpcOrigin(value: string | undefined): string | undefined {
   if (value === undefined || value.length === 0) return 'https://arb1.arbitrum.io';
   try {
@@ -119,6 +150,7 @@ export function buildSecurityHeaders(input: {
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
+  env: platformPublicEnvironment,
   experimental: {
     extensionAlias: {
       '.js': ['.ts', '.tsx', '.js'],

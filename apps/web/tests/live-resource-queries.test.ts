@@ -23,6 +23,7 @@ const actor = CurrentUserSchema.parse({
 
 const config = {
   particle: {
+    enabled: true,
     expectedImplementationAddress: implementation,
     expectedImplementationCodeHash: implementationHash,
   },

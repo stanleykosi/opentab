@@ -240,6 +240,122 @@ export const AppEnvironmentSchema = z.enum([
 ]);
 export const ProviderModeSchema = z.enum(['deterministic', 'live']);
 
+type PlatformEnvironmentTarget = 'public' | 'server' | 'frontend' | 'indexer';
+
+function normalizedHttpsOrigin(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const candidate = value.includes('://') ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    if (
+      url.protocol !== 'https:' ||
+      url.username !== '' ||
+      url.password !== '' ||
+      url.pathname !== '/' ||
+      url.search !== '' ||
+      url.hash !== ''
+    ) {
+      return undefined;
+    }
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function vercelApplicationEnvironment(value: string | undefined): string | undefined {
+  switch (value?.trim().toLowerCase()) {
+    case 'production':
+      return 'production';
+    case 'preview':
+      return 'preview';
+    case 'development':
+      return 'local';
+    default:
+      return undefined;
+  }
+}
+
+function railwayApplicationEnvironment(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === undefined || normalized === '') return undefined;
+  if (normalized === 'development') return 'local';
+  if (normalized === 'pr' || normalized.startsWith('pr-')) return 'preview';
+  return normalized;
+}
+
+function isRailwayService(input: Readonly<Record<string, string | undefined>>): boolean {
+  return [
+    'RAILWAY_SERVICE_ID',
+    'RAILWAY_SERVICE_NAME',
+    'RAILWAY_PROJECT_ID',
+    'RAILWAY_ENVIRONMENT_ID',
+    'RAILWAY_ENVIRONMENT_NAME',
+  ].some((name) => (input[name]?.trim().length ?? 0) > 0);
+}
+
+function normalizePlatformEnvironment(
+  input: Record<string, string | undefined>,
+  target: PlatformEnvironmentTarget,
+): Record<string, string | undefined> {
+  const normalized = { ...input };
+  if (target === 'indexer') {
+    const railway = isRailwayService(input);
+    if (normalized.APP_ENV === undefined) {
+      normalized.APP_ENV = railwayApplicationEnvironment(input.RAILWAY_ENVIRONMENT_NAME);
+    }
+    if (railway) {
+      normalized.INDEXER_ENABLED ??= 'true';
+      normalized.INDEXER_WRITES_ENABLED ??= 'true';
+      normalized.PARTICLE_LIVE_ENABLED ??= 'true';
+    }
+    return normalized;
+  }
+
+  const vercelEnvironment = vercelApplicationEnvironment(input.VERCEL_ENV);
+  if (target !== 'public') normalized.APP_ENV ??= vercelEnvironment;
+  normalized.NEXT_PUBLIC_APP_ENV ??= normalized.APP_ENV ?? vercelEnvironment;
+
+  const environment = normalized.APP_ENV ?? normalized.NEXT_PUBLIC_APP_ENV;
+  if (normalized.NEXT_PUBLIC_APP_ORIGIN === undefined) {
+    if (environment === 'production' && vercelEnvironment === 'production') {
+      normalized.NEXT_PUBLIC_APP_ORIGIN =
+        normalizedHttpsOrigin(input.VERCEL_PROJECT_PRODUCTION_URL) ?? '';
+    } else if (environment === 'preview' && vercelEnvironment === 'preview') {
+      normalized.NEXT_PUBLIC_APP_ORIGIN = normalizedHttpsOrigin(input.VERCEL_URL) ?? '';
+    }
+  }
+  if (
+    (target === 'server' || target === 'frontend') &&
+    normalized.PROVIDER_MODE === undefined &&
+    vercelEnvironment === 'production' &&
+    environment === 'production'
+  ) {
+    normalized.PROVIDER_MODE = 'live';
+  }
+  if (target === 'server' && normalized.APPLICATION_RELEASE_ID === undefined) {
+    normalized.APPLICATION_RELEASE_ID = input.VERCEL_GIT_COMMIT_SHA;
+  }
+  if (
+    target === 'server' &&
+    normalized.PARTICLE_RESPONSE_PROFILE_PROVENANCE === undefined &&
+    normalized.PARTICLE_LIVE_ENABLED === 'true'
+  ) {
+    normalized.PARTICLE_RESPONSE_PROFILE_PROVENANCE = 'recorded_live';
+  }
+  if (
+    target === 'server' &&
+    ['preview', 'staging', 'demo-mainnet', 'production'].includes(environment ?? '')
+  ) {
+    if (normalized.PAYMENTS_ENABLED === 'true') normalized.ORDER_SIGNER_MODE ??= 'kms';
+    if (normalized.SPLITS_ENABLED === 'true') normalized.SPLIT_SIGNER_MODE ??= 'kms';
+    if (normalized.BOOTSTRAP_SPONSOR_ENABLED === 'true') {
+      normalized.SPONSOR_SIGNER_MODE ??= 'kms';
+    }
+  }
+  return normalized;
+}
+
 /** Minimal, public-safe server projection used by React route presentation. */
 export const FrontendFeatureEnvironmentSchema = z
   .object({
@@ -283,9 +399,7 @@ export const PublicEnvironmentSchema = z.object({
   NEXT_PUBLIC_SPLIT_ADDRESS: EvmAddressSchema.default(
     EvmAddressSchema.parse('0x0000000000000000000000000000000000000000'),
   ),
-  NEXT_PUBLIC_EXPLORER_BASE_URL: z.string().url().default('https://arbiscan.io'),
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: optionalString,
-  NEXT_PUBLIC_SENTRY_DSN: optionalUrl,
 });
 
 export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
@@ -298,12 +412,10 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   BOOTSTRAP_SPONSOR_ENABLED: strictBoolean.default(false),
   BOOTSTRAP_SPONSOR_ALLOWLIST_ONLY: strictBoolean.default(true),
   JUDGE_MODE_ENABLED: strictBoolean.default(false),
-  MERCHANT_MUTATIONS_ENABLED: strictBoolean.default(false),
+  MERCHANT_MUTATIONS_ENABLED: strictBoolean.default(true),
   REFUNDS_ENABLED: strictBoolean.default(false),
   WITHDRAWALS_ENABLED: strictBoolean.default(false),
   SPLITS_ENABLED: strictBoolean.default(false),
-  INDEXER_ENABLED: strictBoolean.default(false),
-  INDEXER_WRITES_ENABLED: strictBoolean.default(false),
   MAGIC_SECRET_KEY: optionalString,
   MAGIC_CLIENT_ID: optionalString,
   PARTICLE_RPC_URL: optionalUrl,
@@ -313,11 +425,8 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   REORG_WINDOW_BLOCKS: z.coerce.number().int().min(16).max(100_000).default(512),
   INDEXER_DEPLOYMENT_BLOCK: unsignedBigInt.default(0n),
   DATABASE_URL: optionalString,
-  DATABASE_URL_MIGRATIONS: optionalString,
-  DATABASE_URL_EVIDENCE_WRITER: optionalString,
   REDIS_URL: optionalUrl,
-  UPSTASH_REDIS_REST_URL: optionalUrl,
-  UPSTASH_REDIS_REST_TOKEN: optionalString,
+  OPENTAB_SECRET_ROOT: optionalString,
   SESSION_HASH_PEPPER: optionalString,
   CSRF_SECRET: optionalString,
   CAPABILITY_TOKEN_PEPPER: optionalString,
@@ -329,7 +438,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   CHECKOUT_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
   PAYMENT_INTENT_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
   PLATFORM_FEE_BPS: optionalPlatformFeeBps,
-  PARTICLE_QUOTE_SAFETY_SECONDS: z.coerce.number().int().min(5).max(300).default(20),
   PARTICLE_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(500).default(100),
   PARTICLE_MAX_FEE_USD_MICROS: unsignedBigInt.default(5_000_000n),
   PARTICLE_ALLOWED_SOURCE_CHAIN_IDS: z.preprocess(
@@ -356,7 +464,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET: optionalParticleNonceOffset,
   PARTICLE_DELEGATION_PLAN_TTL_SECONDS: z.preprocess(
     (value) => (value === '' ? undefined : value),
-    z.coerce.number().int().min(30).max(600).optional(),
+    z.coerce.number().int().min(30).max(600).default(300),
   ),
   ORDER_SIGNER_MODE: z.enum(['disabled', 'private-key', 'kms']).default('disabled'),
   ORDER_SIGNER_PRIVATE_KEY: optionalString,
@@ -385,12 +493,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   SPONSOR_GLOBAL_DAILY_CAP_WEI: unsignedBigInt.default(0n),
   SPONSOR_LOW_BALANCE_ALERT_WEI: unsignedBigInt.default(0n),
   SPONSOR_ALLOWED_ADDRESSES: z.string().default(''),
-  SENTRY_DSN: optionalUrl,
-  SENTRY_AUTH_TOKEN: optionalString,
-  OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
   TURNSTILE_SECRET_KEY: optionalString,
-  EMAIL_PROVIDER_API_KEY: optionalString,
-  ANALYTICS_WRITE_KEY: optionalString,
 }).superRefine((config, context) => {
   const requireConfigured = (name: keyof typeof config, message?: string) => {
     if (!isConfigured(config[name])) {
@@ -398,6 +501,20 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
         code: 'custom',
         path: [name],
         message: message ?? `${name} must be configured with a non-placeholder value`,
+      });
+    }
+  };
+  type LegacySecuritySecret =
+    | 'SESSION_HASH_PEPPER'
+    | 'CSRF_SECRET'
+    | 'CAPABILITY_TOKEN_PEPPER'
+    | 'PRIVACY_SUBJECT_HASH_SECRET';
+  const requireSecuritySecret = (name: LegacySecuritySecret, message: string) => {
+    if (!isConfigured(config.OPENTAB_SECRET_ROOT) && !isConfigured(config[name])) {
+      context.addIssue({
+        code: 'custom',
+        path: [name],
+        message: `${message}; configure ${name} or OPENTAB_SECRET_ROOT`,
       });
     }
   };
@@ -451,42 +568,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
       });
     }
   }
-  if (productionLike && config.DATABASE_URL_EVIDENCE_WRITER !== undefined) {
-    try {
-      const evidenceDatabaseUrl = new URL(config.DATABASE_URL_EVIDENCE_WRITER);
-      const sslModes = evidenceDatabaseUrl.searchParams.getAll('sslmode');
-      const sslMode = sslModes[0];
-      if (
-        !['postgres:', 'postgresql:'].includes(evidenceDatabaseUrl.protocol) ||
-        sslModes.length !== 1 ||
-        !['require', 'verify-ca', 'verify-full'].includes(sslMode ?? '') ||
-        evidenceDatabaseUrl.username.length === 0 ||
-        evidenceDatabaseUrl.password.length === 0
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['DATABASE_URL_EVIDENCE_WRITER'],
-          message: 'The production-like evidence writer requires authenticated TLS PostgreSQL',
-        });
-      }
-      if (config.DATABASE_URL !== undefined) {
-        const runtimeDatabaseUrl = new URL(config.DATABASE_URL);
-        if (runtimeDatabaseUrl.username === evidenceDatabaseUrl.username) {
-          context.addIssue({
-            code: 'custom',
-            path: ['DATABASE_URL_EVIDENCE_WRITER'],
-            message: 'The evidence writer must use a database role distinct from runtime',
-          });
-        }
-      }
-    } catch {
-      context.addIssue({
-        code: 'custom',
-        path: ['DATABASE_URL_EVIDENCE_WRITER'],
-        message: 'DATABASE_URL_EVIDENCE_WRITER must be a valid PostgreSQL URL',
-      });
-    }
-  }
   if (productionLike && config.REDIS_URL !== undefined) {
     const redisUrl = new URL(config.REDIS_URL);
     const railwayPrivate =
@@ -534,6 +615,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   }
 
   for (const secret of [
+    'OPENTAB_SECRET_ROOT',
     'SESSION_HASH_PEPPER',
     'CSRF_SECRET',
     'CAPABILITY_TOKEN_PEPPER',
@@ -552,6 +634,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   }
 
   const configuredSecuritySecrets = [
+    config.OPENTAB_SECRET_ROOT,
     config.SESSION_HASH_PEPPER,
     config.CSRF_SECRET,
     config.CAPABILITY_TOKEN_PEPPER,
@@ -564,7 +647,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
       code: 'custom',
       path: ['PRIVACY_SUBJECT_HASH_SECRET'],
       message:
-        'Session, CSRF, capability, privacy, Judge, and acceptance-attestation secrets must be independent',
+        'The root, session, CSRF, capability, privacy, Judge, and acceptance-attestation secrets must be independent',
     });
   }
 
@@ -575,12 +658,16 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
       'MAGIC_CLIENT_ID',
       'DATABASE_URL',
       'REDIS_URL',
+    ] as const) {
+      requireConfigured(name, `${name} is required for the production application`);
+    }
+    for (const name of [
       'SESSION_HASH_PEPPER',
       'CSRF_SECRET',
       'CAPABILITY_TOKEN_PEPPER',
       'PRIVACY_SUBJECT_HASH_SECRET',
     ] as const) {
-      requireConfigured(name, `${name} is required for the production application`);
+      requireSecuritySecret(name, 'Production application security material is required');
     }
   }
 
@@ -597,10 +684,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
       ['ARBITRUM_FALLBACK_RPC_URL', config.ARBITRUM_FALLBACK_RPC_URL],
       ['DATABASE_URL', config.DATABASE_URL],
       ['REDIS_URL', config.REDIS_URL],
-      ['SESSION_HASH_PEPPER', config.SESSION_HASH_PEPPER],
-      ['CSRF_SECRET', config.CSRF_SECRET],
-      ['CAPABILITY_TOKEN_PEPPER', config.CAPABILITY_TOKEN_PEPPER],
-      ['PRIVACY_SUBJECT_HASH_SECRET', config.PRIVACY_SUBJECT_HASH_SECRET],
       ['ORDER_SIGNER_ADDRESS', config.ORDER_SIGNER_ADDRESS],
     ];
     for (const [name, value] of required) {
@@ -610,6 +693,14 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
           path: [name],
           message: `${name} is required when payments are enabled`,
         });
+    }
+    for (const name of [
+      'SESSION_HASH_PEPPER',
+      'CSRF_SECRET',
+      'CAPABILITY_TOKEN_PEPPER',
+      'PRIVACY_SUBJECT_HASH_SECRET',
+    ] as const) {
+      requireSecuritySecret(name, 'Payment security material is required');
     }
     if (config.PLATFORM_FEE_BPS === undefined) {
       context.addIssue({
@@ -868,7 +959,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   }
 
   if (config.BOOTSTRAP_SPONSOR_ENABLED) {
-    requireConfigured(
+    requireSecuritySecret(
       'PRIVACY_SUBJECT_HASH_SECRET',
       'Sponsor risk dimensions require a dedicated privacy hashing secret',
     );
@@ -947,7 +1038,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
         message: 'Split reimbursements require live payments and a deployed split contract',
       });
     }
-    requireConfigured('CAPABILITY_TOKEN_PEPPER', 'Split capabilities require a hashing pepper');
+    requireSecuritySecret('CAPABILITY_TOKEN_PEPPER', 'Split capabilities require a hashing pepper');
     requireConfigured(
       'SPLIT_SIGNER_EXPECTED_ADDRESS',
       'Split reimbursements require a reviewed signer address',
@@ -1017,19 +1108,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
         'LIVE_ACCEPTANCE_ATTESTATION_SECRET',
         'Live Judge Mode requires an independent acceptance attestation secret',
       );
-    }
-  }
-
-  if (config.APP_ENV === 'production' && config.INDEXER_ENABLED) {
-    for (const name of ['DATABASE_URL', 'ARBITRUM_RPC_URL', 'ARBITRUM_FALLBACK_RPC_URL'] as const) {
-      requireConfigured(name, `${name} is required by the production indexer`);
-    }
-    if (config.INDEXER_DEPLOYMENT_BLOCK === 0n) {
-      context.addIssue({
-        code: 'custom',
-        path: ['INDEXER_DEPLOYMENT_BLOCK'],
-        message: 'Production indexer requires the reviewed nonzero deployment block',
-      });
     }
   }
 
@@ -1141,7 +1219,7 @@ export const IndexerEnvironmentSchema = z
     PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET: optionalParticleNonceOffset,
     PARTICLE_DELEGATION_PLAN_TTL_SECONDS: z.preprocess(
       (value) => (value === '' ? undefined : value),
-      z.coerce.number().int().min(30).max(600).optional(),
+      z.coerce.number().int().min(30).max(600).default(300),
     ),
   })
   .superRefine((config, context) => {
@@ -1379,23 +1457,23 @@ export function deriveServerFeatureCapabilities(
 export function parsePublicEnvironment(
   input: Record<string, string | undefined>,
 ): PublicEnvironment {
-  return PublicEnvironmentSchema.parse(input);
+  return PublicEnvironmentSchema.parse(normalizePlatformEnvironment(input, 'public'));
 }
 
 export function parseFrontendFeatureEnvironment(input: Record<string, string | undefined>) {
-  return FrontendFeatureEnvironmentSchema.parse(input);
+  return FrontendFeatureEnvironmentSchema.parse(normalizePlatformEnvironment(input, 'frontend'));
 }
 
 export function parseServerEnvironment(
   input: Record<string, string | undefined>,
 ): ServerEnvironment {
-  return ServerEnvironmentSchema.parse(input);
+  return ServerEnvironmentSchema.parse(normalizePlatformEnvironment(input, 'server'));
 }
 
 export function parseIndexerEnvironment(
   input: Record<string, string | undefined>,
 ): IndexerEnvironment {
-  return IndexerEnvironmentSchema.parse(input);
+  return IndexerEnvironmentSchema.parse(normalizePlatformEnvironment(input, 'indexer'));
 }
 
-export const OPEN_TAB_CONFIG_SCHEMA_VERSION = 11 as const;
+export const OPEN_TAB_CONFIG_SCHEMA_VERSION = 12 as const;

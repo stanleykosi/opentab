@@ -197,8 +197,8 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
       readonly backend: PostgresBackendApiStore;
       readonly judgeEvidence?: PostgresJudgeEvidenceManager;
       readonly chain: ArbitrumReadPort;
-      readonly expectedDelegationImplementation: ReturnType<typeof EvmAddressSchema.parse>;
-      readonly expectedDelegationCodeHash: `0x${string}`;
+      readonly expectedDelegationImplementation?: ReturnType<typeof EvmAddressSchema.parse>;
+      readonly expectedDelegationCodeHash?: `0x${string}`;
       readonly checkoutAddress: ReturnType<typeof EvmAddressSchema.parse>;
       readonly splitAddress: ReturnType<typeof EvmAddressSchema.parse>;
       readonly tokenAddress: ReturnType<typeof EvmAddressSchema.parse>;
@@ -815,6 +815,17 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
     input: Parameters<BackendApiCommandPort['recordDelegationEvidence']>[0],
   ) {
     const body = DelegationEvidenceBodySchema.parse(input.body);
+    const expectedDelegationImplementation = this.dependencies.expectedDelegationImplementation;
+    const expectedDelegationCodeHash = this.dependencies.expectedDelegationCodeHash;
+    if (
+      expectedDelegationImplementation === undefined ||
+      expectedDelegationCodeHash === undefined
+    ) {
+      throw new AppError(
+        'FEATURE_DISABLED',
+        'Delegation evidence is disabled until Particle is configured.',
+      );
+    }
     return this.#idempotent(input, `wallet:delegation-evidence:${input.actor.id}`, async () => {
       const readAuthorizationEvidence = this.dependencies.chain.getEip7702AuthorizationEvidence;
       if (readAuthorizationEvidence === undefined) {
@@ -826,7 +837,7 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
       const authorizationEvidence = await readAuthorizationEvidence.call(this.dependencies.chain, {
         transactionHash: body.transactionHash,
         expectedAuthority: input.actor.walletAddress,
-        expectedDelegate: this.dependencies.expectedDelegationImplementation,
+        expectedDelegate: expectedDelegationImplementation,
       });
       const evidenceTransactionHash = TransactionHashSchema.safeParse(
         authorizationEvidence.transactionHash,
@@ -854,10 +865,7 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
         evidenceTransactionHash.data.toLowerCase() !== body.transactionHash.toLowerCase() ||
         !sameEvmAddress(evidenceTransactionFrom.data, input.actor.walletAddress) ||
         !sameEvmAddress(evidenceAuthority.data, input.actor.walletAddress) ||
-        !sameEvmAddress(
-          evidenceDelegate.data,
-          this.dependencies.expectedDelegationImplementation,
-        ) ||
+        !sameEvmAddress(evidenceDelegate.data, expectedDelegationImplementation) ||
         authorizationEvidence.chainId !== ARBITRUM_ONE_CHAIN_ID ||
         authorizationEvidence.transactionType !== 'eip7702' ||
         authorizationEvidence.authorizationIndex !== 0 ||
@@ -889,10 +897,7 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
       if (
         delegation.accountType !== 'delegated_eoa' ||
         delegation.implementation === undefined ||
-        !sameEvmAddress(
-          delegation.implementation,
-          this.dependencies.expectedDelegationImplementation,
-        )
+        !sameEvmAddress(delegation.implementation, expectedDelegationImplementation)
       ) {
         throw new AppError(
           'UA_DELEGATION_REQUIRED',
@@ -910,10 +915,7 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
         this.dependencies.chain,
         delegation.implementation,
       );
-      if (
-        implementationCodeHash.toLowerCase() !==
-        this.dependencies.expectedDelegationCodeHash.toLowerCase()
-      ) {
+      if (implementationCodeHash.toLowerCase() !== expectedDelegationCodeHash.toLowerCase()) {
         throw new AppError(
           'UA_CONFIGURATION_INVALID',
           'The EIP-7702 implementation code is invalid.',

@@ -335,47 +335,50 @@ export interface PublicBrowserConfig {
   readonly liveAcceptanceConfigDigest?: string;
   readonly magic: { readonly publishableKey: string; readonly rpcUrl: string };
   readonly challenge: { readonly turnstileSiteKey?: string };
-  readonly particle: {
-    readonly projectId: string;
-    readonly projectClientKey: string;
-    readonly projectAppUuid: string;
-    readonly expectedImplementationAddress: string;
-    readonly expectedImplementationCodeHash: string;
-    readonly slippageBps: number;
-    readonly maxFeeUsdMicros: string;
-    readonly allowedSourceChainIds: readonly string[];
-    readonly allowedSourceAssets: readonly ('USDC' | 'USDT' | 'ETH')[];
-    readonly allowedSourceTokens: readonly {
-      readonly chainId: string;
-      readonly asset: 'USDC' | 'USDT' | 'ETH';
-      readonly address: string;
-    }[];
-    readonly sourceCallProfiles: readonly {
-      readonly profileId: string;
-      readonly chainId: string;
-      readonly asset: 'USDC' | 'USDT' | 'ETH';
-      readonly tokenAddress: string;
-      readonly sourceAmount: string;
-      readonly fixtureDigest: string;
-      readonly calls: readonly {
-        readonly uaType: string;
-        readonly to: string;
-        readonly data: string;
-        readonly valueWei: string;
-      }[];
-    }[];
-    readonly rpcUrl?: string;
-    readonly responseProfile: {
-      readonly profileId: string;
-      readonly provenance: 'deterministic' | 'recorded_live';
-      readonly deploymentsFixtureDigest: string;
-      readonly authFixtureDigest: string;
-      readonly submissionFixtureDigest: string;
-      readonly statusFixtureDigest: string;
-      readonly magicAuthorizationNonceOffset: 0 | 1;
-      readonly delegationPlanTtlSeconds: number;
-    };
-  };
+  readonly particle:
+    | { readonly enabled: false }
+    | {
+        readonly enabled: true;
+        readonly projectId: string;
+        readonly projectClientKey: string;
+        readonly projectAppUuid: string;
+        readonly expectedImplementationAddress: string;
+        readonly expectedImplementationCodeHash: string;
+        readonly slippageBps: number;
+        readonly maxFeeUsdMicros: string;
+        readonly allowedSourceChainIds: readonly string[];
+        readonly allowedSourceAssets: readonly ('USDC' | 'USDT' | 'ETH')[];
+        readonly allowedSourceTokens: readonly {
+          readonly chainId: string;
+          readonly asset: 'USDC' | 'USDT' | 'ETH';
+          readonly address: string;
+        }[];
+        readonly sourceCallProfiles: readonly {
+          readonly profileId: string;
+          readonly chainId: string;
+          readonly asset: 'USDC' | 'USDT' | 'ETH';
+          readonly tokenAddress: string;
+          readonly sourceAmount: string;
+          readonly fixtureDigest: string;
+          readonly calls: readonly {
+            readonly uaType: string;
+            readonly to: string;
+            readonly data: string;
+            readonly valueWei: string;
+          }[];
+        }[];
+        readonly rpcUrl?: string;
+        readonly responseProfile: {
+          readonly profileId: string;
+          readonly provenance: 'deterministic' | 'recorded_live';
+          readonly deploymentsFixtureDigest: string;
+          readonly authFixtureDigest: string;
+          readonly submissionFixtureDigest: string;
+          readonly statusFixtureDigest: string;
+          readonly magicAuthorizationNonceOffset: 0 | 1;
+          readonly delegationPlanTtlSeconds: number;
+        };
+      };
   readonly environment: string;
   readonly media: { readonly allowedOrigins: readonly string[] };
   readonly features: {

@@ -114,76 +114,80 @@ export const PublicBrowserConfigSchema = z
         rpcUrl: z.string().url(),
       })
       .strict(),
-    particle: z
-      .object({
-        projectId: z.string().min(1).max(256),
-        projectClientKey: z.string().min(1).max(512),
-        projectAppUuid: z.string().min(1).max(256),
-        expectedImplementationAddress: EvmAddressSchema,
-        expectedImplementationCodeHash: EvidenceDigestSchema,
-        slippageBps: z.number().int().min(0).max(500),
-        maxFeeUsdMicros: UnsignedIntegerSchema.refine((value) => BigInt(value) > 0n),
-        allowedSourceChainIds: z.array(UnsignedIntegerSchema).min(1).max(32),
-        allowedSourceAssets: z
-          .array(z.enum(['USDC', 'USDT', 'ETH']))
-          .min(1)
-          .max(3),
-        allowedSourceTokens: z
-          .array(
-            z
-              .object({
-                chainId: UnsignedIntegerSchema.refine((value) => BigInt(value) > 0n),
-                asset: z.enum(['USDC', 'USDT', 'ETH']),
-                address: EvmAddressSchema,
-              })
-              .strict(),
-          )
-          .max(32),
-        sourceCallProfiles: z
-          .array(
-            z
-              .object({
-                profileId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
-                chainId: UnsignedIntegerSchema.refine((value) => BigInt(value) > 0n),
-                asset: z.enum(['USDC', 'USDT', 'ETH']),
-                tokenAddress: EvmAddressSchema,
-                sourceAmount: z
-                  .string()
-                  .regex(/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/)
-                  .max(100),
-                fixtureDigest: EvidenceDigestSchema,
-                calls: z
-                  .array(
-                    z
-                      .object({
-                        uaType: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
-                        to: EvmAddressSchema,
-                        data: z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/),
-                        valueWei: UnsignedIntegerSchema,
-                      })
-                      .strict(),
-                  )
-                  .min(1)
-                  .max(16),
-              })
-              .strict(),
-          )
-          .max(32),
-        rpcUrl: z.string().url().optional(),
-        responseProfile: z
-          .object({
-            profileId: z.string().min(1).max(128),
-            provenance: z.enum(['deterministic', 'recorded_live']),
-            deploymentsFixtureDigest: EvidenceDigestSchema,
-            authFixtureDigest: EvidenceDigestSchema,
-            submissionFixtureDigest: EvidenceDigestSchema,
-            statusFixtureDigest: EvidenceDigestSchema,
-            magicAuthorizationNonceOffset: z.union([z.literal(0), z.literal(1)]),
-            delegationPlanTtlSeconds: z.number().int().min(30).max(600),
-          })
-          .strict(),
-      })
-      .strict(),
+    particle: z.discriminatedUnion('enabled', [
+      z.object({ enabled: z.literal(false) }).strict(),
+      z
+        .object({
+          enabled: z.literal(true),
+          projectId: z.string().min(1).max(256),
+          projectClientKey: z.string().min(1).max(512),
+          projectAppUuid: z.string().min(1).max(256),
+          expectedImplementationAddress: EvmAddressSchema,
+          expectedImplementationCodeHash: EvidenceDigestSchema,
+          slippageBps: z.number().int().min(0).max(500),
+          maxFeeUsdMicros: UnsignedIntegerSchema.refine((value) => BigInt(value) > 0n),
+          allowedSourceChainIds: z.array(UnsignedIntegerSchema).min(1).max(32),
+          allowedSourceAssets: z
+            .array(z.enum(['USDC', 'USDT', 'ETH']))
+            .min(1)
+            .max(3),
+          allowedSourceTokens: z
+            .array(
+              z
+                .object({
+                  chainId: UnsignedIntegerSchema.refine((value) => BigInt(value) > 0n),
+                  asset: z.enum(['USDC', 'USDT', 'ETH']),
+                  address: EvmAddressSchema,
+                })
+                .strict(),
+            )
+            .max(32),
+          sourceCallProfiles: z
+            .array(
+              z
+                .object({
+                  profileId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+                  chainId: UnsignedIntegerSchema.refine((value) => BigInt(value) > 0n),
+                  asset: z.enum(['USDC', 'USDT', 'ETH']),
+                  tokenAddress: EvmAddressSchema,
+                  sourceAmount: z
+                    .string()
+                    .regex(/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/)
+                    .max(100),
+                  fixtureDigest: EvidenceDigestSchema,
+                  calls: z
+                    .array(
+                      z
+                        .object({
+                          uaType: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
+                          to: EvmAddressSchema,
+                          data: z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/),
+                          valueWei: UnsignedIntegerSchema,
+                        })
+                        .strict(),
+                    )
+                    .min(1)
+                    .max(16),
+                })
+                .strict(),
+            )
+            .max(32),
+          rpcUrl: z.string().url().optional(),
+          responseProfile: z
+            .object({
+              profileId: z.string().min(1).max(128),
+              provenance: z.enum(['deterministic', 'recorded_live']),
+              deploymentsFixtureDigest: EvidenceDigestSchema,
+              authFixtureDigest: EvidenceDigestSchema,
+              submissionFixtureDigest: EvidenceDigestSchema,
+              statusFixtureDigest: EvidenceDigestSchema,
+              magicAuthorizationNonceOffset: z.union([z.literal(0), z.literal(1)]),
+              delegationPlanTtlSeconds: z.number().int().min(30).max(600),
+            })
+            .strict(),
+        })
+        .strict(),
+    ]),
     media: z.object({ allowedOrigins: z.array(z.string().url()).min(1).max(21) }).strict(),
     features: z
       .object({

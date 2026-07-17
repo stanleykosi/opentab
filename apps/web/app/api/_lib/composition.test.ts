@@ -2,6 +2,7 @@ import type { ArbitrumReadPort } from '@opentab/application';
 import { describe, expect, it } from 'vitest';
 import {
   assertPlatformFeeParity,
+  deriveApplicationSecret,
   judgeEvidenceProvenance,
   resolveApplicationReleaseId,
   trustedNetworkSubject,
@@ -11,6 +12,16 @@ const releaseA = 'a'.repeat(40);
 const releaseB = 'b'.repeat(40);
 
 describe('backend production boundary helpers', () => {
+  it('derives independent application secrets from one protected root', () => {
+    const root = 'root-secret-material-that-is-at-least-32-bytes';
+    const session = deriveApplicationSecret(root, 'session-token-hash');
+    const csrf = deriveApplicationSecret(root, 'csrf-token-hash');
+    expect(session).toMatch(/^[0-9a-f]{64}$/);
+    expect(csrf).toMatch(/^[0-9a-f]{64}$/);
+    expect(session).not.toBe(csrf);
+    expect(deriveApplicationSecret(undefined, 'session-token-hash')).toBeUndefined();
+  });
+
   it('resolves a portable release ID on non-Vercel hosts', () => {
     expect(resolveApplicationReleaseId({ APPLICATION_RELEASE_ID: releaseA }, false)).toBe(releaseA);
   });
