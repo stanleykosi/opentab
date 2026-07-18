@@ -4,8 +4,10 @@ import {
   deriveParticleCompatibilityScopeId,
   digestParticleCompatibilityProfile,
   digestParticleProjectConfiguration,
+  EvmAddressSchema,
   type ParticleCompatibilityProfile,
   ParticleCompatibilityProfileSchema,
+  ParticleProfileReleaseBindingSchema,
   type ProviderOperation,
   type ProviderOperationId,
   ProviderOperationIdSchema,
@@ -23,7 +25,7 @@ import type {
   LoadIndexerParticleProfileInput,
 } from '../src/particle-profile.js';
 
-const address = (digit: string) => `0x${digit.repeat(40)}` as const;
+const address = (digit: string) => EvmAddressSchema.parse(`0x${digit.repeat(40)}`);
 
 function environment(): Record<string, string> {
   return {
@@ -136,21 +138,23 @@ function loadedProfile(
       : {}),
     capturedAt: '2026-07-18T10:00:00.000Z',
   });
+  const releaseBinding = ParticleProfileReleaseBindingSchema.parse({
+    schemaVersion: 1,
+    environment: input.environment,
+    applicationReleaseId: input.profileScopeId,
+    chainId: ARBITRUM_ONE_CHAIN_ID,
+    stage,
+    profileId: profile.profileId,
+    profileDigest: digestParticleCompatibilityProfile(profile),
+    certifiedSubjectHash: `0x${'1'.repeat(64)}`,
+    canaryProductId: '1',
+    canaryMaxBaseUnits: '1',
+    boundAt: '2026-07-18T10:01:00.000Z',
+  });
+  const { applicationReleaseId: profileScopeId, ...binding } = releaseBinding;
   return {
     profile,
-    binding: {
-      schemaVersion: 1,
-      environment: input.environment,
-      profileScopeId: input.profileScopeId,
-      chainId: ARBITRUM_ONE_CHAIN_ID,
-      stage,
-      profileId: profile.profileId,
-      profileDigest: digestParticleCompatibilityProfile(profile),
-      certifiedSubjectHash: `0x${'1'.repeat(64)}`,
-      canaryProductId: '1',
-      canaryMaxBaseUnits: '1',
-      boundAt: '2026-07-18T10:01:00.000Z',
-    },
+    binding: { ...binding, profileScopeId },
   };
 }
 

@@ -4,6 +4,8 @@ import {
   type ArbitrumAdapterConfig,
   createParticleUniversalAccountAdapter,
   createViemArbitrumReadAdapter,
+  type ParticleRecordedResponseProfile,
+  type ParticleSourceCallPolicy,
 } from '@opentab/integrations/indexer';
 import {
   AppError,
@@ -73,19 +75,53 @@ function assertScopedProfile(input: {
   return loaded;
 }
 
-function particleResponseProfile(profile: ParticleCompatibilityProfile) {
+function bytes32Hex(value: string, name: string): `0x${string}` {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new AppError('CONFIGURATION_INVALID', `${name} must be an exact bytes32 value.`);
+  }
+  return value as `0x${string}`;
+}
+
+function selectorHex(value: string): `0x${string}` {
+  if (!/^0x[0-9a-fA-F]{8}$/.test(value)) {
+    throw new AppError(
+      'CONFIGURATION_INVALID',
+      'Particle source-call selector must be exactly four bytes.',
+    );
+  }
+  return value as `0x${string}`;
+}
+
+function particleResponseProfile(
+  profile: ParticleCompatibilityProfile,
+): ParticleRecordedResponseProfile {
   return {
     profileId: profile.profileId,
     provenance: 'recorded_live' as const,
-    certificationStage: profile.stage,
-    deploymentsFixtureDigest: profile.responseDigests.deployments,
-    authFixtureDigest: profile.responseDigests.auth,
+    deploymentsFixtureDigest: bytes32Hex(
+      profile.responseDigests.deployments,
+      'Particle deployments fixture digest',
+    ),
+    authFixtureDigest: bytes32Hex(
+      profile.responseDigests.auth,
+      'Particle authorization fixture digest',
+    ),
     ...(profile.responseDigests.submission === undefined
       ? {}
-      : { submissionFixtureDigest: profile.responseDigests.submission }),
+      : {
+          submissionFixtureDigest: bytes32Hex(
+            profile.responseDigests.submission,
+            'Particle submission fixture digest',
+          ),
+        }),
     ...(profile.responseDigests.status === undefined
       ? {}
-      : { statusFixtureDigest: profile.responseDigests.status }),
+      : {
+          statusFixtureDigest: bytes32Hex(
+            profile.responseDigests.status,
+            'Particle status fixture digest',
+          ),
+        }),
     magicAuthorizationNonceOffset: profile.nonceConvention.magicAuthorizationNonceOffset,
     delegationPlanTtlSeconds: profile.nonceConvention.delegationPlanTtlSeconds,
   };
@@ -241,20 +277,28 @@ export async function createProductionIndexerDependencies(
       liveProfile.sourceTokenProfile,
       'Particle source-token profile',
     );
+    const sourceCallPolicies: readonly ParticleSourceCallPolicy[] =
+      sourceTokenProfile.sourceCallPolicies.map((policy) => ({
+        ...policy,
+        functionSelector: selectorHex(policy.functionSelector),
+      }));
     return operationsFactory({
       projectId: server.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
       projectClientKey: server.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
       projectAppUuid: server.NEXT_PUBLIC_PARTICLE_APP_UUID,
       ownerAddress,
       expectedImplementationAddress: liveProfile.delegateAddress,
-      expectedImplementationCodeHash: liveProfile.delegateCodeHash,
+      expectedImplementationCodeHash: bytes32Hex(
+        liveProfile.delegateCodeHash,
+        'Particle delegation implementation code hash',
+      ),
       environment: server.APP_ENV,
       slippageBps: server.PARTICLE_MAX_SLIPPAGE_BPS,
       maxFeeUsdMicros: server.PARTICLE_MAX_FEE_USD_MICROS,
       allowedSourceChainIds: sourceTokenProfile.allowedSourceChainIds,
       allowedSourceAssets: sourceTokenProfile.allowedSourceAssets,
       allowedSourceTokens: sourceTokenProfile.allowedSourceTokens,
-      sourceCallPolicies: sourceTokenProfile.sourceCallPolicies,
+      sourceCallPolicies,
       responseProfile: particleResponseProfile(liveProfile),
       ...(server.PARTICLE_RPC_URL === undefined ? {} : { rpcUrl: server.PARTICLE_RPC_URL }),
     });
