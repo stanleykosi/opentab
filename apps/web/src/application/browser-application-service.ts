@@ -1711,12 +1711,16 @@ export class BrowserApplicationService {
         capturedFixtureDigest: asBytes32(policy.capturedFixtureDigest),
       })),
       responseProfile: {
-        ...config.particle.responseProfile,
+        profileId: config.particle.responseProfile.profileId,
+        provenance: config.particle.responseProfile.provenance,
         certificationStage: config.particle.certificationStage,
         deploymentsFixtureDigest: asHexDigest(
           config.particle.responseProfile.deploymentsFixtureDigest,
         ),
         authFixtureDigest: asHexDigest(config.particle.responseProfile.authFixtureDigest),
+        magicAuthorizationNonceOffset:
+          config.particle.responseProfile.magicAuthorizationNonceOffset,
+        delegationPlanTtlSeconds: config.particle.responseProfile.delegationPlanTtlSeconds,
         ...(config.particle.responseProfile.submissionFixtureDigest === undefined
           ? {}
           : {
