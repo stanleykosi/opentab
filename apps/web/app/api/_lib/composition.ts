@@ -468,7 +468,6 @@ function operationsFactory(
           }),
       responseProfile: {
         ...particle.responseProfile,
-        certificationStage: particle.certificationStage,
         deploymentsFixtureDigest: particle.responseProfile
           .deploymentsFixtureDigest as `0x${string}`,
         authFixtureDigest: particle.responseProfile.authFixtureDigest as `0x${string}`,
