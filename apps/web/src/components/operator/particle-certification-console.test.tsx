@@ -75,12 +75,12 @@ function serviceFixture(initialStatus: ParticleCertificationStatus) {
 
 async function unlockConsole(service: BrowserApplicationService) {
   render(<ParticleCertificationConsole service={service} />);
-  fireEvent.change(await screen.findByLabelText('Operator token'), {
+  fireEvent.change(await screen.findByLabelText(/Operator token/), {
     target: { value: 'o'.repeat(32) },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   await screen.findByRole('heading', { name: 'Activate customer payments' });
-  await waitFor(() => expect(screen.getByLabelText('Activation item')).toHaveValue(product.id));
+  await waitFor(() => expect(screen.getByLabelText(/Activation item/)).toHaveValue(product.id));
 }
 
 describe('ParticleCertificationConsole', () => {

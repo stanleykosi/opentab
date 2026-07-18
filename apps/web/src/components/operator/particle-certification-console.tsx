@@ -233,10 +233,10 @@ export function ParticleCertificationConsole({
               ]);
               setStatus(nextStatus);
               setWalletAddress(owner);
-              if (nextStatus.certification.stage === 'canary_ready') {
+              const certification = nextStatus.certification;
+              if (certification.stage === 'canary_ready') {
                 const boundProduct = products.find(
-                  (product) =>
-                    product.onchainProductId === nextStatus.certification.canaryProductId,
+                  (product) => product.onchainProductId === certification.canaryProductId,
                 );
                 if (boundProduct === undefined) {
                   throw new Error(
