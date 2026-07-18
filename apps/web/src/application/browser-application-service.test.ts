@@ -1,5 +1,6 @@
 import type { MagicWalletPort, UniversalOperationPort } from '@opentab/application';
 import {
+  ARBITRUM_ONE_CHAIN_ID,
   BoundOperationTemplateSchema,
   CheckoutBindingSchema,
   type CurrentUser,
@@ -118,7 +119,18 @@ function continuationStore(): ContinuationStore & { value: string | undefined } 
   };
 }
 
-function magicWallet(overrides: Partial<MagicWalletPort> = {}): MagicWalletPort {
+type TestMagicWallet = MagicWalletPort & {
+  probeDelegationAuthorizationNonce(input: {
+    ownerAddress: EvmAddress;
+    implementationAddress: EvmAddress;
+  }): Promise<{
+    chainId: typeof ARBITRUM_ONE_CHAIN_ID;
+    implementationAddress: EvmAddress;
+    nonce: string;
+  }>;
+};
+
+function magicWallet(overrides: Partial<TestMagicWallet> = {}): TestMagicWallet {
   return {
     loginWithGoogle: vi.fn(async () => undefined),
     completeGoogleRedirect: vi.fn(async () => ({
@@ -132,6 +144,11 @@ function magicWallet(overrides: Partial<MagicWalletPort> = {}): MagicWalletPort 
     getOwnerAddress: vi.fn(async () => owner),
     getChainId: vi.fn(async () => '42161'),
     switchToArbitrum: vi.fn(async () => undefined),
+    probeDelegationAuthorizationNonce: vi.fn(async (input) => ({
+      chainId: ARBITRUM_ONE_CHAIN_ID,
+      implementationAddress: input.implementationAddress,
+      nonce: '0',
+    })),
     authorizeDelegation: vi.fn(),
     submitDelegation: vi.fn(),
     signValidatedRoot: vi.fn(),
@@ -139,6 +156,17 @@ function magicWallet(overrides: Partial<MagicWalletPort> = {}): MagicWalletPort 
     ...overrides,
   };
 }
+
+const certificationIntegrationStub = {
+  createParticleOperatorCertificationAdapter: () => ({
+    captureBootstrap: async (): Promise<never> => {
+      throw new Error('Particle certification is not available in this test');
+    },
+    captureCanaryReady: async (): Promise<never> => {
+      throw new Error('Particle certification is not available in this test');
+    },
+  }),
+};
 
 const checkoutSessionId = `chk_${'0'.repeat(26)}`;
 const paymentAttemptId = `pay_${'0'.repeat(26)}`;
@@ -410,6 +438,7 @@ describe('browser application service boundaries', () => {
       digestUnknown: () => digest as EvidenceDigest,
       createMagicBrowserWallet: () => wallet,
       createParticleUniversalAccountAdapter: vi.fn<() => UniversalOperationPort>(),
+      ...certificationIntegrationStub,
     }));
     const storage = continuationStore();
     const service = new BrowserApplicationService({
@@ -446,6 +475,7 @@ describe('browser application service boundaries', () => {
         digestUnknown: () => digest as EvidenceDigest,
         createMagicBrowserWallet: () => wallet,
         createParticleUniversalAccountAdapter: vi.fn<() => UniversalOperationPort>(),
+        ...certificationIntegrationStub,
       }),
       continuationStore: storage,
       origin: () => 'https://opentab.example',
@@ -478,6 +508,7 @@ describe('browser application service boundaries', () => {
         digestUnknown: () => digest as EvidenceDigest,
         createMagicBrowserWallet: () => wallet,
         createParticleUniversalAccountAdapter: () => universalAccount(),
+        ...certificationIntegrationStub,
       }),
       continuationStore: continuationStore(),
       origin: () => 'https://opentab.example',
@@ -554,6 +585,7 @@ describe('browser application service boundaries', () => {
         digestUnknown: () => digest as EvidenceDigest,
         createMagicBrowserWallet: () => wallet,
         createParticleUniversalAccountAdapter: () => account,
+        ...certificationIntegrationStub,
       }),
       continuationStore: continuationStore(),
       origin: () => 'https://opentab.example',
@@ -613,6 +645,7 @@ describe('browser application service boundaries', () => {
         digestUnknown: () => digest as EvidenceDigest,
         createMagicBrowserWallet: () => wallet,
         createParticleUniversalAccountAdapter: () => account,
+        ...certificationIntegrationStub,
       }),
       continuationStore: continuationStore(),
       origin: () => 'https://opentab.example',
@@ -671,6 +704,7 @@ describe('browser application service boundaries', () => {
             })),
           }),
         createParticleUniversalAccountAdapter: () => account,
+        ...certificationIntegrationStub,
       }),
       continuationStore: continuationStore(),
       origin: () => 'https://opentab.example',
@@ -754,6 +788,7 @@ describe('browser application service boundaries', () => {
         validateBrowserContractOperation: () => merchantMutationTemplate,
         createMagicBrowserWallet: () => wallet,
         createParticleUniversalAccountAdapter: () => account,
+        ...certificationIntegrationStub,
       }),
       continuationStore: continuationStore(),
       origin: () => 'https://opentab.example',
@@ -1018,9 +1053,7 @@ describe('browser application service boundaries', () => {
         validateBrowserContractOperation: (input) => input.template,
         createMagicBrowserWallet: () => wallet,
         createParticleUniversalAccountAdapter: () => universalAccount(),
-        createParticleOperatorCertificationAdapter: () => {
-          throw new Error('not used');
-        },
+        ...certificationIntegrationStub,
       }),
       continuationStore: continuationStore(),
       origin: () => 'https://opentab.example',

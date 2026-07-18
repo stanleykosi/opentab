@@ -1,6 +1,7 @@
 import { AppError, CurrentUserSchema, MerchantIdSchema } from '@opentab/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { LiveBackendApiCommands } from '../app/api/_lib/live-commands.js';
+import { ContractOperationSubmissionBodySchema } from '../app/api/_lib/schemas.js';
 
 const ULID = '01J00000000000000000000000';
 const actor = CurrentUserSchema.parse({
@@ -24,7 +25,7 @@ type MutableRegistration = {
   transactionHash?: string;
 };
 
-function context(body: Readonly<Record<string, unknown>>, suffix: string) {
+function context<const Body extends object>(body: Body, suffix: string) {
   return {
     actor,
     body,
@@ -32,6 +33,10 @@ function context(body: Readonly<Record<string, unknown>>, suffix: string) {
     requestHash: `request-${suffix}`.padEnd(64, 'b'),
     requestId: `request-id-${suffix}`,
   };
+}
+
+function contractSubmissionContext(body: unknown, suffix: string) {
+  return context(ContractOperationSubmissionBodySchema.parse(body), suffix);
 }
 
 function commands(input: {
@@ -330,7 +335,7 @@ describe('live command submission-result boundaries', () => {
     });
 
     await instance.registerContractOperationSubmission({
-      ...context(
+      ...contractSubmissionContext(
         { status: 'submission_started', providerOperationId: magicProviderOperationId },
         'contract-start',
       ),
@@ -344,7 +349,7 @@ describe('live command submission-result boundaries', () => {
     policy.refunds = false;
     await expectCode(
       instance.registerContractOperationSubmission({
-        ...context(
+        ...contractSubmissionContext(
           { status: 'submitted', providerOperationId: magicProviderOperationId },
           'contract-magic-result-without-hash',
         ),
@@ -353,7 +358,7 @@ describe('live command submission-result boundaries', () => {
       'OPERATION_PLAN_INVALID',
     );
     await instance.registerContractOperationSubmission({
-      ...context(
+      ...contractSubmissionContext(
         {
           status: 'submitted',
           providerOperationId: magicProviderOperationId,
@@ -367,7 +372,7 @@ describe('live command submission-result boundaries', () => {
     expect(spies.registerContractOperationSubmission).toHaveBeenCalledTimes(2);
 
     await instance.registerContractOperationSubmission({
-      ...context(
+      ...contractSubmissionContext(
         {
           status: 'submitted',
           providerOperationId: magicProviderOperationId,
@@ -380,7 +385,7 @@ describe('live command submission-result boundaries', () => {
     expect(spies.registerContractOperationSubmission).toHaveBeenCalledTimes(2);
     await expectCode(
       instance.registerContractOperationSubmission({
-        ...context(
+        ...contractSubmissionContext(
           { status: 'submitted', providerOperationId: 'different-operation' },
           'contract-provider-result-mismatch',
         ),
@@ -390,7 +395,7 @@ describe('live command submission-result boundaries', () => {
     );
     await expectCode(
       instance.registerContractOperationSubmission({
-        ...context(
+        ...contractSubmissionContext(
           {
             status: 'submitted',
             providerOperationId: magicProviderOperationId,
@@ -407,7 +412,7 @@ describe('live command submission-result boundaries', () => {
     delete operation.providerOperationId;
     await expectCode(
       instance.registerContractOperationSubmission({
-        ...context(
+        ...contractSubmissionContext(
           { status: 'submission_started', providerOperationId: 'new-provider-operation' },
           'contract-new-start-after-kill-switch',
         ),

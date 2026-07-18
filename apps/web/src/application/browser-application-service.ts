@@ -125,7 +125,7 @@ interface BrowserIntegrationModule {
     captureBootstrap(): Promise<{ profile: ParticleCompatibilityProfile }>;
     captureCanaryReady(binding: CheckoutBinding): Promise<{
       profile: ParticleCompatibilityProfile;
-      preparedFixtureDigest: `0x${string}`;
+      preparedFixtureDigest: EvidenceDigest;
     }>;
   };
 }

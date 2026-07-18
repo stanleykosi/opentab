@@ -1,40 +1,120 @@
-import type { BackendApiQueryPort } from '@opentab/application';
+import type { BackendApiQueryPort, OrderSnapshotRecord } from '@opentab/application';
 import type { LoadedParticleCompatibilityProfile } from '@opentab/db';
-import type { CurrentUser } from '@opentab/shared';
+import {
+  ARBITRUM_ONE_CHAIN_ID,
+  type CurrentUser,
+  CurrentUserSchema,
+  digestParticleCompatibilityProfile,
+  EvidenceDigestSchema,
+  OrderIdSchema,
+  ParticleCompatibilityProfileSchema,
+  ParticleProfileReleaseBindingSchema,
+  type Product,
+} from '@opentab/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ParticleReleasePaymentPolicy } from './particle-payment-policy.js';
 
-const OPERATOR_HASH = `0x${'1'.repeat(64)}`;
-const CANARY_PRODUCT_ID = `0x${'2'.repeat(64)}`;
-const ORDER_ID = '01J00000000000000000000000' as Parameters<
-  BackendApiQueryPort['getOrderForActor']
->[0];
+const digest = (value: string) => EvidenceDigestSchema.parse(`0x${value.repeat(64)}`);
+const address = (value: string) => `0x${value.repeat(40)}`;
+const OPERATOR_HASH = digest('1');
+const CANARY_PRODUCT_ID = '2';
+const ORDER_ID = OrderIdSchema.parse('ord_01J00000000000000000000000');
 
-const operator = {
-  id: '01J00000000000000000000001',
+const operator = CurrentUserSchema.parse({
+  id: 'usr_01J00000000000000000000001',
   walletAddress: '0x1111111111111111111111111111111111111111',
   authMethod: 'email_otp',
   status: 'active',
   merchantMemberships: [],
-} as CurrentUser;
+});
 
-const otherUser = {
+const otherUser = CurrentUserSchema.parse({
   ...operator,
-  id: '01J00000000000000000000002',
+  id: 'usr_01J00000000000000000000002',
   walletAddress: '0x2222222222222222222222222222222222222222',
-} as CurrentUser;
+});
+
+const sourceTokenProfile = {
+  allowedSourceChainIds: [ARBITRUM_ONE_CHAIN_ID, '8453'],
+  allowedSourceAssets: ['USDC'],
+  allowedSourceTokens: [{ chainId: '8453', asset: 'USDC', address: address('4') }],
+  sourceCallPolicies: [
+    {
+      policyId: 'base-usdc-approve-v1',
+      chainId: '8453',
+      asset: 'USDC',
+      tokenAddress: address('4'),
+      uaType: 'evm',
+      target: address('5'),
+      functionSelector: '0x095ea7b3',
+      nativeValueAllowed: false,
+      maxCalls: 1,
+      capturedFixtureDigest: digest('6'),
+    },
+  ],
+} as const;
+
+function callableProxy<T extends object>(overrides: Partial<T>): T {
+  return new Proxy(overrides, {
+    get(target, property, receiver) {
+      if (Reflect.has(target, property)) return Reflect.get(target, property, receiver);
+      if (property === 'then') return undefined;
+      throw new Error(`Unexpected test dependency access: ${String(property)}`);
+    },
+  }) as T;
+}
 
 function loaded(
   stage: 'bootstrap' | 'canary_ready' | 'certified',
 ): LoadedParticleCompatibilityProfile {
+  const profile = ParticleCompatibilityProfileSchema.parse({
+    schemaVersion: 1,
+    profileId: `particle-payment-policy-${stage}`,
+    stage,
+    environment: 'demo-mainnet',
+    chainId: ARBITRUM_ONE_CHAIN_ID,
+    particleSdkVersion: '2.0.3',
+    particleProtocolVersion: '2.0.1',
+    particleProjectConfigDigest: digest('7'),
+    useEIP7702: true,
+    delegateAddress: address('8'),
+    delegateCodeHash: digest('9'),
+    responseDigests: {
+      deployments: digest('a'),
+      auth: digest('b'),
+      ...(stage === 'certified' ? { submission: digest('c'), status: digest('d') } : {}),
+    },
+    nonceConvention: { magicAuthorizationNonceOffset: 1, delegationPlanTtlSeconds: 300 },
+    ...(stage === 'bootstrap' ? {} : { sourceTokenProfile }),
+    ...(stage === 'certified'
+      ? {
+          canonicalCanaryEvidence: {
+            paymentAttemptId: 'pay_01J00000000000000000000000',
+            orderKey: digest('e'),
+            transactionHash: digest('f'),
+            blockHash: digest('0'),
+            acceptanceEvidenceDigest: digest('2'),
+          },
+        }
+      : {}),
+    capturedAt: '2026-07-18T10:00:00.000Z',
+  });
   return {
-    profile: { stage },
-    binding: {
+    profile,
+    binding: ParticleProfileReleaseBindingSchema.parse({
+      schemaVersion: 1,
+      environment: 'demo-mainnet',
+      applicationReleaseId: 'a'.repeat(40),
+      chainId: ARBITRUM_ONE_CHAIN_ID,
+      stage,
+      profileId: profile.profileId,
+      profileDigest: digestParticleCompatibilityProfile(profile),
       certifiedSubjectHash: OPERATOR_HASH,
       canaryProductId: CANARY_PRODUCT_ID,
       canaryMaxBaseUnits: '1000000',
-    },
-  } as LoadedParticleCompatibilityProfile;
+      boundAt: '2026-07-18T10:01:00.000Z',
+    }),
+  };
 }
 
 function setup(input: {
@@ -45,14 +125,14 @@ function setup(input: {
   getOrderForActor.mockResolvedValue(
     input.orderProductId === undefined
       ? undefined
-      : ({ product: { onchainProductId: input.orderProductId } } as Awaited<
-          ReturnType<BackendApiQueryPort['getOrderForActor']>
-        >),
+      : callableProxy<OrderSnapshotRecord>({
+          product: callableProxy<Product>({ onchainProductId: input.orderProductId }),
+        }),
   );
   const policy = new ParticleReleasePaymentPolicy({
     loaded: input.stage === undefined ? undefined : loaded(input.stage),
-    queries: { getOrderForActor } as unknown as BackendApiQueryPort,
-    subjectHash: (actor) => (actor.id === operator.id ? OPERATOR_HASH : `0x${'3'.repeat(64)}`),
+    queries: callableProxy<BackendApiQueryPort>({ getOrderForActor }),
+    subjectHash: (actor) => (actor.id === operator.id ? OPERATOR_HASH : digest('3')),
   });
   return { getOrderForActor, policy };
 }

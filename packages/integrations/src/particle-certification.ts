@@ -4,6 +4,7 @@ import {
   type CheckoutBinding,
   CheckoutBindingSchema,
   digestParticleProjectConfiguration,
+  type EvidenceDigest,
   type EvmAddress,
   EvmAddressSchema,
   type ParticleCompatibilityProfile,
@@ -286,7 +287,7 @@ export class ParticleOperatorCertificationAdapter {
 
   async captureCanaryReady(bindingInput: CheckoutBinding): Promise<{
     profile: ParticleCompatibilityProfile;
-    preparedFixtureDigest: `0x${string}`;
+    preparedFixtureDigest: EvidenceDigest;
   }> {
     const binding = CheckoutBindingSchema.parse(bindingInput);
     if (!sameEvmAddress(binding.orderIntent.payer, this.config.ownerAddress)) {
@@ -374,7 +375,7 @@ export class ParticleOperatorCertificationAdapter {
         functionSelector: `0x${string}`;
         nativeValueAllowed: boolean;
         maxCalls: number;
-        capturedFixtureDigest: `0x${string}`;
+        capturedFixtureDigest: EvidenceDigest;
       }[] = [];
       for (const operation of prepared.userOps.filter(
         (entry) => entry.chainId !== ARBITRUM_CHAIN_NUMBER,
