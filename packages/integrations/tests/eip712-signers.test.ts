@@ -118,7 +118,16 @@ describe('EIP-712 intent signer boundaries', () => {
       signerKeyId: 'order-only-role',
       signerAddress: signer.orderSignerAddress,
     });
-    for (const environment of ['preview', 'staging', 'demo-mainnet', 'production']) {
+    const demoSigner = createPrivateKeyOrderIntentSigner({
+      environment: 'demo-mainnet',
+      orderPrivateKey,
+      order: { signerKeyId: 'demo-mainnet-order-only-role', verifyingContract: checkout },
+    });
+    await expect(demoSigner.order.signIntent(orderIntent())).resolves.toMatchObject({
+      signerKeyId: 'demo-mainnet-order-only-role',
+      signerAddress: demoSigner.orderSignerAddress,
+    });
+    for (const environment of ['preview', 'staging', 'production']) {
       expect(() =>
         createPrivateKeyOrderIntentSigner({
           environment,

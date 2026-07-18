@@ -255,6 +255,9 @@ export const PublicBrowserConfigSchema = z
     magic: z
       .object({ publishableKey: z.string().min(8).max(256), rpcUrl: z.string().url().max(2_048) })
       .strict(),
+    challenge: z
+      .object({ turnstileSiteKey: z.string().min(1).max(256).optional() })
+      .strict(),
     particle: z.discriminatedUnion('enabled', [
       z.object({ enabled: z.literal(false) }).strict(),
       z

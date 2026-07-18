@@ -543,7 +543,7 @@ describe('server environment safety', () => {
     'staging',
     'demo-mainnet',
     'production',
-  ] as const)('rejects private-key signers in production-like %s', (environment) => {
+  ] as const)('rejects private-key sponsor signers in production-like %s', (environment) => {
     expect(() =>
       parseServerEnvironment({
         APP_ENV: environment,
@@ -552,6 +552,62 @@ describe('server environment safety', () => {
         SPONSOR_SIGNER_MODE: 'private-key',
       }),
     ).toThrow(/local\/test/);
+  });
+
+  it.each(['preview', 'staging', 'production'] as const)(
+    'rejects private-key order signing in %s even with the demo opt-in',
+    (environment) => {
+      expect(() =>
+        parseServerEnvironment({
+          APP_ENV: environment,
+          NEXT_PUBLIC_APP_ENV: environment,
+          NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
+          PROVIDER_MODE: 'live',
+          DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED: 'true',
+          ORDER_SIGNER_MODE: 'private-key',
+        }),
+      ).toThrow(/demo-mainnet/);
+    },
+  );
+
+  it('requires an explicit opt-in for demo-mainnet private-key order signing', () => {
+    expect(() =>
+      parseServerEnvironment({
+        APP_ENV: 'demo-mainnet',
+        NEXT_PUBLIC_APP_ENV: 'demo-mainnet',
+        NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
+        PROVIDER_MODE: 'live',
+        ORDER_SIGNER_MODE: 'private-key',
+      }),
+    ).toThrow(/explicit demo-mainnet opt-in/);
+  });
+
+  it('allows only the dedicated order signer in an explicit demo-mainnet payment canary', () => {
+    const config = parseServerEnvironment({
+      ...LIVE_CANARY_ENVIRONMENT,
+      APP_ENV: 'demo-mainnet',
+      NEXT_PUBLIC_APP_ENV: 'demo-mainnet',
+      NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
+      APPLICATION_RELEASE_ID: 'b'.repeat(40),
+      PAYMENTS_ENABLED: 'true',
+      MAGIC_SECRET_KEY: 'sk_live_demo_opentab',
+      DATABASE_URL: 'postgresql://runtime:secret@db.example/opentab?sslmode=verify-full',
+      REDIS_URL: 'rediss://default:secret@redis.example:6380',
+      OPENTAB_SECRET_ROOT: 'root-secret-material-that-is-at-least-32-bytes',
+      PLATFORM_FEE_BPS: '0',
+      DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED: 'true',
+      ORDER_SIGNER_MODE: 'private-key',
+      ORDER_SIGNER_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
+      ORDER_SIGNER_ADDRESS: '0x7777777777777777777777777777777777777777',
+    });
+
+    expect(config).toMatchObject({
+      APP_ENV: 'demo-mainnet',
+      DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED: true,
+      ORDER_SIGNER_MODE: 'private-key',
+      SPONSOR_SIGNER_MODE: 'disabled',
+      SPLIT_SIGNER_MODE: 'disabled',
+    });
   });
 
   it('keeps order and split signing roles independently configured', () => {

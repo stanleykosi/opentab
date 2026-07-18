@@ -470,6 +470,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
     (value) => (value === '' ? undefined : value),
     z.coerce.number().int().min(30).max(600).default(300),
   ),
+  DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED: strictBoolean.default(false),
   ORDER_SIGNER_MODE: z.enum(['disabled', 'private-key', 'kms']).default('disabled'),
   ORDER_SIGNER_PRIVATE_KEY: optionalString,
   ORDER_SIGNER_KMS_KEY_ID: optionalString,
@@ -1113,18 +1114,52 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
     }
   }
 
-  if (productionLike) {
-    if (
-      config.SPONSOR_SIGNER_MODE === 'private-key' ||
-      config.ORDER_SIGNER_MODE === 'private-key' ||
-      config.SPLIT_SIGNER_MODE === 'private-key'
-    ) {
+  if (config.DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED) {
+    if (config.APP_ENV !== 'demo-mainnet') {
       context.addIssue({
         code: 'custom',
-        path: ['SPONSOR_SIGNER_MODE'],
-        message: 'Private-key signers are restricted to local/test environments',
+        path: ['DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED'],
+        message: 'The private-key order signer opt-in is restricted to demo-mainnet',
       });
     }
+    if (config.PROVIDER_MODE !== 'live') {
+      context.addIssue({
+        code: 'custom',
+        path: ['PROVIDER_MODE'],
+        message: 'The demo-mainnet private-key order signer requires live provider mode',
+      });
+    }
+    if (config.ORDER_SIGNER_MODE !== 'private-key') {
+      context.addIssue({
+        code: 'custom',
+        path: ['ORDER_SIGNER_MODE'],
+        message: 'The demo-mainnet private-key order signer opt-in requires private-key mode',
+      });
+    }
+  }
+
+  if (
+    productionLike &&
+    (config.SPONSOR_SIGNER_MODE === 'private-key' || config.SPLIT_SIGNER_MODE === 'private-key')
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['SPONSOR_SIGNER_MODE'],
+      message: 'Private-key sponsor and split signers are restricted to local/test environments',
+    });
+  }
+
+  if (
+    productionLike &&
+    config.ORDER_SIGNER_MODE === 'private-key' &&
+    !(config.APP_ENV === 'demo-mainnet' && config.DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['ORDER_SIGNER_MODE'],
+      message:
+        'Production-like private-key order signing requires the explicit demo-mainnet opt-in',
+    });
   }
 
   if (

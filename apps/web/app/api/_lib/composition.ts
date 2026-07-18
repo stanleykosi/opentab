@@ -569,7 +569,11 @@ async function orderSigner(
   }
   if (!config.PAYMENTS_ENABLED) return { signer: disabledSigner(), keyId: 'disabled' };
   if (config.ORDER_SIGNER_MODE === 'private-key' && config.ORDER_SIGNER_PRIVATE_KEY !== undefined) {
-    const keyId = config.ORDER_SIGNER_KMS_KEY_ID ?? 'local-order-intent-v1';
+    const keyId =
+      config.ORDER_SIGNER_KMS_KEY_ID ??
+      (config.APP_ENV === 'demo-mainnet'
+        ? 'demo-mainnet-dedicated-order-intent-v1'
+        : 'local-order-intent-v1');
     const composed = createPrivateKeyOrderIntentSigner({
       environment: config.APP_ENV,
       orderPrivateKey: config.ORDER_SIGNER_PRIVATE_KEY as `0x${string}`,

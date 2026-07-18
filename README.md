@@ -210,8 +210,12 @@ live-chain proof.
 
 The deployment-time order signer
 `0x03981bA2a287b173A16b2c0a04088aB33AA98526` is a temporary local encrypted
-EOA. It must be rotated to the reviewed AWS KMS signer before
-`PAYMENTS_ENABLED=true`.
+EOA dedicated only to EIP-712 order intents; it holds no customer or merchant
+funds. The protected hackathon canary may use that key from a Vercel encrypted
+Sensitive variable only under `APP_ENV=demo-mainnet`, with
+`DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED=true` and
+`ORDER_SIGNER_MODE=private-key`. Preview, staging, and production still reject
+private-key order signers; production requires a managed remote signer.
 
 The local release bundle records the remaining external gates and guarded
 acceptance procedure. It is intentionally excluded from Git by the owner's

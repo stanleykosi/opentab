@@ -42,6 +42,7 @@ const productionLike = ['preview', 'staging', 'demo-mainnet', 'production'].incl
 );
 const orderSignerMode =
   env.ORDER_SIGNER_MODE ?? (bool('PAYMENTS_ENABLED') && productionLike ? 'kms' : 'disabled');
+const demoPrivateKeyOrderSignerEnabled = bool('DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED');
 const hasRootSecret = !missing('OPENTAB_SECRET_ROOT');
 const bigint = (name) => {
   const value = String(env[name] ?? '0');
@@ -214,11 +215,29 @@ const configuredSecuritySecrets = [
   .filter((value) => value && !/REPLACE_ME|REPLACE_WITH/.test(value));
 if (new Set(configuredSecuritySecrets).size !== configuredSecuritySecrets.length)
   errors.push('Security peppers and Judge/acceptance secrets must all be independent.');
-if (appEnvironment === 'production' && ['private-key'].includes(env.SPONSOR_SIGNER_MODE)) {
-  errors.push('Production cannot use private-key sponsor mode.');
+if (productionLike && ['private-key'].includes(env.SPONSOR_SIGNER_MODE)) {
+  errors.push('Production-like environments cannot use private-key sponsor mode.');
 }
-if (appEnvironment === 'production' && orderSignerMode === 'private-key') {
-  errors.push('Production cannot use private-key order signer mode.');
+if (productionLike && ['private-key'].includes(env.SPLIT_SIGNER_MODE)) {
+  errors.push('Production-like environments cannot use private-key split signer mode.');
+}
+if (demoPrivateKeyOrderSignerEnabled && appEnvironment !== 'demo-mainnet') {
+  errors.push('DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED is restricted to APP_ENV=demo-mainnet.');
+}
+if (demoPrivateKeyOrderSignerEnabled && providerMode !== 'live') {
+  errors.push('The demo-mainnet private-key order signer requires PROVIDER_MODE=live.');
+}
+if (demoPrivateKeyOrderSignerEnabled && orderSignerMode !== 'private-key') {
+  errors.push('The demo-mainnet order signer opt-in requires ORDER_SIGNER_MODE=private-key.');
+}
+if (
+  productionLike &&
+  orderSignerMode === 'private-key' &&
+  !(appEnvironment === 'demo-mainnet' && demoPrivateKeyOrderSignerEnabled)
+) {
+  errors.push(
+    'Production-like private-key order signing requires the explicit demo-mainnet opt-in.',
+  );
 }
 if (appEnvironment === 'production') {
   for (const key of [

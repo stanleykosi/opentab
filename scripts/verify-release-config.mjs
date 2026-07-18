@@ -269,8 +269,10 @@ for (const match of example.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)) {
   );
 }
 expect(
-  /^VERCEL_AWS_ROLE_ARN=$/m.test(example),
-  '.env.example must expose the Vercel OIDC role boundary without a value.',
+  /^DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED=false$/m.test(example) &&
+    /^ORDER_SIGNER_MODE=private-key$/m.test(example) &&
+    /^ORDER_SIGNER_PRIVATE_KEY=$/m.test(example),
+  '.env.example must expose the guarded AWS-free demo-mainnet order signer boundary.',
 );
 for (const forbiddenStaticAwsCredential of ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']) {
   expect(

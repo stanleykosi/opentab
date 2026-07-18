@@ -381,16 +381,16 @@ export async function createAwsKmsIntentSigners(input: {
   };
 }
 
-/** Local/demo-only order signer for deployments where split payments are disabled. */
+/** Dedicated order signer for local/test or the explicitly gated demo-mainnet canary. */
 export function createPrivateKeyOrderIntentSigner(input: {
   environment: string;
   orderPrivateKey: `0x${string}`;
   order: Omit<IntentSignerConfig, 'environment' | 'expectedSignerAddress'>;
 }): { order: ViemOrderIntentSigner; orderSignerAddress: EvmAddress } {
-  if (!['local', 'test'].includes(input.environment)) {
+  if (!['local', 'test', 'demo-mainnet'].includes(input.environment)) {
     throw new AppError(
       'CONFIGURATION_INVALID',
-      'Private-key intent signing is restricted to local and test environments.',
+      'Private-key order signing is restricted to local, test, and demo-mainnet environments.',
     );
   }
   if (!/^0x[0-9a-fA-F]{64}$/.test(input.orderPrivateKey)) {
