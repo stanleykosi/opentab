@@ -32,7 +32,27 @@ describe('live authentication callback', () => {
     expect(
       await screen.findByRole('heading', { name: 'This return link is not valid' }),
     ).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Return home' })).toHaveAttribute('href', '/');
+    expect(
+      screen.getByText('OpenTab only returns to a verified page in this application.'),
+    ).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Return to OpenTab' })).toHaveAttribute('href', '/');
     expect(document.querySelector('a[href*="chk_demo"]')).toBeNull();
+  });
+
+  it('uses destination-neutral recovery copy when sign-in expires', async () => {
+    const completeGoogleSignIn = vi.fn(async () => {
+      throw new BrowserApiError({
+        code: 'AUTH_EXPIRED',
+        message: 'Expired continuation.',
+        status: 0,
+      });
+    });
+
+    render(<AuthCallback mode="live" service={{ completeGoogleSignIn } as never} />);
+
+    expect(await screen.findByRole('heading', { name: 'This sign-in expired' })).toBeVisible();
+    expect(screen.getByText(/where you began/i)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Return to OpenTab' })).toHaveAttribute('href', '/');
+    expect(screen.queryByText(/checkout/i)).not.toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@ import { demoReceipt } from '../../src/client/deterministic-data';
 import { getServerFeatureState } from '../../src/client/presentation-mode';
 import { AccountOverview } from '../../src/components/account/account-view';
 import { LiveAccountOverview } from '../../src/components/account/live-account-page';
+import { LiveAuthGate } from '../../src/components/live-auth-gate';
 import { CustomerShell, FeatureUnavailable } from '../../src/components/shell';
 
 export const metadata: Metadata = {
@@ -20,7 +21,13 @@ export default function AccountPage() {
           title="Account unavailable"
         />
       ) : features.mode === 'live' ? (
-        <LiveAccountOverview />
+        <LiveAuthGate
+          authBody="Continue with the Google or email account used for your purchases. Your passes appear here automatically."
+          authTitle="Sign in to see your passes"
+          returnPath="/account"
+        >
+          <LiveAccountOverview />
+        </LiveAuthGate>
       ) : (
         <AccountOverview receipt={demoReceipt} />
       )}

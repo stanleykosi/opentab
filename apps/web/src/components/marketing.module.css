@@ -140,6 +140,14 @@
   margin-block-start: 2rem;
 }
 
+.buyerPath {
+  color: var(--marketing-muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0.85rem 0 0;
+  max-inline-size: 35rem;
+}
+
 .heroProof {
   align-items: center;
   color: var(--marketing-muted);

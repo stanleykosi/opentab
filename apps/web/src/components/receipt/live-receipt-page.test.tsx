@@ -112,6 +112,12 @@ describe('live receipt', () => {
     );
 
     expect(await screen.findByText('Paid and confirmed')).toBeInTheDocument();
+    expect(screen.getByText(/Monday, 2 August 2027/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not include a confirmed loyalty award or current rewards balance/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('+180 points')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Daylight Room loyalty/)).not.toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: /Receipt and pass for Sunday Table/ }),
     ).toBeInTheDocument();

@@ -34,7 +34,7 @@ import {
 } from './browser-api-client';
 
 const CONTINUATION_STORAGE_KEY = 'opentab.auth.continuation';
-const RELEASE_CANARY_PRODUCT_SLUG = 'opentab-release-canary';
+const RELEASE_CANARY_PRODUCT_SLUG = 'opentab-payment-activation';
 const RELEASE_CANARY_PRICE_BASE_UNITS = '100000';
 const RELEASE_CANARY_MAX_PRICE_BASE_UNITS = 100_000n;
 
@@ -142,6 +142,14 @@ type MagicWallet = MagicWalletPort & {
   }): Promise<{ readonly transactionHash: string }>;
 };
 type UniversalAccount = UniversalOperationPort;
+
+type WalletPreparationContext =
+  | { readonly mode: 'self_funded'; readonly owner: EvmAddress }
+  | {
+      readonly mode: 'sponsor_evaluated';
+      readonly owner: EvmAddress;
+      readonly result: BootstrapEligibilityResponse;
+    };
 
 type IntegrationLoader = () => Promise<BrowserIntegrationModule>;
 
@@ -257,7 +265,7 @@ function bootstrapAction(operation: ContractOperationRecord): OperatorBootstrapA
   if (typeof mutation !== 'object' || mutation === null || !('action' in mutation)) {
     throw new BrowserApiError({
       code: 'OPERATION_PLAN_INVALID',
-      message: 'The canary operation omitted its exact contract action.',
+      message: 'The activation operation omitted its exact contract action.',
       status: 0,
     });
   }
@@ -269,7 +277,7 @@ function bootstrapAction(operation: ContractOperationRecord): OperatorBootstrapA
   ) {
     throw new BrowserApiError({
       code: 'OPERATION_PLAN_INVALID',
-      message: 'The canary operation is not an allowed bootstrap action.',
+      message: 'The activation operation is not an allowed account action.',
       status: 0,
     });
   }
@@ -544,9 +552,9 @@ export class BrowserApplicationService {
     if (profile === undefined) {
       const merchant = await this.#api.createMerchantProfile(
         {
-          slug: `opentab-canary-${ownerAddress.slice(-8).toLowerCase()}`,
-          displayName: 'OpenTab Release Canary',
-          supportContact: 'OpenTab release operator',
+          slug: `opentab-payments-${ownerAddress.slice(-8).toLowerCase()}`,
+          displayName: 'OpenTab Payments',
+          supportContact: 'OpenTab payment operator',
           payoutAddress: ownerAddress,
         },
         certificationIdempotencyKey(
@@ -588,7 +596,7 @@ export class BrowserApplicationService {
     ) {
       throw new BrowserApiError({
         code: 'IDEMPOTENCY_CONFLICT',
-        message: 'The reserved release-canary slug already has a different price.',
+        message: 'The reserved payment-activation item already has a different price.',
         status: 0,
       });
     }
@@ -597,9 +605,9 @@ export class BrowserApplicationService {
         {
           merchantId: profile.merchant.id,
           slug: RELEASE_CANARY_PRODUCT_SLUG,
-          title: 'OpenTab 10¢ Release Canary',
+          title: 'OpenTab Payment Activation',
           description:
-            'A single tiny live purchase used to certify this Particle configuration before customer payments open.',
+            'The one-time project payment used to verify settlement before customer checkout opens.',
           unitPriceBaseUnits: RELEASE_CANARY_PRICE_BASE_UNITS,
           maxSupply: '100',
           maxPerOrder: '1',
@@ -610,7 +618,7 @@ export class BrowserApplicationService {
         certificationIdempotencyKey(status.profileScopeId, 'product', 'create'),
       );
       product = created.product;
-      input.onProgress?.('Approve the fixed 0.10 USDC canary product in Magic…');
+      input.onProgress?.('Approve the fixed 0.10 USDC activation item in Magic…');
       await this.#submitOperatorBootstrapOperation({
         status,
         operation: created.operation,
@@ -623,7 +631,7 @@ export class BrowserApplicationService {
       if (detail.operation === undefined) {
         throw new BrowserApiError({
           code: 'OPERATION_PLAN_INVALID',
-          message: 'The pending canary product has no durable contract operation.',
+          message: 'The pending activation item has no durable contract operation.',
           status: 0,
         });
       }
@@ -642,7 +650,7 @@ export class BrowserApplicationService {
         'publish',
         certificationIdempotencyKey(status.profileScopeId, 'product', 'activate'),
       );
-      input.onProgress?.('Approve the final canary activation in Magic…');
+      input.onProgress?.('Approve the activation item in Magic…');
       await this.#submitOperatorBootstrapOperation({
         status,
         operation: activated.operation,
@@ -663,14 +671,13 @@ export class BrowserApplicationService {
     ) {
       throw new BrowserApiError({
         code: 'INDEXER_LAGGING',
-        message:
-          'The canonical active canary product is not visible yet. Resume without resubmitting.',
+        message: 'The confirmed activation item is not visible yet. Resume without resubmitting.',
         retryable: true,
         submissionPossible: true,
         status: 0,
       });
     }
-    input.onProgress?.('Tiny onchain canary product is active and ready for certification.');
+    input.onProgress?.('The payment activation item is active and ready.');
     return { ownerAddress, product };
   }
 
@@ -683,7 +690,7 @@ export class BrowserApplicationService {
     if (bootstrapAction(input.operation) !== input.expectedAction) {
       throw new BrowserApiError({
         code: 'OPERATION_PLAN_INVALID',
-        message: 'The server returned a different bootstrap action than requested.',
+        message: 'The server returned a different account action than requested.',
         status: 0,
       });
     }
@@ -696,7 +703,7 @@ export class BrowserApplicationService {
         if (new Date(current.expiresAt) <= new Date()) {
           throw new BrowserApiError({
             code: 'UA_QUOTE_EXPIRED',
-            message: 'This bootstrap approval expired before broadcast. Refresh its server record.',
+            message: 'This account approval expired before broadcast. Refresh its server record.',
             retryable: true,
             status: 0,
           });
@@ -704,7 +711,7 @@ export class BrowserApplicationService {
         if (bootstrapAction(current) !== input.expectedAction) {
           throw new BrowserApiError({
             code: 'OPERATION_PLAN_INVALID',
-            message: 'The durable bootstrap action changed before submission.',
+            message: 'The durable account action changed before submission.',
             status: 0,
           });
         }
@@ -716,7 +723,7 @@ export class BrowserApplicationService {
         ) {
           throw new BrowserApiError({
             code: 'WALLET_ADDRESS_MISMATCH',
-            message: 'The bootstrap operation does not belong to this Magic EOA.',
+            message: 'The account operation does not belong to this Magic EOA.',
             status: 0,
           });
         }
@@ -743,7 +750,7 @@ export class BrowserApplicationService {
         ) {
           throw new BrowserApiError({
             code: 'OPERATION_PLAN_INVALID',
-            message: 'The bootstrap calls did not match the configured checkout contract.',
+            message: 'The account calls did not match the configured checkout contract.',
             status: 0,
           });
         }
@@ -826,7 +833,7 @@ export class BrowserApplicationService {
       if (current.status === 'failed' || current.status === 'orphaned') {
         throw new BrowserApiError({
           code: 'PAYMENT_FAILED_CONFIRMED',
-          message: 'The canonical Arbitrum bootstrap operation failed.',
+          message: 'The Arbitrum account operation failed confirmation.',
           status: 0,
         });
       }
@@ -886,7 +893,7 @@ export class BrowserApplicationService {
       if (detail.operation?.status === 'failed' || detail.operation?.status === 'orphaned') {
         throw new BrowserApiError({
           code: 'PAYMENT_FAILED_CONFIRMED',
-          message: 'The canonical canary product operation failed.',
+          message: 'The activation-item operation failed confirmation.',
           status: 0,
         });
       }
@@ -895,7 +902,7 @@ export class BrowserApplicationService {
     }
     throw new BrowserApiError({
       code: 'INDEXER_LAGGING',
-      message: 'The canary product is still being projected. Resume without resubmitting.',
+      message: 'The activation item is still being confirmed. Resume without resubmitting.',
       retryable: true,
       submissionPossible: true,
       status: 0,
@@ -939,7 +946,7 @@ export class BrowserApplicationService {
     ) {
       throw new BrowserApiError({
         code: 'UA_CONFIGURATION_INVALID',
-        message: 'Capture bootstrap evidence with this Magic account first.',
+        message: 'Complete payment activation checks with this Magic account first.',
         status: 0,
       });
     }
@@ -974,10 +981,7 @@ export class BrowserApplicationService {
       paymentAttemptId: binding.attemptId,
       preparedFixtureDigest,
     };
-    window.sessionStorage.setItem(
-      'opentab.particle-certification.preview',
-      JSON.stringify(recovery),
-    );
+    window.localStorage.setItem('opentab.particle-certification.preview', JSON.stringify(recovery));
     return {
       status: resultingStatus,
       checkoutSessionId: checkout.sessionId,
@@ -995,29 +999,29 @@ export class BrowserApplicationService {
     const storedSubmission = this.#particleCanarySubmission(input.expectedPaymentAttemptId);
     let submissionEvidenceDigest = storedSubmission?.submissionEvidenceDigest;
     if (submissionEvidenceDigest === undefined) {
-      input.onProgress?.('Preparing the exact profile-bound canary payment…');
+      input.onProgress?.('Preparing the exact project activation payment…');
       const prepared = await this.prepareCheckoutPayment(input.checkoutSessionId);
       if (prepared.binding.attemptId !== input.expectedPaymentAttemptId) {
         throw new BrowserApiError({
           code: 'IDEMPOTENCY_CONFLICT',
-          message: 'The canary checkout resolved to another payment attempt.',
+          message: 'The activation checkout resolved to another payment attempt.',
           status: 0,
         });
       }
-      input.onProgress?.('Approve the tiny canary once in Magic.');
+      input.onProgress?.('Approve the activation payment once in Magic.');
       const submitted = await this.submitCheckoutPayment(prepared.binding.attemptId);
       if (submitted.kind !== 'submitted') {
         throw new BrowserApiError({
           code: 'PAYMENT_SUBMITTED_UNKNOWN',
           message:
-            'The canary may already be moving. This tab will not submit it again; return after reconciliation.',
+            'The activation payment may already be moving. This tab will not submit it again; return after confirmation.',
           retryable: true,
           submissionPossible: true,
           status: 0,
         });
       }
       submissionEvidenceDigest = submitted.operation.evidence.evidenceDigest;
-      window.sessionStorage.setItem(
+      window.localStorage.setItem(
         'opentab.particle-certification.canary',
         JSON.stringify({
           paymentAttemptId: prepared.binding.attemptId,
@@ -1027,7 +1031,7 @@ export class BrowserApplicationService {
       input.onProgress?.('Submitted. Waiting for Particle and canonical Arbitrum confirmation…');
     } else {
       input.onProgress?.(
-        'Recovering the existing canary. No second Particle operation will be submitted…',
+        'Recovering the existing activation payment. No second payment will be submitted…',
       );
     }
     for (let attempt = 0; attempt < 240; attempt += 1) {
@@ -1037,7 +1041,7 @@ export class BrowserApplicationService {
         observed.workflow.canonicalOrderPaid !== undefined &&
         observed.workflow.receipt?.status === 'issued'
       ) {
-        input.onProgress?.('Canonical OrderPaid event and pass confirmed. Certifying profile…');
+        input.onProgress?.('Settlement and pass confirmed. Opening customer checkout…');
         const status = await this.#api.finalizeParticleCertification(
           {
             operatorToken: input.operatorToken,
@@ -1049,7 +1053,8 @@ export class BrowserApplicationService {
             `particle-certification.finalize.${input.expectedPaymentAttemptId}`,
           ),
         );
-        window.sessionStorage.removeItem('opentab.particle-certification.canary');
+        window.localStorage.removeItem('opentab.particle-certification.canary');
+        window.localStorage.removeItem('opentab.particle-certification.preview');
         this.#resetLiveConfiguration();
         return status;
       }
@@ -1058,7 +1063,7 @@ export class BrowserApplicationService {
     throw new BrowserApiError({
       code: 'INDEXER_LAGGING',
       message:
-        'The canary is still reconciling. No duplicate payment was started; resume certification.',
+        'The activation payment is still confirming. No duplicate payment was started; resume activation.',
       retryable: true,
       submissionPossible: true,
       status: 0,
@@ -1069,7 +1074,7 @@ export class BrowserApplicationService {
     paymentAttemptId: string,
   ): { readonly submissionEvidenceDigest: EvidenceDigest } | undefined {
     try {
-      const raw = window.sessionStorage.getItem('opentab.particle-certification.canary');
+      const raw = window.localStorage.getItem('opentab.particle-certification.canary');
       if (raw === null) return undefined;
       const parsed = JSON.parse(raw) as {
         readonly paymentAttemptId?: unknown;
@@ -1173,9 +1178,27 @@ export class BrowserApplicationService {
     const grantRequired = eligibility.result.eligible && BigInt(eligibility.result.deficitWei) > 0n;
     if (grantRequired) this.#assertChallengeToken(challengeToken);
     this.#accountPreparationPromise ??= this.#prepareWalletAccount(
-      eligibility,
+      { mode: 'sponsor_evaluated', ...eligibility },
       challengeToken,
     ).finally(() => {
+      this.#accountPreparationPromise = undefined;
+    });
+    return this.#accountPreparationPromise;
+  }
+
+  prepareSelfFundedWalletAccount(): Promise<WalletReadinessResponse> {
+    this.#accountPreparationPromise ??= (async () => {
+      const session = await this.restoreSession();
+      const owner = await this.getWalletOwner();
+      if (!sameEvmAddress(owner, session.user.walletAddress)) {
+        throw new BrowserApiError({
+          code: 'WALLET_ADDRESS_MISMATCH',
+          message: 'The signed-in wallet changed. Sign in again before account preparation.',
+          status: 0,
+        });
+      }
+      return this.#prepareWalletAccount({ mode: 'self_funded', owner });
+    })().finally(() => {
       this.#accountPreparationPromise = undefined;
     });
     return this.#accountPreparationPromise;
@@ -1196,14 +1219,14 @@ export class BrowserApplicationService {
   }
 
   async #prepareWalletAccount(
-    eligibility: { readonly owner: EvmAddress; readonly result: BootstrapEligibilityResponse },
+    context: WalletPreparationContext,
     challengeToken?: string,
   ): Promise<WalletReadinessResponse> {
     const session = await this.restoreSession();
     const owner = await this.getWalletOwner();
     if (
       !sameEvmAddress(owner, session.user.walletAddress) ||
-      !sameEvmAddress(owner, eligibility.owner)
+      !sameEvmAddress(owner, context.owner)
     ) {
       throw new BrowserApiError({
         code: 'WALLET_ADDRESS_MISMATCH',
@@ -1212,7 +1235,11 @@ export class BrowserApplicationService {
       });
     }
     const account = await this.getUniversalAccount(owner);
-    if (eligibility.result.eligible && BigInt(eligibility.result.deficitWei) > 0n) {
+    if (
+      context.mode === 'sponsor_evaluated' &&
+      context.result.eligible &&
+      BigInt(context.result.deficitWei) > 0n
+    ) {
       this.#assertChallengeToken(challengeToken);
       let { grant } = await this.#api.requestBootstrapGrant(
         challengeToken,

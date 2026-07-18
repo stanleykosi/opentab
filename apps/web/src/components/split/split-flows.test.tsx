@@ -71,6 +71,38 @@ describe('split flows', () => {
     expect(await screen.findByText('Split revoked')).toBeInTheDocument();
   });
 
+  it('allows a partial reimbursement request and keeps the purchaser remainder', async () => {
+    const createSplit = vi.fn(async (input: SplitCreationInput) => ({
+      splitId: split.id,
+      invitations: input.participants.map((participant, index) => ({
+        invitationId: `spi_${String(index).repeat(26)}`,
+        participantLabel: participant.label,
+        amountBaseUnits: participant.amountBaseUnits,
+        capabilityReference: `private-${index}`,
+        expiresAt: input.expiresAt,
+      })),
+    }));
+    render(<SplitBuilder createSplit={createSplit} initial={split} />);
+
+    fireEvent.change(screen.getAllByLabelText('Amount')[1] as HTMLElement, {
+      target: { value: '3' },
+    });
+
+    const purchaserShare = screen.getByText('Your share').parentElement;
+    expect(purchaserShare).toHaveTextContent('$6.00');
+    expect(screen.queryByText('Check the reimbursement amounts')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create private links' }));
+    await waitFor(() => expect(createSplit).toHaveBeenCalledTimes(1));
+    expect(createSplit.mock.calls[0]?.[0]).toMatchObject({
+      totalBaseUnits: '12000000',
+      participants: [
+        { label: 'Alex', amountBaseUnits: '9000000' },
+        { label: 'Jo', amountBaseUnits: '3000000' },
+      ],
+    });
+  });
+
   it('does not submit a reimbursement until the exact fee preview is confirmed', async () => {
     const actions = {
       prepare: vi.fn(async () => ({ estimatedFeeUsd: '0.09', maximumTotalUsd: '9.09' })),
@@ -135,6 +167,8 @@ describe('split flows', () => {
     expect(screen.queryByRole('button', { name: /Confirm reimbursement/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Check status' }));
     expect(await screen.findByText('Confirmed reimbursement')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Your reimbursement is complete' })).toBeVisible();
+    expect(screen.queryByText(/Sam has been repaid/)).not.toBeInTheDocument();
     expect(actions.prepare).not.toHaveBeenCalled();
     expect(actions.submit).not.toHaveBeenCalled();
   });

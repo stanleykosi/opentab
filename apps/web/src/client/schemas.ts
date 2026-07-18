@@ -10,7 +10,7 @@ export const MerchantIdentityViewSchema = z
     slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     displayName: z.string().min(2).max(100),
     monogram: z.string().min(1).max(4),
-    supportContact: z.string().min(1).max(200),
+    supportContact: z.string().min(1).max(200).optional(),
     verified: z.boolean(),
   })
   .strict();
@@ -28,7 +28,7 @@ export const ProductViewSchema = z
     merchant: MerchantIdentityViewSchema,
     title: z.string().min(2).max(140),
     description: z.string().min(1).max(4_000),
-    category: z.string().min(1).max(80),
+    category: z.string().min(1).max(80).optional(),
     imagePath: z.union([z.string().startsWith('/'), z.string().url()]),
     imageAlt: z.string().min(1).max(240),
     unitPriceBaseUnits: amount,
@@ -39,7 +39,7 @@ export const ProductViewSchema = z
     projectionStale: z.boolean(),
     refundTerms: z.string().min(1).max(500),
     startsAt: dateTime,
-    location: z.string().min(1).max(200),
+    location: z.string().min(1).max(200).optional(),
     loyaltyPoints: unsigned,
   })
   .strict();
@@ -153,6 +153,7 @@ export const ReceiptViewSchema = z
         current: unsigned,
         target: z.string().regex(/^[1-9][0-9]*$/),
         rewardLabel: z.string().min(1).max(160),
+        rewardDetailsAvailable: z.boolean(),
       })
       .strict(),
   })
@@ -231,6 +232,10 @@ const MerchantProductViewSchema = z
 export const MerchantDashboardViewSchema = z
   .object({
     merchant: MerchantIdentityViewSchema,
+    payoutAddress: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
     grossBaseUnits: amount,
     refundedBaseUnits: amount,
     pendingBaseUnits: amount,

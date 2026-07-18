@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 
 export function PageSkeleton({ label = 'Loading page' }: { label?: string }) {
   return (
-    <main aria-busy="true" aria-label={label} className="state-page" id="main-content">
+    <section aria-busy="true" aria-label={label} className="state-page">
       <span className="sr-status">{label}</span>
       <Skeleton className="skeleton-line skeleton-line--short" />
       <Skeleton className="skeleton-title" />
       <Skeleton className="skeleton-card" />
-    </main>
+    </section>
   );
 }
 

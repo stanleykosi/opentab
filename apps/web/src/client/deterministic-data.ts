@@ -114,7 +114,13 @@ export const demoReceipt: ReceiptView = {
   transactionHash: '0x6d65d60f18fcfa3a2dc8b73d4b5ee2a7b32f628c3af4fc8f0f44de4d87ee8f31',
   refundBaseUnits: '0',
   passStatus: 'valid',
-  loyalty: { earned: '180', current: '640', target: '1000', rewardLabel: 'A table-side treat' },
+  loyalty: {
+    earned: '180',
+    current: '640',
+    target: '1000',
+    rewardLabel: 'A table-side treat',
+    rewardDetailsAvailable: true,
+  },
 };
 
 export const demoSplit: SplitView = {
@@ -156,6 +162,7 @@ export const demoSplit: SplitView = {
 
 export const demoDashboard: MerchantDashboardView = {
   merchant: demoMerchant,
+  payoutAddress: '0x7D240000000000000000000000000000000091C0',
   grossBaseUnits: '468000000',
   refundedBaseUnits: '18000000',
   pendingBaseUnits: '54000000',

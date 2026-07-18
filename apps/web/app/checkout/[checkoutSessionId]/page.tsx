@@ -43,8 +43,8 @@ export default async function CheckoutPage({
     return (
       <CustomerShell features={features} narrow={false}>
         <FeatureUnavailable
-          body="No provider or contract action can start until the live payment canary is enabled and its adapters pass readiness checks."
-          title="Live checkout is safely disabled"
+          body="Payments are not active yet. OpenTab will not start an account or payment action until the secure checkout service is ready."
+          title="Checkout is temporarily unavailable"
         />
       </CustomerShell>
     );

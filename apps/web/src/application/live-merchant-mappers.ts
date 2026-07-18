@@ -160,10 +160,12 @@ export function mapMerchantDashboard(input: {
         .slice(0, 2)
         .map((part) => part.slice(0, 1).toUpperCase())
         .join(''),
-      supportContact:
-        input.summary.merchant.supportContact ?? 'Support available from the merchant',
+      ...(input.summary.merchant.supportContact?.trim()
+        ? { supportContact: input.summary.merchant.supportContact.trim() }
+        : {}),
       verified: input.summary.merchant.status === 'active',
     },
+    payoutAddress: input.summary.merchant.payoutAddress,
     grossBaseUnits: input.summary.grossBaseUnits,
     refundedBaseUnits: input.summary.refundedBaseUnits,
     pendingBaseUnits: input.summary.pendingBaseUnits,
@@ -190,9 +192,6 @@ export function mapOrderSnapshotToReceipt(
   origin: string,
 ): ReceiptView {
   const status = mapOrderStatus(snapshot.order.status);
-  const earned = (
-    BigInt(snapshot.product.loyaltyPoints) * BigInt(snapshot.order.quantity)
-  ).toString();
   return {
     orderId: snapshot.order.id,
     supportReference: supportReference(snapshot.order.id),
@@ -229,10 +228,11 @@ export function mapOrderSnapshotToReceipt(
             ? 'investigation'
             : 'pending',
     loyalty: {
-      earned,
-      current: earned,
-      target: earned === '0' ? '1' : earned,
-      rewardLabel: `${snapshot.merchant.displayName} loyalty`,
+      earned: '0',
+      current: '0',
+      target: '1',
+      rewardLabel: 'Reward details unavailable',
+      rewardDetailsAvailable: false,
     },
   };
 }

@@ -210,18 +210,18 @@ export class LiveParticleCertificationService implements ParticleCertificationSe
     if (profile.stage === 'certified') {
       throw new AppError(
         'VALIDATION_FAILED',
-        'Certified status can only be produced from indexed canary evidence.',
+        'Payment activation can only complete from indexed settlement evidence.',
       );
     }
 
     const productId = ProductIdSchema.parse(input.productId);
     const authoritative = await this.dependencies.workflow.findAuthoritativeProduct(productId);
     if (authoritative === undefined || !authoritative.active) {
-      throw new AppError('PRODUCT_UNAVAILABLE', 'The canary product is not active onchain.');
+      throw new AppError('PRODUCT_UNAVAILABLE', 'The activation item is not active onchain.');
     }
     const canaryAmount = BigInt(authoritative.product.unitPriceBaseUnits);
     if (canaryAmount < 1n || canaryAmount > MAX_CANARY_BASE_UNITS) {
-      throw new AppError('VALIDATION_FAILED', 'The canary product must cost no more than 1 USDC.');
+      throw new AppError('VALIDATION_FAILED', 'The activation item must cost no more than 1 USDC.');
     }
 
     const subject = this.#subject(input.actor);
@@ -234,7 +234,7 @@ export class LiveParticleCertificationService implements ParticleCertificationSe
       ) {
         throw new AppError(
           'AUTH_FORBIDDEN',
-          'This Particle profile is already bound to another operator or canary product.',
+          'This Particle profile is already bound to another operator or activation item.',
         );
       }
       if (stageRank(profile.stage) < stageRank(current.profile.stage)) {
@@ -256,7 +256,7 @@ export class LiveParticleCertificationService implements ParticleCertificationSe
     } else if (profile.stage !== 'bootstrap') {
       throw new AppError(
         'UA_CONFIGURATION_INVALID',
-        'Capture bootstrap compatibility before preparing a canary preview.',
+        'Complete account compatibility checks before preparing the activation payment.',
       );
     }
 
@@ -286,12 +286,15 @@ export class LiveParticleCertificationService implements ParticleCertificationSe
     if (current === undefined || current.profile.stage !== 'canary_ready') {
       throw new AppError(
         'UA_CONFIGURATION_INVALID',
-        'This Particle profile is not waiting for a canonical canary payment.',
+        'This Particle profile is not waiting for a confirmed activation payment.',
       );
     }
     const subject = this.#subject(input.actor);
     if (current.binding.certifiedSubjectHash !== subject) {
-      throw new AppError('AUTH_FORBIDDEN', 'Only the bound canary operator can certify payment.');
+      throw new AppError(
+        'AUTH_FORBIDDEN',
+        'Only the bound payment operator can finish activation.',
+      );
     }
 
     const workflow = await this.dependencies.queries.getPaymentWorkflowForActor(
@@ -299,7 +302,7 @@ export class LiveParticleCertificationService implements ParticleCertificationSe
       input.actor,
     );
     if (workflow === undefined) {
-      throw new AppError('NOT_FOUND', 'The canary payment attempt was not found.');
+      throw new AppError('NOT_FOUND', 'The activation payment attempt was not found.');
     }
     const order = await this.dependencies.queries.getOrderForActor(workflow.order.id, input.actor);
     const canonical = workflow.canonicalOrderPaid;
@@ -318,7 +321,7 @@ export class LiveParticleCertificationService implements ParticleCertificationSe
     ) {
       throw new AppError(
         'PAYMENT_NOT_CANONICAL',
-        'The indexed canary has not met every payment and receipt invariant.',
+        'The indexed activation payment has not met every payment and receipt invariant.',
       );
     }
 
@@ -333,7 +336,7 @@ export class LiveParticleCertificationService implements ParticleCertificationSe
     ) {
       throw new AppError(
         'UA_STATUS_UNKNOWN',
-        'The reconciled Particle operation does not match the canary evidence.',
+        'The reconciled Particle operation does not match the activation evidence.',
       );
     }
 

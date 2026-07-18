@@ -1,5 +1,6 @@
 'use client';
 
+import { LinkButton } from '@opentab/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserApiClient, BrowserApiError } from '../../application/browser-api-client';
 import { mapMerchantDashboard } from '../../application/live-merchant-mappers';
@@ -11,7 +12,7 @@ type View = 'dashboard' | 'orders' | 'products';
 type State =
   | { status: 'loading' }
   | { status: 'ready'; dashboard: MerchantDashboardView }
-  | { status: 'error'; message: string; reference?: string };
+  | { status: 'error'; message: string; reference?: string; merchantMissing?: boolean };
 
 export function LiveMerchantConsole({
   client: providedClient,
@@ -42,9 +43,14 @@ export function LiveMerchantConsole({
         setState({
           status: 'error',
           message:
-            error instanceof BrowserApiError && error.code === 'AUTH_REQUIRED'
-              ? 'Sign in with the merchant account that owns this storefront.'
-              : 'OpenTab could not load the merchant records. No financial action was started.',
+            error instanceof BrowserApiError && error.status === 404
+              ? 'Create and activate a merchant profile before opening the merchant console.'
+              : error instanceof BrowserApiError && error.code === 'AUTH_REQUIRED'
+                ? 'Sign in with the merchant account that owns this storefront.'
+                : 'OpenTab could not load the merchant records. No financial action was started.',
+          ...(error instanceof BrowserApiError && error.status === 404
+            ? { merchantMissing: true }
+            : {}),
           ...(error instanceof BrowserApiError && error.requestId !== undefined
             ? { reference: error.requestId }
             : {}),
@@ -59,6 +65,11 @@ export function LiveMerchantConsole({
   if (state.status === 'error') {
     return (
       <ErrorState
+        {...(state.merchantMissing
+          ? {
+              action: <LinkButton href="/merchant/onboarding">Create merchant profile</LinkButton>,
+            }
+          : {})}
         body={state.message}
         {...(state.reference === undefined ? {} : { reference: state.reference })}
         title="Merchant console unavailable"

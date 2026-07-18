@@ -3,6 +3,7 @@ import { demoDashboard } from '../../../src/client/deterministic-data';
 import { getServerFeatureState } from '../../../src/client/presentation-mode';
 import { AccountOrders } from '../../../src/components/account/account-view';
 import { LiveAccountOrders } from '../../../src/components/account/live-account-page';
+import { LiveAuthGate } from '../../../src/components/live-auth-gate';
 import { CustomerShell, FeatureUnavailable } from '../../../src/components/shell';
 
 export const metadata: Metadata = { title: 'Your orders', robots: { index: false, follow: false } };
@@ -17,7 +18,13 @@ export default function AccountOrdersPage() {
           title="Order history unavailable"
         />
       ) : features.mode === 'live' ? (
-        <LiveAccountOrders />
+        <LiveAuthGate
+          authBody="Continue with the Google or email account used for your purchases to see verified payment and receipt updates."
+          authTitle="Sign in to see your orders"
+          returnPath="/account/orders"
+        >
+          <LiveAccountOrders />
+        </LiveAuthGate>
       ) : (
         <AccountOrders dashboard={demoDashboard} />
       )}

@@ -217,7 +217,7 @@ export function ProductDetail({
           title={
             chainSyncStatus === 'mismatch' || chainSyncStatus === 'failed'
               ? 'Product projection needs investigation'
-              : 'Product change is not canonical yet'
+              : 'Product change is not confirmed yet'
           }
           tone={chainSyncStatus === 'mismatch' || chainSyncStatus === 'failed' ? 'danger' : 'info'}
         >
@@ -293,7 +293,7 @@ export function ProductDetail({
         </div>
       </section>
       <Dialog
-        description="Saving prepares a new exact product version. A separate embedded-account approval is required before it becomes canonical."
+        description="Saving prepares a new exact product version. A separate embedded-account approval is required before it becomes active."
         onOpenChange={setEditOpen}
         open={editOpen}
         title={`Edit ${product.title}`}
@@ -467,7 +467,7 @@ export function OrderDetail({
             </dd>
           </div>
         </dl>
-        <p>Paid status is derived from the canonical order event, not a provider callback.</p>
+        <p>Paid status comes from the confirmed order event, not a provider callback.</p>
         {order.refundableUntil === undefined ? null : (
           <p>
             Refund eligibility ends{' '}
@@ -492,7 +492,7 @@ export function OrderDetail({
           </li>
           <li>
             <strong>Order paid</strong>
-            <span>Canonical event confirmed</span>
+            <span>Settlement event confirmed</span>
           </li>
           <li>
             <strong>Pass created</strong>
@@ -506,14 +506,16 @@ export function OrderDetail({
         {...(refundActions === undefined ? {} : { liveActions: refundActions })}
         order={order}
       />
-      <details className="disclosure">
-        <summary>Technical proof</summary>
-        <p>
-          Public-safe proof is available in Judge Mode. Sensitive signatures, session data, and
-          provider payloads are never shown.
-        </p>
-        <a href={`/judge/${order.id}`}>Open order evidence</a>
-      </details>
+      {features.judgeMode ? (
+        <details className="disclosure">
+          <summary>Technical proof</summary>
+          <p>
+            Public-safe proof is available in Judge Mode. Sensitive signatures, session data, and
+            provider payloads are never shown.
+          </p>
+          <a href={`/judge/${order.id}`}>Open order evidence</a>
+        </details>
+      ) : null}
     </div>
   );
 }

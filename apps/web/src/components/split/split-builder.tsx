@@ -81,16 +81,30 @@ export function SplitBuilder({
   const [pending, setPending] = useState<'create' | 'revoke'>();
   const [revocationStatus, setRevocationStatus] = useState(initialRevocationStatus);
   const [error, setError] = useState<string>();
-  const allocated = useMemo(() => {
+  const allocation = useMemo(() => {
     try {
-      return participants
-        .reduce((sum, participant) => sum + BigInt(decimalToBaseUnits(participant.amount)), 0n)
-        .toString();
+      const participantAmounts = participants.map((participant) =>
+        BigInt(decimalToBaseUnits(participant.amount)),
+      );
+      return {
+        participantAmounts,
+        total: participantAmounts.reduce((sum, amount) => sum + amount, 0n),
+      };
     } catch {
       return undefined;
     }
   }, [participants]);
-  const exact = allocated === initial.totalBaseUnits;
+  const purchaseTotal = BigInt(initial.totalBaseUnits);
+  const allocationValid =
+    allocation !== undefined &&
+    allocation.total > 0n &&
+    allocation.total <= purchaseTotal &&
+    allocation.participantAmounts.every((amount) => amount > 0n);
+  const allocated = allocation?.total.toString();
+  const purchaserRemainder =
+    allocation !== undefined && allocation.total <= purchaseTotal
+      ? (purchaseTotal - allocation.total).toString()
+      : undefined;
 
   useEffect(() => {
     if (revocationStatus !== 'revoking' || checkRevocation === undefined) return;
@@ -130,7 +144,7 @@ export function SplitBuilder({
           <InlineAlert title="Revocation is reconciling" tone="warning">
             <p>
               Payment-key revocations were durably submitted. Links remain in a protected pending
-              state until every canonical revocation event is indexed.
+              state until every revocation event is confirmed.
             </p>
           </InlineAlert>
         ) : null}
@@ -212,8 +226,9 @@ export function SplitBuilder({
         <p className="eyebrow">Split purchase</p>
         <h1>Who is paying you back?</h1>
         <p>
-          Allocate the exact <MoneyAmount baseUnits={initial.totalBaseUnits} /> purchase.
-          Reimbursements are separate from the merchant order.
+          Request any positive amount up to the <MoneyAmount baseUnits={initial.totalBaseUnits} />{' '}
+          purchase. The part you keep remains your share, and reimbursements stay separate from the
+          merchant order.
         </p>
       </header>
       <div className="participant-list">
@@ -287,18 +302,26 @@ export function SplitBuilder({
       </SelectField>
       <section className="allocation-total">
         <div>
-          <span>Allocated</span>
+          <span>Requested from friends</span>
           {allocated ? <MoneyAmount baseUnits={allocated} /> : <strong>Invalid amount</strong>}
+        </div>
+        <div>
+          <span>Your share</span>
+          {purchaserRemainder === undefined ? (
+            <strong>—</strong>
+          ) : (
+            <MoneyAmount baseUnits={purchaserRemainder} />
+          )}
         </div>
         <div>
           <span>Purchase total</span>
           <MoneyAmount baseUnits={initial.totalBaseUnits} />
         </div>
       </section>
-      {!exact ? (
-        <InlineAlert title="Amounts must match the purchase" tone="warning">
+      {!allocationValid ? (
+        <InlineAlert title="Check the reimbursement amounts" tone="warning">
           <p>
-            Adjust the amounts until the allocated total is exactly{' '}
+            Each person’s amount must be above zero, and the combined request cannot exceed{' '}
             <MoneyAmount baseUnits={initial.totalBaseUnits} />. No floating-point rounding is used.
           </p>
         </InlineAlert>
@@ -311,7 +334,7 @@ export function SplitBuilder({
       <Button
         disabled={
           pending !== undefined ||
-          !exact ||
+          !allocationValid ||
           participants.some((participant) => participant.label.trim().length === 0)
         }
         loading={pending === 'create'}
@@ -319,7 +342,7 @@ export function SplitBuilder({
           setError(undefined);
           setPending('create');
           const input = {
-            totalBaseUnits: initial.totalBaseUnits,
+            totalBaseUnits: allocation?.total.toString() ?? '0',
             expiresAt: new Date(Date.now() + Number(expiryDays) * 86_400_000).toISOString(),
             participants: participants.map((participant) => ({
               label: participant.label.trim(),

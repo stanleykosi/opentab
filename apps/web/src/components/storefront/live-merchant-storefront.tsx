@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@opentab/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserApiClient, BrowserApiError } from '../../application/browser-api-client';
 import { mapMerchantProduct } from '../../application/live-merchant-mappers';
@@ -33,6 +34,7 @@ export function LiveMerchantStorefront({
           .slice(0, 2)
           .map((part) => part.slice(0, 1).toUpperCase())
           .join('');
+        const supportContact = catalog.merchant.supportContact?.trim();
         setState({
           status: 'ready',
           dashboard: {
@@ -41,7 +43,9 @@ export function LiveMerchantStorefront({
               slug: catalog.merchant.slug,
               displayName: catalog.merchant.displayName,
               monogram,
-              supportContact: catalog.merchant.supportContact ?? 'Support available from merchant',
+              ...(supportContact === undefined || supportContact.length === 0
+                ? {}
+                : { supportContact }),
               verified: catalog.merchant.status === 'active',
             },
             grossBaseUnits: '0',
@@ -87,6 +91,7 @@ export function LiveMerchantStorefront({
       />
     );
   }
+  const activeProducts = state.dashboard.products.filter((product) => product.status === 'active');
   return (
     <div className="storefront-page">
       <MerchantIdentity dashboard={state.dashboard} />
@@ -95,13 +100,18 @@ export function LiveMerchantStorefront({
           <p className="eyebrow">Open tabs</p>
           <h2>Current offers</h2>
         </div>
-        <div className="product-grid">
-          {state.dashboard.products
-            .filter((product) => product.status === 'active')
-            .map((product) => (
+        {activeProducts.length === 0 ? (
+          <EmptyState
+            body="This merchant does not have an active offer right now. Check back after they publish their next offer."
+            title="No offers available"
+          />
+        ) : (
+          <div className="product-grid">
+            {activeProducts.map((product) => (
               <ProductCard dashboardProduct={product} key={product.id} />
             ))}
-        </div>
+          </div>
+        )}
       </section>
     </div>
   );

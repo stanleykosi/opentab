@@ -62,6 +62,7 @@ export function mapPublicProductToView(
   record: PublicProductRecord,
   options: { origin: string; allowedMediaOrigins?: readonly string[] },
 ): ProductView {
+  const supportContact = record.merchant.supportContact?.trim();
   return {
     id: record.product.id,
     slug: record.product.slug,
@@ -70,12 +71,11 @@ export function mapPublicProductToView(
       slug: record.merchant.slug,
       displayName: record.merchant.displayName,
       monogram: monogram(record.merchant.displayName),
-      supportContact: record.merchant.supportContact ?? 'support@opentab.app',
+      ...(supportContact === undefined || supportContact.length === 0 ? {} : { supportContact }),
       verified: record.merchant.status === 'active',
     },
     title: record.product.title,
     description: record.product.description,
-    category: 'Experience',
     imagePath: approvedImagePath(
       record.product.imageUrl,
       options.origin,
@@ -90,7 +90,6 @@ export function mapPublicProductToView(
     projectionStale: record.projectionStale,
     refundTerms: refundTerms(record.product.refundWindowSeconds),
     startsAt: record.product.startsAt,
-    location: `See ${record.merchant.displayName} for venue details`,
     loyaltyPoints: record.product.loyaltyPoints,
   };
 }

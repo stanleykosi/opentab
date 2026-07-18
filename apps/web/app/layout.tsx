@@ -6,7 +6,7 @@ import './globals.css';
 
 const title = 'OpenTab · Walletless checkout for real-world commerce';
 const description =
-  'Create one link or QR, let customers pay from supported digital-asset balances, and treat an order as paid only after canonical settlement.';
+  'Create one link or QR, let customers pay from supported digital-asset balances, and treat an order as paid only after confirmed settlement.';
 
 function resolveMetadataBase() {
   try {

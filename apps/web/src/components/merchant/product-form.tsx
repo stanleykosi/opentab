@@ -61,20 +61,20 @@ export function ProductForm({
   createProduct?: (input: ProductDraftInput) => Promise<ProductPreparedResult>;
   submitProduct?: (operationId: string) => Promise<ProductResult>;
 }) {
-  const [title, setTitle] = useState('Golden Hour Supper');
-  const [slug, setSlug] = useState('golden-hour-supper');
+  const [title, setTitle] = useState(mode === 'live' ? '' : 'Golden Hour Supper');
+  const [slug, setSlug] = useState(mode === 'live' ? '' : 'golden-hour-supper');
   const [description, setDescription] = useState(
-    'A six-seat supper with a seasonal menu and sunset listening session.',
+    mode === 'live' ? '' : 'A six-seat supper with a seasonal menu and sunset listening session.',
   );
   const [imageUrl, setImageUrl] = useState('');
   const [imageFailed, setImageFailed] = useState(false);
-  const [price, setPrice] = useState('24.00');
-  const [inventory, setInventory] = useState('18');
-  const [maxPerOrder, setMaxPerOrder] = useState('4');
-  const [loyalty, setLoyalty] = useState('240');
-  const [startsAt, setStartsAt] = useState('2027-08-02T12:00');
-  const [endsAt, setEndsAt] = useState('2027-08-02T16:00');
-  const [refundWindow, setRefundWindow] = useState('172800');
+  const [price, setPrice] = useState(mode === 'live' ? '' : '24.00');
+  const [inventory, setInventory] = useState(mode === 'live' ? '' : '18');
+  const [maxPerOrder, setMaxPerOrder] = useState(mode === 'live' ? '1' : '4');
+  const [loyalty, setLoyalty] = useState(mode === 'live' ? '0' : '240');
+  const [startsAt, setStartsAt] = useState(mode === 'live' ? '' : '2027-08-02T12:00');
+  const [endsAt, setEndsAt] = useState(mode === 'live' ? '' : '2027-08-02T16:00');
+  const [refundWindow, setRefundWindow] = useState(mode === 'live' ? '0' : '172800');
   const [acknowledged, setAcknowledged] = useState(false);
   const [state, setState] = useState<PublishState>('draft');
   const [error, setError] = useState<string>();
@@ -157,15 +157,15 @@ export function ProductForm({
           {title} {confirmed ? 'is registered' : 'is being confirmed'}
         </h1>
         <InlineAlert
-          title={confirmed ? 'Product registration confirmed' : 'Canonical confirmation pending'}
+          title={confirmed ? 'Product registration confirmed' : 'Confirmation pending'}
           tone={confirmed ? 'success' : 'info'}
         >
           <p>
             {confirmed
               ? mode === 'deterministic'
                 ? 'This explicit deterministic demo did not send a live transaction.'
-                : 'The indexed canonical product record is registered. Activate sales from product detail.'
-              : 'The durable operation is saved. OpenTab will not call this product registered until the canonical product event is indexed.'}
+                : 'The confirmed product record is registered. Activate sales from product detail.'
+              : 'The durable operation is saved. OpenTab will not call this product registered until its product event is confirmed.'}
           </p>
         </InlineAlert>
         <div className="page-actions">
@@ -402,7 +402,7 @@ export function ProductForm({
             Review product
           </Button>
           <a className="ot-button ot-button--quiet" href="/merchant/products">
-            Save and leave
+            Discard draft
           </a>
         </div>
       </form>
@@ -464,9 +464,9 @@ export function ProductForm({
               <dd>{refundWindow} seconds</dd>
             </div>
           </dl>
-          <InlineAlert title="Canonical confirmation required" tone="info">
+          <InlineAlert title="Confirmation required" tone="info">
             <p>
-              Registration and sales activation are separate, canonically confirmed changes. This
+              Registration and sales activation are separate, independently confirmed changes. This
               step cannot make an unconfirmed product available to buyers.
             </p>
           </InlineAlert>

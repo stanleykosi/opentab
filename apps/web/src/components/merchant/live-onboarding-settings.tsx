@@ -133,9 +133,14 @@ export function LiveMerchantOnboarding({
           </p>
         </InlineAlert>
         {active ? (
-          <a className="ot-button ot-button--primary" href="/merchant/products/new">
-            Create your first product
-          </a>
+          <div className="page-actions">
+            <a className="ot-button ot-button--primary" href="/merchant">
+              Open merchant console
+            </a>
+            <a className="ot-button ot-button--secondary" href="/merchant/products/new">
+              Create a product
+            </a>
+          </div>
         ) : (
           <a className="ot-button ot-button--secondary" href="/merchant">
             Check activation status
@@ -363,7 +368,7 @@ export function LiveMerchantSettings({
         setNotice({
           tone: 'success',
           title: 'Payout destination confirmed',
-          body: 'The canonical merchant record now uses the new destination.',
+          body: 'The confirmed merchant record now uses the new destination.',
         });
         payoutOperation.reset();
       })
@@ -502,7 +507,7 @@ export function LiveMerchantSettings({
       setNotice({
         tone: 'success',
         title: 'Payout approval ready',
-        body: 'Review and approve the exact destination below. The current destination remains active until canonical confirmation.',
+        body: 'Review and approve the exact destination below. The current destination remains active until confirmation.',
       });
     } catch (error) {
       setNotice({
@@ -596,7 +601,7 @@ export function LiveMerchantSettings({
         <div>
           <h2>Payout destination</h2>
           <p>
-            Changes require the merchant owner’s embedded-account approval and a canonical event.
+            Changes require the merchant owner’s embedded-account approval and a confirmed event.
           </p>
         </div>
         <form

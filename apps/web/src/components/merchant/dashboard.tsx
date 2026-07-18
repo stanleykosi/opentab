@@ -3,7 +3,7 @@ import type { MerchantDashboardView } from '../../client/view-models';
 
 function csvHref(dashboard: MerchantDashboardView): string {
   const rows = [
-    ['Order', 'Product', 'Customer alias', 'Amount base units', 'Canonical status', 'Created at'],
+    ['Order', 'Product', 'Customer alias', 'Amount base units', 'Settlement status', 'Created at'],
     ...dashboard.orders.map((order) => [
       order.supportReference,
       order.productTitle,
@@ -133,7 +133,7 @@ export function MerchantDashboard({ dashboard }: { dashboard: MerchantDashboardV
       <section>
         <div className="section-bar">
           <div>
-            <p className="eyebrow">Canonical activity</p>
+            <p className="eyebrow">Settlement activity</p>
             <h2>Recent orders</h2>
           </div>
           <LinkButton href="/merchant/orders" variant="quiet">
@@ -213,24 +213,6 @@ export function MerchantProducts({ dashboard }: { dashboard: MerchantDashboardVi
         </div>
         <LinkButton href="/merchant/products/new">Create product</LinkButton>
       </header>
-      <form className="merchant-filters">
-        <label>
-          Search products
-          <input name="search" placeholder="Product name" type="search" />
-        </label>
-        <label>
-          Status
-          <select name="status">
-            <option>All states</option>
-            <option>Active</option>
-            <option>Paused</option>
-            <option>Draft</option>
-          </select>
-        </label>
-        <button className="ot-button ot-button--secondary" type="submit">
-          Apply filters
-        </button>
-      </form>
       <div className="merchant-product-list">
         {dashboard.products.map((product) => (
           <article className="merchant-product-card" key={product.id}>
@@ -272,7 +254,7 @@ export function MerchantOrders({ dashboard }: { dashboard: MerchantDashboardView
         <div>
           <p className="eyebrow">Settlement ledger</p>
           <h1>Orders</h1>
-          <p>Pending records never count as paid until canonical confirmation.</p>
+          <p>Pending records never count as paid until settlement is confirmed.</p>
         </div>
         <a
           className="ot-button ot-button--secondary"
@@ -282,25 +264,6 @@ export function MerchantOrders({ dashboard }: { dashboard: MerchantDashboardView
           Export CSV
         </a>
       </header>
-      <form className="merchant-filters">
-        <label>
-          Search reference
-          <input name="search" placeholder="7R2K-9D" type="search" />
-        </label>
-        <label>
-          Status
-          <select name="status">
-            <option>All states</option>
-            <option>Paid</option>
-            <option>Confirming</option>
-            <option>Refunded</option>
-            <option>Investigation</option>
-          </select>
-        </label>
-        <button className="ot-button ot-button--secondary" type="submit">
-          Apply filters
-        </button>
-      </form>
       <DataTable
         caption="Merchant orders"
         columns={[
@@ -323,7 +286,7 @@ export function MerchantOrders({ dashboard }: { dashboard: MerchantDashboardView
           { id: 'customer', header: 'Customer', cell: (row) => row.customerAlias },
           {
             id: 'status',
-            header: 'Canonical status',
+            header: 'Settlement status',
             cell: (row) => (
               <CanonicalStatus
                 label={row.status.replaceAll('_', ' ')}

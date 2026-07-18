@@ -100,7 +100,7 @@ export function LiveSplitBuilder({
         if (!['paid', 'partially_refunded'].includes(receipt.order.status)) {
           throw new BrowserApiError({
             code: 'PAYMENT_NOT_CANONICAL',
-            message: 'Only a canonically confirmed purchase can be split.',
+            message: 'Only a confirmed purchase can be split.',
             status: 0,
           });
         }
@@ -208,7 +208,7 @@ export function LiveSplitBuilder({
         if (operations.some((operation) => ['failed', 'orphaned'].includes(operation.status))) {
           throw new BrowserApiError({
             code: 'PAYMENT_FAILED_CONFIRMED',
-            message: 'A canonical payment-key revocation failed. Operator review is required.',
+            message: 'A payment-key revocation failed confirmation. Operator review is required.',
             status: 0,
           });
         }

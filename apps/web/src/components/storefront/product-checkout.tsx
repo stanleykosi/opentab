@@ -38,8 +38,8 @@ export function ProductCheckout({
 
   return (
     <section aria-labelledby="buy-title" className="buy-card">
-      <p className="eyebrow">Your tab</p>
-      <h2 id="buy-title">Choose your passes</h2>
+      <p className="eyebrow">Your order</p>
+      <h2 id="buy-title">Choose quantity</h2>
       <div className="quantity-row">
         <span>Quantity</span>
         <fieldset className="quantity-stepper">
@@ -131,12 +131,13 @@ export function ProductCheckout({
       </Button>
       {mode === 'live-unavailable' ? (
         <p className="disabled-reason">
-          Live checkout is disabled until the server confirms provider and contract readiness.
+          Checkout is paused until OpenTab confirms payment readiness.
         </p>
       ) : null}
       {mode === 'live' && !paymentsEnabled ? (
         <p className="disabled-reason">
-          Checkout is paused while the merchant can still manage products and review orders.
+          Checkout is temporarily paused while OpenTab verifies payment readiness. No payment can
+          start yet.
         </p>
       ) : null}
       {unavailable ? (

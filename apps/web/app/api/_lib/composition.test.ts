@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   assertPlatformFeeParity,
   deriveApplicationSecret,
+  deriveLiveParticlePublicGates,
   judgeEvidenceProvenance,
+  parseApiServerEnvironment,
   resolveApplicationReleaseId,
   trustedNetworkSubject,
 } from './composition.js';
@@ -20,6 +22,25 @@ describe('backend production boundary helpers', () => {
     expect(csrf).toMatch(/^[0-9a-f]{64}$/);
     expect(session).not.toBe(csrf);
     expect(deriveApplicationSecret(undefined, 'session-token-hash')).toBeUndefined();
+  });
+
+  it('reports invalid environment field names without exposing secret values', () => {
+    const secretValue = 'do-not-return-this-secret-value';
+    let observed: unknown;
+    try {
+      parseApiServerEnvironment({
+        APP_ENV: 'local',
+        NEXT_PUBLIC_APP_ENV: 'local',
+        PARTICLE_CERTIFICATION_TOKEN: secretValue,
+      });
+    } catch (error) {
+      observed = error;
+    }
+    expect(observed).toMatchObject({
+      code: 'CONFIGURATION_INVALID',
+      message: expect.stringContaining('PARTICLE_CERTIFICATION_TOKEN'),
+    });
+    expect((observed as Error).message).not.toContain(secretValue);
   });
 
   it('resolves a portable release ID on non-Vercel hosts', () => {
@@ -120,5 +141,48 @@ describe('backend production boundary helpers', () => {
     expect(judgeEvidenceProvenance('staging', false)).toBe('staging');
     expect(judgeEvidenceProvenance('demo-mainnet', false)).toBe('recorded_live');
     expect(judgeEvidenceProvenance('production', false)).toBe('recorded_live');
+  });
+
+  it('keeps customer checkout closed until the live Particle profile is certified', () => {
+    expect(
+      deriveLiveParticlePublicGates({
+        particleLiveEnabled: true,
+        profileStage: 'canary_ready',
+        hasSourceTokenProfile: true,
+      }),
+    ).toEqual({ particleReady: true, customerCheckoutReady: false });
+
+    expect(
+      deriveLiveParticlePublicGates({
+        particleLiveEnabled: true,
+        profileStage: 'certified',
+        hasSourceTokenProfile: true,
+      }),
+    ).toEqual({ particleReady: true, customerCheckoutReady: true });
+  });
+
+  it('does not expose Particle before a source policy exists', () => {
+    for (const input of [
+      {
+        particleLiveEnabled: false,
+        profileStage: 'certified' as const,
+        hasSourceTokenProfile: true,
+      },
+      {
+        particleLiveEnabled: true,
+        profileStage: 'bootstrap' as const,
+        hasSourceTokenProfile: false,
+      },
+      {
+        particleLiveEnabled: true,
+        profileStage: 'canary_ready' as const,
+        hasSourceTokenProfile: false,
+      },
+    ]) {
+      expect(deriveLiveParticlePublicGates(input)).toEqual({
+        particleReady: false,
+        customerCheckoutReady: false,
+      });
+    }
   });
 });

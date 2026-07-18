@@ -28,6 +28,10 @@ function availabilityStatus(product: ProductView) {
   }
 }
 
+function isEmailContact(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export function MerchantIdentity({ dashboard }: { dashboard: MerchantDashboardView }) {
   return (
     <header className="storefront-head">
@@ -94,7 +98,9 @@ export function ProductPageView({
           src={product.imagePath}
           width={960}
         />
-        <span className="product-visual__category">{product.category}</span>
+        {product.category === undefined ? null : (
+          <span className="product-visual__category">{product.category}</span>
+        )}
       </section>
       <div className="product-details">
         <header className="product-merchant">
@@ -120,10 +126,12 @@ export function ProductPageView({
               }).format(new Date(product.startsAt))}
             </dd>
           </div>
-          <div>
-            <dt>Where</dt>
-            <dd>{product.location}</dd>
-          </div>
+          {product.location === undefined ? null : (
+            <div>
+              <dt>Where</dt>
+              <dd>{product.location}</dd>
+            </div>
+          )}
           <div>
             <dt>Included</dt>
             <dd>The offer described above and its confirmed digital receipt</dd>
@@ -138,12 +146,18 @@ export function ProductPageView({
               Payment uses supported digital assets. OpenTab shows the total and estimated payment
               cost before approval.
             </p>
-            <p>
-              Support:{' '}
-              <a className="support-link" href={`mailto:${product.merchant.supportContact}`}>
-                {product.merchant.supportContact}
-              </a>
-            </p>
+            {product.merchant.supportContact === undefined ? null : (
+              <p>
+                Support:{' '}
+                {isEmailContact(product.merchant.supportContact) ? (
+                  <a className="support-link" href={`mailto:${product.merchant.supportContact}`}>
+                    {product.merchant.supportContact}
+                  </a>
+                ) : (
+                  <span>{product.merchant.supportContact}</span>
+                )}
+              </p>
+            )}
           </div>
         </details>
       </div>

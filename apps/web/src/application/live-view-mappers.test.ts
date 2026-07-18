@@ -58,6 +58,21 @@ describe('live product view mapping', () => {
     expect(view.unitPriceBaseUnits).toBe('18000000');
     expect(view.availability).toEqual({ state: 'available', remaining: '22' });
     expect(view.refundTerms).toContain('2 days');
+    expect(view.merchant.supportContact).toBe('hello@daylight.example');
+    expect(view.category).toBeUndefined();
+    expect(view.location).toBeUndefined();
+  });
+
+  it('does not invent merchant support details when none were supplied', () => {
+    const withoutSupport = PublicProductRecordSchema.parse({
+      ...record,
+      merchant: { ...record.merchant, supportContact: undefined },
+    });
+
+    expect(
+      mapPublicProductToView(withoutSupport, { origin: 'https://opentab.example' }).merchant
+        .supportContact,
+    ).toBeUndefined();
   });
 
   it('does not proxy an unapproved remote image URL', () => {

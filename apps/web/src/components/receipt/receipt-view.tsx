@@ -31,6 +31,19 @@ function receiptStatus(receipt: ReceiptView) {
   }
 }
 
+function eventDate(startsAt: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  }).format(new Date(startsAt));
+}
+
 function ShareActions({ receipt }: { receipt: ReceiptView }) {
   const [shared, setShared] = useState(false);
   const shareText = `${receipt.product.title} · ${receipt.product.merchant.displayName}`;
@@ -38,15 +51,16 @@ function ShareActions({ receipt }: { receipt: ReceiptView }) {
     <div className="share-actions">
       <ButtonLikeShare
         onShare={async () => {
-          const url = `${window.location.origin}/receipt/${encodeURIComponent(receipt.orderId)}`;
-          if (navigator.share)
-            await navigator.share({ title: receipt.product.title, text: shareText, url });
-          else await navigator.clipboard.writeText(url);
+          if (navigator.share) {
+            await navigator.share({ title: receipt.product.title, text: shareText });
+          } else {
+            await navigator.clipboard.writeText(shareText);
+          }
           setShared(true);
           window.setTimeout(() => setShared(false), 1800);
         }}
       >
-        {shared ? 'Pass link ready' : 'Share pass'}
+        {shared ? 'Pass details ready' : 'Share pass details'}
       </ButtonLikeShare>
       <CopyButton label="Copy order reference" value={receipt.supportReference} />
     </div>
@@ -137,9 +151,11 @@ export function ReceiptPageView({
       <section className="pass-column">
         <h1 className="sr-only">Receipt and pass for {receipt.product.title}</h1>
         <PassFrame
-          date="Sunday, 2 August · 12:00"
+          date={eventDate(receipt.product.startsAt)}
           holder={receipt.holderAlias}
-          location={receipt.product.location}
+          {...(receipt.product.location === undefined
+            ? {}
+            : { location: receipt.product.location })}
           merchant={receipt.product.merchant.displayName}
           status={receipt.status === 'refunded' ? 'Refunded' : 'Valid'}
           title={receipt.product.title}
@@ -168,14 +184,26 @@ export function ReceiptPageView({
           </InlineAlert>
         ) : null}
         <section className="loyalty-card">
-          <p className="eyebrow">Daylight regulars</p>
-          <h2>+{receipt.loyalty.earned} points</h2>
-          <ProgressMeter
-            current={receipt.loyalty.current}
-            detail={`${BigInt(receipt.loyalty.target) - BigInt(receipt.loyalty.current)} points until ${receipt.loyalty.rewardLabel}.`}
-            label="Loyalty progress"
-            target={receipt.loyalty.target}
-          />
+          {!receipt.loyalty.rewardDetailsAvailable ? (
+            <>
+              <p className="eyebrow">Rewards</p>
+              <h2>Rewards update unavailable</h2>
+              <p>
+                This receipt does not include a confirmed loyalty award or current rewards balance.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="eyebrow">{receipt.product.merchant.displayName} rewards</p>
+              <h2>+{receipt.loyalty.earned} points</h2>
+              <ProgressMeter
+                current={receipt.loyalty.current}
+                detail={`${BigInt(receipt.loyalty.target) > BigInt(receipt.loyalty.current) ? BigInt(receipt.loyalty.target) - BigInt(receipt.loyalty.current) : 0n} points until ${receipt.loyalty.rewardLabel}.`}
+                label="Loyalty progress"
+                target={receipt.loyalty.target}
+              />
+            </>
+          )}
         </section>
         <div className="receipt-actions">
           {features.splits && receipt.status === 'paid' ? (
@@ -187,7 +215,7 @@ export function ReceiptPageView({
         </div>
         <details className="disclosure">
           <summary>Payment proof</summary>
-          <p>This order is marked paid only from the confirmed canonical event.</p>
+          <p>This order is marked paid only from its confirmed settlement record.</p>
           {receipt.transactionHash ? (
             <ExternalProofLink
               href={`https://arbiscan.io/tx/${receipt.transactionHash}`}
@@ -197,13 +225,22 @@ export function ReceiptPageView({
             <p>Public proof is temporarily unavailable. Order status remains under review.</p>
           )}
         </details>
-        <p className="support-copy">
-          Questions? Contact{' '}
-          <a className="support-link" href={`mailto:${receipt.product.merchant.supportContact}`}>
-            {receipt.product.merchant.supportContact}
-          </a>{' '}
-          with reference <span className="mono">{receipt.supportReference}</span>.
-        </p>
+        {receipt.product.merchant.supportContact === undefined ? null : (
+          <p className="support-copy">
+            Questions? Contact{' '}
+            {/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(receipt.product.merchant.supportContact) ? (
+              <a
+                className="support-link"
+                href={`mailto:${receipt.product.merchant.supportContact}`}
+              >
+                {receipt.product.merchant.supportContact}
+              </a>
+            ) : (
+              <span>{receipt.product.merchant.supportContact}</span>
+            )}{' '}
+            with reference <span className="mono">{receipt.supportReference}</span>.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -490,8 +490,11 @@ export function CheckoutWorkflow({
             </InlineAlert>
             {mode === 'live' ? (
               sponsorSiteKey === undefined ? (
-                <InlineAlert title="Security check unavailable" tone="warning">
-                  <p>Account setup is disabled until the anti-abuse check is configured.</p>
+                <InlineAlert title="Account setup temporarily unavailable" tone="warning">
+                  <p>
+                    No payment was started. Return with this checkout link after protected setup is
+                    restored.
+                  </p>
                 </InlineAlert>
               ) : (
                 <TurnstileChallenge
@@ -766,7 +769,7 @@ export function CheckoutWorkflow({
               <details className="disclosure">
                 <summary>Payment proof</summary>
                 <p>
-                  Confirmed on Arbitrum from canonical <span className="mono">OrderPaid</span>{' '}
+                  Confirmed on Arbitrum from verified <span className="mono">OrderPaid</span>{' '}
                   evidence after {snapshot.canonicalConfirmation.confirmations} confirmations.
                 </p>
                 <ExternalProofLink

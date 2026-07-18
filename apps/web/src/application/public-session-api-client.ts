@@ -378,6 +378,12 @@ export interface PublicSessionApplicationService {
   logout(): Promise<void>;
   getPublicProduct(merchantSlug: string, productSlug: string): Promise<PublicProductRecord>;
   getPublicMediaOrigins(): Promise<readonly string[]>;
+  getPublicCheckoutContext(): Promise<PublicCheckoutContext>;
+}
+
+export interface PublicCheckoutContext {
+  readonly checkoutEnabled: boolean;
+  readonly allowedMediaOrigins: readonly string[];
 }
 
 export class DefaultPublicSessionApplicationService implements PublicSessionApplicationService {
@@ -414,6 +420,14 @@ export class DefaultPublicSessionApplicationService implements PublicSessionAppl
 
   async getPublicMediaOrigins(): Promise<readonly string[]> {
     return (await this.#api.getPublicConfig()).media.allowedOrigins;
+  }
+
+  async getPublicCheckoutContext(): Promise<PublicCheckoutContext> {
+    const config = await this.#api.getPublicConfig();
+    return {
+      checkoutEnabled: config.features.checkout,
+      allowedMediaOrigins: config.media.allowedOrigins,
+    };
   }
 }
 

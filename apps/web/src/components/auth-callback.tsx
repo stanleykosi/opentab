@@ -68,15 +68,9 @@ export function AuthCallback({
   }, [mode, service, state]);
   useEffect(() => {
     if (state !== 'success') return;
-    const timeout = window.setTimeout(
-      () =>
-        window.location.replace(
-          mode === 'deterministic' ? '/checkout/chk_demo_sunday_table' : returnPath,
-        ),
-      650,
-    );
+    const timeout = window.setTimeout(() => window.location.replace(returnPath), 650);
     return () => window.clearTimeout(timeout);
-  }, [mode, returnPath, state]);
+  }, [returnPath, state]);
   return (
     <main className="auth-callback" id="main-content">
       <div className="working-mark" aria-hidden="true">
@@ -104,7 +98,7 @@ export function AuthCallback({
         </p>
       ) : null}
       {state === 'success' ? (
-        <InlineAlert title="Returning to checkout" tone="success">
+        <InlineAlert title="Returning to OpenTab" tone="success">
           <p>
             Your application session is ready. No token or callback detail is shown on this page.
           </p>
@@ -112,33 +106,27 @@ export function AuthCallback({
       ) : null}
       {state === 'rejected' ? (
         <>
-          <p>No application session was created and no payment started.</p>
-          <LinkButton href={mode === 'deterministic' ? '/checkout/chk_demo_sunday_table' : '/'}>
-            {mode === 'deterministic' ? 'Return to checkout' : 'Return home'}
-          </LinkButton>
+          <p>No application session was created and no action was started.</p>
+          <LinkButton href="/">Return to OpenTab</LinkButton>
         </>
       ) : null}
       {state === 'expired' ? (
         <>
-          <p>
-            The provider result is too old to use safely. Start sign-in again from the checkout.
-          </p>
-          <LinkButton href={mode === 'deterministic' ? '/checkout/chk_demo_sunday_table' : '/'}>
-            {mode === 'deterministic' ? 'Restart sign-in' : 'Return home'}
-          </LinkButton>
+          <p>The provider result is too old to use safely. Start sign-in again where you began.</p>
+          <LinkButton href="/">Return to OpenTab</LinkButton>
         </>
       ) : null}
       {state === 'invalid_continuation' ? (
         <>
-          <p>OpenTab only returns to an allowlisted, opaque checkout continuation.</p>
-          <LinkButton href="/">Return home</LinkButton>
+          <p>OpenTab only returns to a verified page in this application.</p>
+          <LinkButton href="/">Return to OpenTab</LinkButton>
         </>
       ) : null}
       {state === 'session_error' ? (
         <>
           <p>
             Your provider session may still be active. OpenTab can retry the server exchange without
-            repeating payment.
+            repeating the action that brought you here.
           </p>
           <button
             className="ot-button ot-button--secondary"

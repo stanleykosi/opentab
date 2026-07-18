@@ -85,6 +85,7 @@ import {
   type SplitReimbursementIntent,
   TransactionHashSchema,
 } from '@opentab/shared';
+import { ZodError } from 'zod';
 import type { DeterministicBackendParts } from './deterministic-composition.js';
 import { LiveBackendApiCommands } from './live-commands.js';
 import { LiveBackendApiResourceQueries } from './live-resource-queries.js';
@@ -274,6 +275,25 @@ export function judgeEvidenceProvenance(
   return 'recorded_live';
 }
 
+export function deriveLiveParticlePublicGates(input: {
+  readonly particleLiveEnabled: boolean;
+  readonly profileStage: 'bootstrap' | 'canary_ready' | 'certified' | undefined;
+  readonly hasSourceTokenProfile: boolean;
+}): {
+  readonly particleReady: boolean;
+  readonly customerCheckoutReady: boolean;
+} {
+  const particleReady =
+    input.particleLiveEnabled &&
+    input.profileStage !== undefined &&
+    input.profileStage !== 'bootstrap' &&
+    input.hasSourceTokenProfile;
+  return {
+    particleReady,
+    customerCheckoutReady: particleReady && input.profileStage === 'certified',
+  };
+}
+
 function publicConfig(
   config: ServerEnvironment,
   deterministicParts: DeterministicBackendParts | undefined,
@@ -283,11 +303,11 @@ function publicConfig(
   const deterministic = deterministicParts !== undefined;
   const capabilities = deriveServerFeatureCapabilities(config);
   const liveProfile = compatibility?.profile;
-  const liveReady =
-    config.PARTICLE_LIVE_ENABLED &&
-    liveProfile !== undefined &&
-    liveProfile.stage !== 'bootstrap' &&
-    liveProfile.sourceTokenProfile !== undefined;
+  const liveGates = deriveLiveParticlePublicGates({
+    particleLiveEnabled: config.PARTICLE_LIVE_ENABLED,
+    profileStage: liveProfile?.stage,
+    hasSourceTokenProfile: liveProfile?.sourceTokenProfile !== undefined,
+  });
   const mediaOrigins = [
     new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
     ...config.PRODUCT_MEDIA_ALLOWED_ORIGINS.filter(
@@ -308,7 +328,8 @@ function publicConfig(
     environment: config.APP_ENV,
     media: { allowedOrigins: mediaOrigins },
     features: {
-      checkout: capabilities.checkoutSubmission && (deterministic || liveReady),
+      checkout:
+        capabilities.checkoutSubmission && (deterministic || liveGates.customerCheckoutReady),
       bootstrapGas: config.BOOTSTRAP_SPONSOR_ENABLED,
       splits: config.SPLITS_ENABLED,
       loyalty: config.MERCHANT_MUTATIONS_ENABLED,
@@ -316,7 +337,7 @@ function publicConfig(
     },
   } satisfies Omit<PublicBrowserConfig, 'particle' | 'liveAcceptanceConfigDigest'>;
 
-  if (!deterministic && !liveReady) {
+  if (!deterministic && !liveGates.particleReady) {
     return {
       ...common,
       particle: { enabled: false },
@@ -671,10 +692,48 @@ async function splitSigner(
   );
 }
 
+/**
+ * Convert environment-schema failures into a public-safe API error.
+ *
+ * Only schema field names are exposed. Zod issue messages and input values stay
+ * attached as the non-serialized cause for trusted runtime diagnostics.
+ */
+export function parseApiServerEnvironment(
+  env: Record<string, string | undefined>,
+): ServerEnvironment {
+  try {
+    return parseServerEnvironment(env);
+  } catch (error) {
+    if (!(error instanceof ZodError)) {
+      throw error;
+    }
+    const fields = [
+      ...new Set(
+        error.issues
+          .map((issue) => issue.path[0])
+          .filter(
+            (field): field is string | number =>
+              typeof field === 'string' || typeof field === 'number',
+          )
+          .map(String),
+      ),
+    ]
+      .sort()
+      .slice(0, 12);
+    throw new AppError(
+      'CONFIGURATION_INVALID',
+      fields.length === 0
+        ? 'The server environment is invalid.'
+        : `The server environment is invalid: ${fields.join(', ')}.`,
+      { cause: error },
+    );
+  }
+}
+
 export async function createBackendApiRegistry(
   env: Record<string, string | undefined>,
 ): Promise<BackendApiRegistry & { close(): Promise<void> }> {
-  const config = parseServerEnvironment(env);
+  const config = parseApiServerEnvironment(env);
   const featureCapabilities = deriveServerFeatureCapabilities(config);
   const deterministic = config.PROVIDER_MODE === 'deterministic';
   const applicationReleaseId = resolveApplicationReleaseId(env, deterministic);

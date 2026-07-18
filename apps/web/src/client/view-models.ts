@@ -6,7 +6,7 @@ export interface MerchantIdentityView {
   slug: string;
   displayName: string;
   monogram: string;
-  supportContact: string;
+  supportContact?: string | undefined;
   verified: boolean;
 }
 
@@ -21,7 +21,7 @@ export interface ProductView {
   merchant: MerchantIdentityView;
   title: string;
   description: string;
-  category: string;
+  category?: string | undefined;
   imagePath: string;
   imageAlt: string;
   unitPriceBaseUnits: string;
@@ -32,7 +32,7 @@ export interface ProductView {
   projectionStale: boolean;
   refundTerms: string;
   startsAt: string;
-  location: string;
+  location?: string | undefined;
   loyaltyPoints: string;
 }
 
@@ -121,7 +121,13 @@ export interface ReceiptView {
   transactionHash?: string | undefined;
   refundBaseUnits: string;
   passStatus: 'pending' | 'valid' | 'refunded' | 'investigation';
-  loyalty: { earned: string; current: string; target: string; rewardLabel: string };
+  loyalty: {
+    earned: string;
+    current: string;
+    target: string;
+    rewardLabel: string;
+    rewardDetailsAvailable: boolean;
+  };
 }
 
 export interface SplitInvitationView {
@@ -199,6 +205,7 @@ export interface CustomerOrderView {
 
 export interface MerchantDashboardView {
   merchant: MerchantIdentityView;
+  payoutAddress?: string | undefined;
   grossBaseUnits: string;
   refundedBaseUnits: string;
   pendingBaseUnits: string;

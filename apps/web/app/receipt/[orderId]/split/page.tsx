@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { demoSplit } from '../../../../src/client/deterministic-data';
 import { getServerFeatureState } from '../../../../src/client/presentation-mode';
+import { LiveAuthGate } from '../../../../src/components/live-auth-gate';
 import { CustomerShell, FeatureUnavailable } from '../../../../src/components/shell';
 import { LiveSplitBuilder } from '../../../../src/components/split/live-split-builder';
 import { SplitBuilder, SplitProgressView } from '../../../../src/components/split/split-builder';
@@ -28,7 +29,13 @@ export default async function ReceiptSplitPage({
           title="Split is not available"
         />
       ) : features.mode === 'live' ? (
-        <LiveSplitBuilder orderId={orderId} />
+        <LiveAuthGate
+          authBody="Continue with the Google or email account that made this purchase before creating private reimbursement links."
+          authTitle="Sign in to split this purchase"
+          returnPath={`/receipt/${encodeURIComponent(orderId)}/split`}
+        >
+          <LiveSplitBuilder orderId={orderId} />
+        </LiveAuthGate>
       ) : features.mode === 'deterministic' && query.view === 'progress' ? (
         <SplitProgressView split={demoSplit} />
       ) : features.mode === 'deterministic' ? (

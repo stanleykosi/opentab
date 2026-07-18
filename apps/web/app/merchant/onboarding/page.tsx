@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { getServerFeatureState } from '../../../src/client/presentation-mode';
+import { LiveAuthGate } from '../../../src/components/live-auth-gate';
 import { LiveMerchantOnboarding } from '../../../src/components/merchant/live-onboarding-settings';
 import { MerchantOnboarding } from '../../../src/components/merchant/onboarding-settings';
 import { CustomerShell, FeatureUnavailable } from '../../../src/components/shell';
@@ -19,7 +20,13 @@ export default function OnboardingPage() {
           title="Onboarding unavailable"
         />
       ) : features.mode === 'live' ? (
-        <LiveMerchantOnboarding />
+        <LiveAuthGate
+          authBody="Continue with Google or email to create your storefront. OpenTab sets up secure payment access automatically."
+          authTitle="Sign in to start selling"
+          returnPath="/merchant/onboarding"
+        >
+          <LiveMerchantOnboarding />
+        </LiveAuthGate>
       ) : (
         <MerchantOnboarding />
       )}

@@ -809,12 +809,10 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
     ] as const) {
       requireConfigured(name, `${name} is required for live Particle reads and previews`);
     }
-    if (['demo-mainnet', 'production'].includes(config.APP_ENV)) {
-      requireConfigured(
-        'PARTICLE_CERTIFICATION_TOKEN',
-        'PARTICLE_CERTIFICATION_TOKEN is required for live Particle certification and rotation',
-      );
-    }
+    // The operator token protects activation/rotation endpoints, but is not a
+    // dependency of customer reads or an already-certified payment profile.
+    // When it is absent those privileged endpoints are not composed and fail
+    // closed without taking the rest of the application offline.
     if (config.NEXT_PUBLIC_ARBITRUM_CHAIN_ID !== ARBITRUM_ONE_CHAIN_ID) {
       context.addIssue({
         code: 'custom',

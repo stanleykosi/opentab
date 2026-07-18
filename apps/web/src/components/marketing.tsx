@@ -19,10 +19,10 @@ import styles from './marketing.module.css';
 import { BrandMark, SiteHeader } from './shell';
 
 const technology = [
-  { mark: 'M', name: 'Magic', detail: 'Familiar sign-in' },
-  { mark: 'P', name: 'Particle', detail: 'Balance routing' },
-  { mark: 'A', name: 'Arbitrum', detail: 'Canonical settlement' },
-  { mark: '$', name: 'Native USDC', detail: 'Stable settlement' },
+  { mark: '1', name: 'Familiar sign-in', detail: 'Google or email' },
+  { mark: '2', name: 'One available balance', detail: 'No manual bridging' },
+  { mark: '3', name: 'Verified settlement', detail: 'Paid means confirmed' },
+  { mark: '$', name: 'Stable pricing', detail: 'Clear USDC totals' },
 ] as const;
 
 const salesBars = [
@@ -48,7 +48,7 @@ const faqItems = [
   {
     question: 'When does a merchant see an order as paid?',
     answer:
-      'Only after OpenTab observes the matching, successful, confirmed canonical OrderPaid event on the configured Arbitrum contract. A provider submission response alone is never treated as payment truth.',
+      'Only after OpenTab observes the matching, successful, confirmed settlement event. A provider submission response alone is never treated as payment truth.',
   },
   {
     question: 'Are fees and totals shown before approval?',
@@ -63,6 +63,7 @@ const faqItems = [
 ] as const;
 
 export function MarketingHome({ features }: { features: FrontendFeatureState }) {
+  const demoAvailable = features.mode === 'deterministic';
   return (
     <div className={styles.page}>
       <SiteHeader features={features} marketing />
@@ -81,10 +82,20 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
               <LinkButton href="/merchant/onboarding" size="large">
                 Start selling <ArrowRight aria-hidden="true" size={18} />
               </LinkButton>
-              <LinkButton href="/c/daylight-room/sunday-table" size="large" variant="secondary">
-                Open the demo tab
+              <LinkButton
+                href={demoAvailable ? '/c/daylight-room/sunday-table' : '/account'}
+                size="large"
+                variant="secondary"
+              >
+                {demoAvailable ? 'Open the demo tab' : 'View my purchases'}
               </LinkButton>
             </div>
+            {demoAvailable ? null : (
+              <p className={styles.buyerPath}>
+                Buying something? Open the checkout link from the merchant or scan their QR to
+                begin.
+              </p>
+            )}
             <div className={styles.heroProof}>
               <span>
                 <Check aria-hidden="true" size={15} /> No wallet extension
@@ -112,14 +123,14 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
               <BadgeCheck aria-hidden="true" size={20} />
               <span>
                 <strong>Order confirmed</strong>
-                <small>Canonical on Arbitrum</small>
+                <small>Settlement verified</small>
               </span>
             </div>
           </aside>
         </section>
 
         <section aria-labelledby="technology-heading" className={styles.technology}>
-          <p id="technology-heading">Built on a checkout stack you can verify</p>
+          <p id="technology-heading">A checkout customers can understand</p>
           <ul>
             {technology.map((item) => (
               <li key={item.name}>
@@ -182,7 +193,6 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
 
         <section className={`${styles.section} ${styles.featuresSection}`}>
           <div className={styles.centeredHeading}>
-            <p className={styles.kicker}>Everything checkout needs</p>
             <h2>The crypto complexity stays backstage.</h2>
             <p>
               Every surface is designed around a calm purchase, an exact ledger, and a result that
@@ -243,7 +253,7 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
                   <ShieldCheck aria-hidden="true" size={21} />
                 </div>
                 <h3>Honest payment status</h3>
-                <p>Submitted is not paid. OpenTab waits for the canonical contract event.</p>
+                <p>Submitted is not paid. OpenTab waits for confirmed settlement.</p>
               </div>
               <div className={styles.statusVisual}>
                 <p>
@@ -326,7 +336,7 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
           <aside aria-label="Example OpenTab merchant dashboard" className={styles.dashboard}>
             <header>
               <div>
-                <span>Demo merchant console</span>
+                <span>OpenTab merchant console</span>
                 <strong>Daylight Room</strong>
               </div>
               <CanonicalStatus label="Records fresh" tone="confirmed" />
@@ -427,8 +437,8 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
             <p className={styles.kicker}>Settlement you can stand behind</p>
             <h2>“Paid” means confirmed. Not merely submitted.</h2>
             <p>
-              OpenTab follows the payment all the way to a confirmed canonical Arbitrum event, then
-              preserves a public-safe evidence trail for the result.
+              OpenTab follows the payment all the way to confirmed settlement, then preserves a
+              public-safe evidence trail for the result.
             </p>
           </div>
           <div className={styles.truthFlow}>
@@ -446,8 +456,8 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
             <i aria-hidden="true" />
             <div>
               <span aria-hidden="true">3</span>
-              <strong>Arbitrum confirms</strong>
-              <small>Canonical event observed</small>
+              <strong>Settlement confirms</strong>
+              <small>Verified event observed</small>
             </div>
             <i aria-hidden="true" />
             <div>
@@ -467,7 +477,7 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
             <p>
               <ShieldCheck aria-hidden="true" size={20} />
               <span>
-                <strong>Canonical source of truth</strong>
+                <strong>Confirmed source of truth</strong>
                 Provider status alone never marks the order paid.
               </span>
             </p>
@@ -505,15 +515,20 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
             <p className={styles.kicker}>Your next offer can be open in minutes</p>
             <h2>Make checkout the easiest part of showing up.</h2>
             <p>
-              Create the offer as a merchant, or walk through the complete deterministic buyer
-              journey first.
+              {demoAvailable
+                ? 'Create the offer as a merchant, or walk through the complete deterministic buyer journey first.'
+                : 'Create an offer, publish its checkout, and share the link or QR with customers.'}
             </p>
             <div className={styles.finalActions}>
               <LinkButton href="/merchant/onboarding" size="large">
                 Create a checkout <ArrowRight aria-hidden="true" size={18} />
               </LinkButton>
-              <LinkButton href="/c/daylight-room/sunday-table" size="large" variant="secondary">
-                Try the buyer demo
+              <LinkButton
+                href={demoAvailable ? '/c/daylight-room/sunday-table' : '#how-it-works'}
+                size="large"
+                variant="secondary"
+              >
+                {demoAvailable ? 'Try the buyer demo' : 'See how it works'}
               </LinkButton>
             </div>
           </div>

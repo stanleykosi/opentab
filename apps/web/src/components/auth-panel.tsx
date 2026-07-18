@@ -73,11 +73,6 @@ export function AuthPanel({
       <p className="eyebrow">Secure sign-in</p>
       <h2 id="auth-title">{title}</h2>
       <p>{body}</p>
-      {deterministic ? (
-        <InlineAlert title="Demo sign-in" tone="info">
-          This local path simulates the normalized result. It does not contact Magic.
-        </InlineAlert>
-      ) : null}
       {error ? (
         <InlineAlert title="Sign-in did not continue" tone="danger">
           <p>{error} No payment was started.</p>
@@ -135,7 +130,8 @@ export function AuthPanel({
         </form>
       )}
       <p className="privacy-note">
-        By continuing, you agree to the merchant’s terms and OpenTab’s privacy notice.
+        OpenTab creates a secure application session. Your sign-in credential is never shown to
+        merchants or other customers.
       </p>
     </section>
   );

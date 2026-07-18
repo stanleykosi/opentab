@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { demoReceipt } from '../../../src/client/deterministic-data';
 import { getServerFeatureState } from '../../../src/client/presentation-mode';
 import type { OrderCanonicalStatus, ReceiptView } from '../../../src/client/view-models';
+import { LiveAuthGate } from '../../../src/components/live-auth-gate';
 import { LiveReceiptPage } from '../../../src/components/receipt/live-receipt-page';
 import { ReceiptPageView } from '../../../src/components/receipt/receipt-view';
 import { CustomerShell, FeatureUnavailable } from '../../../src/components/shell';
@@ -66,7 +67,13 @@ export default async function ReceiptPage({
           title="Receipt unavailable"
         />
       ) : features.mode === 'live' ? (
-        <LiveReceiptPage features={features} orderId={orderId} />
+        <LiveAuthGate
+          authBody="Continue with the Google or email account that completed this purchase."
+          authTitle="Sign in to view this receipt"
+          returnPath={`/receipt/${encodeURIComponent(orderId)}`}
+        >
+          <LiveReceiptPage features={features} orderId={orderId} />
+        </LiveAuthGate>
       ) : (
         <ReceiptPageView features={features} receipt={receipt} />
       )}

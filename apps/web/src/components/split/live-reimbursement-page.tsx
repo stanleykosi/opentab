@@ -203,12 +203,12 @@ export function LiveReimbursementPage({
         }
         const readiness = await service.prepareWalletAccount();
         if (!readiness.ready || readiness.blockers.length > 0) {
-          throw new Error('Account preparation is not canonically confirmed yet.');
+          throw new Error('Account preparation is not confirmed yet.');
         }
       } else {
         const readiness = await service.prepareWalletAccount(challengeToken);
         if (!readiness.ready || readiness.blockers.length > 0) {
-          throw new Error('Account preparation is not canonically confirmed yet.');
+          throw new Error('Account preparation is not confirmed yet.');
         }
       }
       setState({ status: 'ready', capability: state.capability });

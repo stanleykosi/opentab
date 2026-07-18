@@ -132,8 +132,8 @@ passed the keyless deployment assertions, and all three contracts have
 creation/runtime `exact_match` source on Sourcify. Public runtime defaults are
 recorded in
 [`packages/contracts/deployments/42161.public.env`](packages/contracts/deployments/42161.public.env).
-This is deployment evidence, not a payment claim: the Particle cross-chain
-canary has not run and the money-moving flags remain disabled.
+This is deployment evidence, not a payment claim: payment activation is proven
+only by its recorded Particle operation and confirmed `OrderPaid` settlement.
 
 ### Railway dashboard handoff
 
@@ -168,7 +168,7 @@ catch-up, `/health/ready` correctly returns HTTP 503 with reason `starting` or
 `lagging`; during a rolling deployment it may briefly report `standby` while
 the previous container owns the single-active-worker lease. Standby is live,
 does not count as a scan failure, and takes over automatically after handoff.
-Wait for HTTP 200 with `"ready": true` before the canary. The
+Wait for HTTP 200 with `"ready": true` before payment activation. The
 reconciliation worker starts safely without a profile and discovers each new
 immutable Supabase certification stage within 15 seconds—no Railway restart or
 profile environment-variable copy is required.
@@ -176,24 +176,33 @@ profile environment-variable copy is required.
 No Magic secret, DID token, KMS credential/identifier, private key, session
 secret, or Vercel OIDC credential belongs in the Railway indexer.
 
-### One-time Particle certification
+### One-time payment activation
 
 Push the configured GitHub branch and wait for its automatic Vercel and Railway
-deployments, then visit `/operator/particle`. Sign in with the Magic account used as operator
-and enter `PARTICLE_CERTIFICATION_TOKEN`. On a fresh database, the page first
-creates a 0.10-USDC canary merchant/product using exact server-bound Magic
-transactions; fund the displayed Magic EOA with a small amount of Arbitrum ETH
-for those three one-time setup transactions. Then run the three certification
-actions: capture bootstrap compatibility, approve the constrained cross-chain
-preview, and pay the tiny canary.
+deployments. Set `PARTICLE_LIVE_ENABLED=true` and `PAYMENTS_ENABLED=true` on
+Vercel before that deployment; the database profile gate still keeps ordinary
+customer checkout closed until activation succeeds. Visit `/operator/particle`,
+sign in with the Magic payment-operator account, and enter
+`PARTICLE_CERTIFICATION_TOKEN`. The same strong value must be stored as the
+server-only Vercel environment variable; it must never use a `NEXT_PUBLIC_`
+name. Leaving it unset now keeps normal APIs online but disables this privileged
+activation/rotation action.
+
+The page presents one resumable activation journey. Select an existing active
+product priced at no more than 1 USDC, or let OpenTab create its fixed 0.10-USDC
+activation item. Creating the item on a fresh account requires three exact
+Magic-approved setup transactions, so the displayed EOA needs a small Arbitrum
+ETH fee balance. The final screen shows the exact activation amount and route
+fees before the single Particle payment approval. The EOA also needs enough
+supported non-Arbitrum value to cover that payment and its route fees.
 
 The profile is stored centrally in Supabase and bound to the Particle project,
 Arbitrum contracts/token, operator subject, delegate code hash, source-token
-policy, and canary product. It is deliberately reused across ordinary Git
+policy, and activation item. It is deliberately reused across ordinary Git
 redeploys during this run. Railway and every warm Vercel instance reload it
-automatically. Normal checkout opens only after Particle reports success and
-Railway has indexed the confirmed canonical `OrderPaid` event and issued pass.
-Customers never repeat this operator certification.
+automatically. Normal checkout opens only after Railway has indexed the
+confirmed `OrderPaid` event and issued the pass; Particle success by itself is
+not sufficient. Customers never repeat project activation.
 
 ## Live-provider safety
 
@@ -221,7 +230,7 @@ live-chain proof.
 The deployment-time order signer
 `0x03981bA2a287b173A16b2c0a04088aB33AA98526` is a temporary local encrypted
 EOA dedicated only to EIP-712 order intents; it holds no customer or merchant
-funds. The protected hackathon canary may use that key from a Vercel encrypted
+funds. The protected payment-activation flow may use that key from a Vercel encrypted
 Sensitive variable only under `APP_ENV=demo-mainnet`, with
 `DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED=true` and
 `ORDER_SIGNER_MODE=private-key`. Preview, staging, and production still reject

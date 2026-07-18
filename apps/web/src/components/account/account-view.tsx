@@ -67,8 +67,8 @@ export function LiveAccountOverviewView({
         </div>
         {recent === undefined ? (
           <EmptyState
-            action={<LinkButton href="/">Explore current offers</LinkButton>}
-            body="Your confirmed purchases and passes will appear here."
+            action={<LinkButton href="/">Return to OpenTab</LinkButton>}
+            body="Open a merchant checkout link or scan their QR code to make a purchase. Confirmed orders and passes will appear here."
             title="No orders yet"
           />
         ) : (
@@ -126,9 +126,9 @@ export function LiveAccountOrdersView({
   if (orders.length === 0)
     return (
       <EmptyState
-        body="Your confirmed purchases and passes will appear here."
+        body="Open a merchant checkout link or scan their QR code to make a purchase. Confirmed orders and passes will appear here."
         title="No orders yet"
-        action={<LinkButton href="/">Explore current offers</LinkButton>}
+        action={<LinkButton href="/">Return to OpenTab</LinkButton>}
       />
     );
   return (
@@ -247,11 +247,9 @@ export function AccountOrders({ dashboard }: { dashboard: MerchantDashboardView 
   if (dashboard.orders.length === 0)
     return (
       <EmptyState
-        body="Your confirmed purchases and passes will appear here."
+        body="Open a merchant checkout link or scan their QR code to make a purchase. Confirmed orders and passes will appear here."
         title="No orders yet"
-        action={
-          <LinkButton href="/c/daylight-room/sunday-table">Explore the demo offer</LinkButton>
-        }
+        action={<LinkButton href="/">Return to OpenTab</LinkButton>}
       />
     );
   return (

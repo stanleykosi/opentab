@@ -248,7 +248,7 @@ export function ReimbursementCheckout({
       {state === 'paid' ? (
         <>
           <CanonicalStatus label="Confirmed reimbursement" tone="confirmed" />
-          <h2>Sam has been repaid</h2>
+          <h2>Your reimbursement is complete</h2>
           <p>The reimbursement is complete from confirmed settlement evidence.</p>
         </>
       ) : null}

@@ -4,7 +4,7 @@ import { ParticleCertificationConsole } from '../../../src/components/operator/p
 import { CustomerShell } from '../../../src/components/shell';
 
 export const metadata: Metadata = {
-  title: 'Particle compatibility certification',
+  title: 'Activate payments',
   robots: { index: false, follow: false },
 };
 

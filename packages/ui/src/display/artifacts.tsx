@@ -59,7 +59,7 @@ export interface PassFrameProps {
   merchant: string;
   title: string;
   date: string;
-  location: string;
+  location?: string;
   holder?: string;
   status?: string;
   children?: ReactNode;
@@ -87,7 +87,7 @@ export function PassFrame({
         <p className="ot-eyebrow">Your pass</p>
         <h2>{title}</h2>
         <p>{date}</p>
-        <p>{location}</p>
+        {location === undefined ? null : <p>{location}</p>}
       </div>
       <footer>
         <span>{holder ?? 'Pass holder'}</span>

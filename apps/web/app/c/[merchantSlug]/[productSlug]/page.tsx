@@ -21,7 +21,7 @@ export default async function ProductPage({
     return (
       <CustomerShell features={features} narrow={false}>
         <FeatureUnavailable
-          body="Public product data and payment providers are not configured for this environment."
+          body="This checkout cannot load securely right now. No account or payment action was started."
           title="Checkout is not available"
         />
       </CustomerShell>

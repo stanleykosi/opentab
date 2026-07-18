@@ -804,7 +804,7 @@ describe('browser application service boundaries', () => {
     expect(account.submitValidated).toHaveBeenCalledTimes(1);
   });
 
-  it('bootstraps the fixed canary through durable Magic-direct operations without duplicate sends', async () => {
+  it('creates the fixed activation item through durable Magic-direct operations without duplicate sends', async () => {
     type BootstrapAction = 'create_merchant' | 'create_product' | 'set_product_active';
     type OperationStatus = ReturnType<typeof contractOperationRecord>['status'];
     const profileScopeId = '0123456789abcdef0123456789abcdef01234567';
@@ -831,9 +831,9 @@ describe('browser application service boundaries', () => {
     const merchant = (active: boolean) => ({
       id: merchantId,
       ownerUserId: user.id,
-      slug: 'opentab-canary-11111111',
-      displayName: 'OpenTab Release Canary',
-      supportContact: 'OpenTab release operator',
+      slug: 'opentab-payments-11111111',
+      displayName: 'OpenTab Payments',
+      supportContact: 'OpenTab payment operator',
       payoutAddress: owner,
       status: active ? ('active' as const) : ('draft' as const),
       createdAt: '2026-07-14T01:00:00.000Z',
@@ -844,9 +844,9 @@ describe('browser application service boundaries', () => {
       merchantId,
       ...(productCreated ? { onchainProductId: '7' } : {}),
       version: '1',
-      slug: 'opentab-release-canary',
-      title: 'OpenTab 10¢ Release Canary',
-      description: 'A tiny release certification product.',
+      slug: 'opentab-payment-activation',
+      title: 'OpenTab Payment Activation',
+      description: 'The one-time project payment used to verify settlement.',
       unitPriceBaseUnits: '100000',
       maxSupply: '100',
       sold: '0',

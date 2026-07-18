@@ -1,6 +1,7 @@
 import { LinkButton } from '@opentab/ui';
 import type { ReactNode } from 'react';
 import type { FrontendFeatureState } from '../client/view-models';
+import { LiveAuthGate } from './live-auth-gate';
 import { SessionControl } from './session-control';
 
 export function BrandSymbol() {
@@ -123,7 +124,19 @@ export function MerchantShell({
             {features.mode === 'deterministic' ? 'Daylight Room' : 'Merchant account'}
           </a>
         </header>
-        <main id="main-content">{children}</main>
+        <main id="main-content">
+          {features.mode === 'live' ? (
+            <LiveAuthGate
+              authBody="Continue with Google or email to manage your products, orders, refunds, and payouts."
+              authTitle="Sign in to manage your merchant account"
+              requireMerchant
+            >
+              {children}
+            </LiveAuthGate>
+          ) : (
+            children
+          )}
+        </main>
       </div>
       <nav aria-label="Merchant mobile navigation" className="merchant-bottom-nav">
         {merchantLinks.map((link) => (
@@ -165,7 +178,7 @@ export function CustomerShell({
 export function FeatureUnavailable({ title, body }: { title: string; body: string }) {
   return (
     <section className="unavailable-panel">
-      <p className="eyebrow">Live path safely disabled</p>
+      <p className="eyebrow">Action unavailable</p>
       <h1>{title}</h1>
       <p>{body}</p>
       <p className="support-copy">No provider action was started and no funds moved.</p>

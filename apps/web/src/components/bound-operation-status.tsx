@@ -50,9 +50,9 @@ export function BoundOperationStatus({
   if (controller.state === 'confirmed') {
     return (
       <section className="operation-approval">
-        <CanonicalStatus label="Canonically confirmed" tone="confirmed" />
+        <CanonicalStatus label="Confirmed" tone="confirmed" />
         <h2>{noun} confirmed</h2>
-        <p>The indexed canonical contract event is now the authoritative record.</p>
+        <p>The confirmed settlement event is now the authoritative record.</p>
       </section>
     );
   }
@@ -72,7 +72,7 @@ export function BoundOperationStatus({
           <InlineAlert title="Do not approve this again" tone="warning">
             <p>
               The operation may have moved. Its durable provider reference is saved while OpenTab
-              reconciles canonical settlement.
+              verifies settlement.
             </p>
           </InlineAlert>
         ) : null}
@@ -96,7 +96,7 @@ export function BoundOperationStatus({
             },
             {
               id: 'canonical',
-              label: 'Canonical event confirmed',
+              label: 'Settlement confirmed',
               status: uncertain
                 ? 'attention'
                 : controller.state === 'confirming'
@@ -107,7 +107,7 @@ export function BoundOperationStatus({
         />
         {controller.state === 'confirming' || uncertain ? (
           <Button onClick={() => void controller.check()} variant="secondary">
-            Check canonical status
+            Check confirmation status
           </Button>
         ) : null}
       </section>

@@ -166,7 +166,7 @@ export function LiveBalancePage({
       />
       <section className="order-ledger">
         <h2>Withdrawal history</h2>
-        <p>No withdrawal is labeled complete until its canonical event is confirmed.</p>
+        <p>No withdrawal is labeled complete until its settlement event is confirmed.</p>
         <dl className="summary-ledger">
           <div>
             <dt>Previously withdrawn</dt>

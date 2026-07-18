@@ -42,7 +42,7 @@ export class ParticleReleasePaymentPolicy {
     ) {
       throw new AppError(
         'FEATURE_DISABLED',
-        'Only the profile-bound tiny canary product is enabled before certification.',
+        'Only the profile-bound activation item is enabled before customer checkout opens.',
       );
     }
   }

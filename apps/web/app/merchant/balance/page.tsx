@@ -17,7 +17,7 @@ export default function BalancePage() {
     <MerchantShell active="/merchant/balance" features={features}>
       {features.mode === 'live-unavailable' ? (
         <FeatureUnavailable
-          body="Settlement balances require authenticated canonical projections and fresh contract reads."
+          body="Settlement balances require authenticated, confirmed records and fresh contract reads."
           title="Balance unavailable"
         />
       ) : features.mode === 'live' ? (
@@ -59,7 +59,7 @@ export default function BalancePage() {
           <WithdrawalFlow dashboard={demoDashboard} features={features} />
           <section className="order-ledger">
             <h2>Withdrawal history</h2>
-            <p>No withdrawal is labeled complete until its canonical event is confirmed.</p>
+            <p>No withdrawal is labeled complete until its settlement event is confirmed.</p>
             <dl className="summary-ledger">
               <div>
                 <dt>Previously withdrawn</dt>

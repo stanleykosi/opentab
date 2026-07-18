@@ -188,7 +188,6 @@ describe('live checkout boundary', () => {
       }),
       remove: vi.fn(),
     };
-
     render(
       <CheckoutWorkflow
         authActions={{ google: vi.fn(), email }}
@@ -210,6 +209,7 @@ describe('live checkout boundary', () => {
     expect(
       await screen.findByRole('heading', { name: 'Prepare your account for one-tap payments' }),
     ).toBeVisible();
+    expect(screen.queryByText(/Arbitrum ETH|acquire gas/i)).not.toBeInTheDocument();
     const eligibility = await screen.findByRole('button', { name: 'Check setup eligibility' });
     await waitFor(() => expect(eligibility).toBeEnabled());
     fireEvent.click(eligibility);

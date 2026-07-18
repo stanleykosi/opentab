@@ -10,6 +10,7 @@ import {
   type BrowserApplicationService,
   getBrowserApplicationService,
 } from '../../application/browser-application-service';
+import { AccountSetupPanel } from '../account-setup-panel';
 import { AuthPanel } from '../auth-panel';
 import { PageSkeleton } from '../states';
 
@@ -21,7 +22,7 @@ interface CanaryReference {
 
 function readCanaryReference(): CanaryReference | undefined {
   try {
-    const value = window.sessionStorage.getItem('opentab.particle-certification.preview');
+    const value = window.localStorage.getItem('opentab.particle-certification.preview');
     if (value === null) return undefined;
     const parsed = JSON.parse(value) as Partial<CanaryReference>;
     if (
@@ -45,7 +46,14 @@ function readCanaryReference(): CanaryReference | undefined {
 function safeMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : 'Certification stopped safely before another provider action was started.';
+    : 'Activation stopped safely before another provider action was started.';
+}
+
+function formatUsdcBaseUnits(value: string): string {
+  const baseUnits = BigInt(value);
+  const whole = baseUnits / 1_000_000n;
+  const fraction = (baseUnits % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '');
+  return fraction.length === 0 ? whole.toString() : `${whole}.${fraction}`;
 }
 
 export function ParticleCertificationConsole({
@@ -64,16 +72,14 @@ export function ParticleCertificationConsole({
   const [products, setProducts] = useState<MerchantProductListResponse['items']>([]);
   const [status, setStatus] = useState<ParticleCertificationStatus>();
   const [canary, setCanary] = useState<CanaryReference>();
-  const [pending, setPending] = useState<
-    'unlock' | 'product' | 'bootstrap' | 'preview' | 'canary' | undefined
-  >();
+  const [walletReady, setWalletReady] = useState(false);
+  const [pending, setPending] = useState<'unlock' | 'product' | 'prepare' | 'canary' | undefined>();
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<string>();
 
   const loadAuthenticatedState = useCallback(async () => {
     try {
       await service.restoreSession();
-      setAuth('ready');
       setWalletAddress(await service.getWalletOwner());
       const response = await service.listParticleCertificationProducts().catch(() => undefined);
       if (response !== undefined) {
@@ -87,6 +93,7 @@ export function ParticleCertificationConsole({
         setProductId((current) => current || candidates[0]?.id || '');
       }
       setCanary(readCanaryReference());
+      setAuth('ready');
     } catch {
       setAuth('required');
     }
@@ -111,57 +118,109 @@ export function ParticleCertificationConsole({
     }
   };
 
+  const markWalletReady = useCallback(() => {
+    setWalletReady(true);
+    setProgress('The embedded account is ready for the activation payment.');
+  }, []);
+
+  const prepareActivation = async () => {
+    if (status === undefined || productId.length === 0) return;
+    let nextStatus = status;
+    if (nextStatus.certification.stage === 'uncertified') {
+      if (!nextStatus.effectiveCapabilities.captureBootstrap) {
+        throw new Error('The server has not enabled the reviewed Particle activation policy.');
+      }
+      setProgress('Verifying the embedded account and payment configuration…');
+      nextStatus = await service.captureParticleCertificationBootstrap({
+        operatorToken,
+        productId,
+      });
+      setStatus(nextStatus);
+    }
+    if (nextStatus.certification.stage === 'bootstrap') {
+      if (!nextStatus.effectiveCapabilities.captureCanaryPreview) {
+        setProgress(
+          'Configuration is recorded. Enable the reviewed live payment policy, reload, and resume.',
+        );
+        return;
+      }
+      setProgress('Binding the exact activation route and server-approved payment…');
+      const result = await service.captureParticleCertificationCanaryPreview({
+        operatorToken,
+        productId,
+      });
+      setStatus(result.status);
+      setCanary(result);
+      setWalletReady(false);
+      setProgress('Activation checks are complete. Review the exact payment to continue.');
+    }
+  };
+
   if (auth === 'loading') return <PageSkeleton label="Restoring secure operator session" />;
   if (auth === 'required') {
     return (
       <AuthPanel
-        body="Use the Magic account that will run OpenTab’s single Particle canary. This is not repeated for customers."
+        body="Use the Magic account that will activate payments for this OpenTab project. Customers do not repeat this step."
         deterministic={false}
         onAuthenticated={() => void loadAuthenticatedState()}
         onEmailSignIn={async (email) => {
           await service.signInWithEmail(email, '/operator/particle');
         }}
         onGoogleSignIn={() => service.beginGoogleSignIn('/operator/particle')}
-        title="Authenticate the certification operator"
+        title="Authenticate the payment operator"
       />
     );
   }
 
   const stage = status?.certification.stage ?? 'locked';
   const canUseProduct = productId.length > 0;
+  const selectedProduct = products.find((product) => product.id === productId);
+  const canaryAmount =
+    selectedProduct === undefined
+      ? 'the selected product amount'
+      : `${formatUsdcBaseUnits(selectedProduct.unitPriceBaseUnits)} USDC`;
+  const activationState =
+    stage === 'certified'
+      ? 'Ready'
+      : stage === 'canary_ready'
+        ? 'Payment confirmation required'
+        : 'Preparing';
   return (
     <div className="operator-certification">
       <header>
-        <p className="eyebrow">One-time Particle control</p>
-        <h1>Certify Particle checkout</h1>
+        <p className="eyebrow">One-time payment control</p>
+        <h1>Activate payments</h1>
         <p>
-          Capture SDK compatibility once for this Particle project and contract deployment,
-          constrain one tiny canary, then unlock normal payments only after Railway confirms the
-          canonical Arbitrum event.
+          Complete one guided activation for this project. OpenTab enables customer checkout only
+          after the final payment has confirmed settlement proof.
         </p>
       </header>
 
-      <InlineAlert title="Not a customer step" tone="info">
-        Customers only sign in and pay. The delegate profile and response schemas are reusable
-        project-level evidence stored centrally in Supabase, not copied into Vercel or Railway
-        variables.
+      <InlineAlert title="One activation for the whole project" tone="info">
+        Customers only sign in and pay. OpenTab stores this project-level activation centrally in
+        Supabase and reuses it for every customer across ordinary redeploys.
+      </InlineAlert>
+
+      <InlineAlert title="One explicit payment confirmation" tone="info">
+        Funds move only at the final confirmation, which shows the selected amount and route fees.
+        Creating the fixed activation item separately may use a small network setup fee.
       </InlineAlert>
 
       {error ? (
-        <InlineAlert title="Certification stopped safely" tone="danger">
+        <InlineAlert title="Activation stopped safely" tone="danger">
           {error}
         </InlineAlert>
       ) : null}
       {progress ? (
-        <InlineAlert title="Live canary progress" tone="info">
+        <InlineAlert title="Activation progress" tone="info">
           <span aria-live="polite">{progress}</span>
         </InlineAlert>
       ) : null}
 
       <section className="settings-section" aria-labelledby="operator-access-title">
         <div>
-          <p className="eyebrow">Step 1</p>
-          <h2 id="operator-access-title">Unlock operator controls</h2>
+          <p className="eyebrow">Secure access</p>
+          <h2 id="operator-access-title">Authorize payment activation</h2>
           <p>The token stays in this tab and is never persisted by OpenTab.</p>
         </div>
         <form
@@ -174,13 +233,33 @@ export function ParticleCertificationConsole({
               ]);
               setStatus(nextStatus);
               setWalletAddress(owner);
+              if (nextStatus.certification.stage === 'canary_ready') {
+                const boundProduct = products.find(
+                  (product) =>
+                    product.onchainProductId === nextStatus.certification.canaryProductId,
+                );
+                if (boundProduct === undefined) {
+                  throw new Error(
+                    'The bound activation item is unavailable. Refresh the page and resume safely.',
+                  );
+                }
+                setProductId(boundProduct.id);
+                setProgress('Recovering the durable activation record…');
+                const recovered = await service.captureParticleCertificationCanaryPreview({
+                  operatorToken,
+                  productId: boundProduct.id,
+                });
+                setStatus(recovered.status);
+                setCanary(recovered);
+                setProgress('Activation record recovered. No duplicate payment was created.');
+              }
             });
           }}
         >
           <TextField
             autoComplete="off"
             id="particle-certification-token"
-            label="Certification token"
+            label="Operator token"
             onChange={(event) => setOperatorToken(event.currentTarget.value)}
             required
             type="password"
@@ -189,159 +268,183 @@ export function ParticleCertificationConsole({
           <Button
             disabled={operatorToken.length < 32}
             loading={pending === 'unlock'}
-            loadingLabel="Verifying operator access"
+            loadingLabel="Verifying secure access"
             type="submit"
           >
-            Unlock certification
+            Continue
           </Button>
         </form>
       </section>
 
       {status ? (
-        <section className="settings-section" aria-labelledby="canary-product-title">
+        <section className="settings-section" aria-labelledby="payment-activation-title">
           <div>
-            <p className="eyebrow">Step 2</p>
-            <h2 id="canary-product-title">Bind the tiny canary</h2>
-            <p>Choose one active onchain product priced at 1 USDC or less.</p>
+            <p className="eyebrow">
+              {stage === 'certified' ? 'Activation complete' : 'Activation in progress'}
+            </p>
+            <h2 id="payment-activation-title">Activate customer payments</h2>
+            <p>
+              Continue resumes the same durable activation record. OpenTab will not create a second
+              payment when an earlier attempt already exists.
+            </p>
           </div>
           <div className="operator-certification__actions">
-            <InlineAlert title="Fund this Magic EOA once" tone="info">
+            {stage !== 'certified' && products.length > 0 ? (
+              <>
+                <TextField
+                  disabled={stage === 'canary_ready'}
+                  id="particle-canary-product"
+                  label="Activation item"
+                  list="particle-canary-products"
+                  onChange={(event) => setProductId(event.currentTarget.value)}
+                  placeholder="prd_…"
+                  required
+                  value={productId}
+                />
+                <datalist id="particle-canary-products">
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.title} — {formatUsdcBaseUnits(product.unitPriceBaseUnits)} USDC
+                    </option>
+                  ))}
+                </datalist>
+              </>
+            ) : null}
+
+            {stage !== 'certified' && products.length === 0 ? (
+              <div className="operator-certification__bootstrap-product">
+                <p>
+                  OpenTab needs one fixed 0.10 USDC activation item. Creating it requires three
+                  constrained Magic confirmations and the normal setup fee.
+                </p>
+                <Button
+                  loading={pending === 'product'}
+                  loadingLabel="Creating activation item"
+                  onClick={() =>
+                    void run('product', async () => {
+                      setProgress('Creating the project activation item…');
+                      const result = await service.bootstrapParticleCertificationCanary({
+                        operatorToken,
+                        onProgress: () => setProgress('Creating the project activation item…'),
+                      });
+                      setWalletAddress(result.ownerAddress);
+                      setProducts([result.product]);
+                      setProductId(result.product.id);
+                      setProgress('The 0.10 USDC activation item is selected.');
+                    })
+                  }
+                >
+                  Create activation item
+                </Button>
+              </div>
+            ) : null}
+
+            {stage === 'uncertified' || stage === 'bootstrap' ? (
+              <Button
+                disabled={
+                  !canUseProduct ||
+                  (stage === 'uncertified'
+                    ? !status.effectiveCapabilities.captureBootstrap
+                    : !status.effectiveCapabilities.captureCanaryPreview)
+                }
+                loading={pending === 'prepare'}
+                loadingLabel="Continuing activation"
+                onClick={() => void run('prepare', prepareActivation)}
+              >
+                Continue payment activation
+              </Button>
+            ) : null}
+
+            {(stage === 'uncertified' && !status.effectiveCapabilities.captureBootstrap) ||
+            (stage === 'bootstrap' && !status.effectiveCapabilities.captureCanaryPreview) ? (
+              <InlineAlert title="Activation is temporarily paused" tone="warning">
+                Enable the reviewed live payment policy on Vercel, then reload and continue.
+                Customer checkout remains safely closed.
+              </InlineAlert>
+            ) : null}
+
+            {stage === 'canary_ready' ? (
+              <>
+                <InlineAlert
+                  title={`Final confirmation: ${canaryAmount} plus route fees`}
+                  tone="warning"
+                >
+                  Confirm this payment once. OpenTab then waits for Railway to verify settlement and
+                  issue the pass before enabling customer checkout.
+                </InlineAlert>
+                {canary === undefined ? (
+                  <InlineAlert title="Activation record could not be recovered" tone="warning">
+                    Refresh and continue. OpenTab uses the existing durable payment attempt and will
+                    not submit a duplicate.
+                  </InlineAlert>
+                ) : null}
+                {canary !== undefined && !walletReady ? (
+                  <AccountSetupPanel onReady={markWalletReady} service={service} />
+                ) : null}
+                {walletReady ? (
+                  <InlineAlert title="Account ready" tone="success">
+                    The embedded account and independent readiness checks agree.
+                  </InlineAlert>
+                ) : null}
+                <Button
+                  disabled={
+                    !status.effectiveCapabilities.runCanary || canary === undefined || !walletReady
+                  }
+                  loading={pending === 'canary'}
+                  loadingLabel="Confirming activation payment"
+                  onClick={() =>
+                    void run('canary', async () => {
+                      if (canary === undefined || !walletReady) return;
+                      const next = await service.runAndCertifyParticleCanary({
+                        operatorToken,
+                        checkoutSessionId: canary.checkoutSessionId,
+                        expectedPaymentAttemptId: canary.paymentAttemptId,
+                        onProgress: () =>
+                          setProgress('Activation payment is processing. Waiting for settlement…'),
+                      });
+                      setStatus(next);
+                      setProgress('Activation is complete and the customer payment gate is open.');
+                    })
+                  }
+                >
+                  Confirm activation payment
+                </Button>
+              </>
+            ) : null}
+
+            {stage === 'certified' ? (
+              <InlineAlert title="Customer payments are active" tone="success">
+                New customers can now use the normal Magic + Particle checkout. Every payment still
+                requires confirmed settlement proof before OpenTab marks it paid.
+              </InlineAlert>
+            ) : null}
+
+            <details className="disclosure">
+              <summary>Funding and technical details</summary>
               <p>
-                Send a small amount of ETH on Arbitrum One to pay gas for merchant and product
-                setup. This is the same authenticated Magic address—not a new operator wallet.
+                This Magic address may need Arbitrum ETH for one-time account or item setup and a
+                supported non-Arbitrum balance for the final routed payment.
               </p>
               <a
                 href={`https://arbiscan.io/address/${walletAddress}`}
                 rel="noreferrer"
                 target="_blank"
               >
-                {walletAddress || 'Loading Magic EOA…'}
+                {walletAddress || 'Loading embedded address…'}
               </a>
-            </InlineAlert>
-            <TextField
-              id="particle-canary-product"
-              label="OpenTab product ID"
-              list="particle-canary-products"
-              onChange={(event) => setProductId(event.currentTarget.value)}
-              placeholder="prd_…"
-              required
-              value={productId}
-            />
-            <datalist id="particle-canary-products">
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.title} — {product.unitPriceBaseUnits} base units
-                </option>
-              ))}
-            </datalist>
-            <dl className="component-status-list">
-              <div>
-                <dt>Particle profile</dt>
-                <dd>{status.profileScopeId.slice(0, 12)}</dd>
-              </div>
-              <div>
-                <dt>Stage</dt>
-                <dd>{stage.replace('_', ' ')}</dd>
-              </div>
-            </dl>
-            {products.length === 0 ? (
-              <div className="operator-certification__bootstrap-product">
-                <p>
-                  No eligible onchain product exists. OpenTab can create and activate the fixed 0.10
-                  USDC release canary with three constrained Magic confirmations.
-                </p>
-                <Button
-                  loading={pending === 'product'}
-                  loadingLabel="Creating canonical canary"
-                  onClick={() =>
-                    void run('product', async () => {
-                      setProgress('Checking the certification merchant and canary product…');
-                      const result = await service.bootstrapParticleCertificationCanary({
-                        operatorToken,
-                        onProgress: setProgress,
-                      });
-                      setWalletAddress(result.ownerAddress);
-                      setProducts([result.product]);
-                      setProductId(result.product.id);
-                      setProgress('The fixed 0.10 USDC canary is active and selected.');
-                    })
-                  }
-                >
-                  Create 0.10 USDC canary
-                </Button>
-              </div>
-            ) : null}
+              <dl className="component-status-list">
+                <div>
+                  <dt>Particle profile</dt>
+                  <dd>{status.profileScopeId.slice(0, 12)}</dd>
+                </div>
+                <div>
+                  <dt>Activation status</dt>
+                  <dd>{activationState}</dd>
+                </div>
+              </dl>
+            </details>
           </div>
         </section>
-      ) : null}
-
-      {status ? (
-        <section className="operator-certification__rail" aria-label="Certification actions">
-          <Button
-            disabled={stage !== 'uncertified' || !canUseProduct}
-            loading={pending === 'bootstrap'}
-            loadingLabel="Capturing bootstrap compatibility"
-            onClick={() =>
-              void run('bootstrap', async () => {
-                setProgress('Verifying Magic owner continuity and Particle EIP-7702 deployment…');
-                const next = await service.captureParticleCertificationBootstrap({
-                  operatorToken,
-                  productId,
-                });
-                setStatus(next);
-                setProgress('Bootstrap profile stored for this Particle project.');
-              })
-            }
-          >
-            1. Capture bootstrap
-          </Button>
-          <Button
-            disabled={!['bootstrap', 'canary_ready'].includes(stage) || !canUseProduct}
-            loading={pending === 'preview'}
-            loadingLabel="Validating constrained preview"
-            onClick={() =>
-              void run('preview', async () => {
-                setProgress('Preparing a non-submitting, server-bound Particle preview…');
-                const result = await service.captureParticleCertificationCanaryPreview({
-                  operatorToken,
-                  productId,
-                });
-                setStatus(result.status);
-                setCanary(result);
-                setProgress('Canary preview approved. No funds moved.');
-              })
-            }
-          >
-            2. Approve canary preview
-          </Button>
-          <Button
-            disabled={stage !== 'canary_ready' || canary === undefined}
-            loading={pending === 'canary'}
-            loadingLabel="Submitting and reconciling canary"
-            onClick={() =>
-              void run('canary', async () => {
-                if (canary === undefined) return;
-                const next = await service.runAndCertifyParticleCanary({
-                  operatorToken,
-                  checkoutSessionId: canary.checkoutSessionId,
-                  expectedPaymentAttemptId: canary.paymentAttemptId,
-                  onProgress: setProgress,
-                });
-                setStatus(next);
-                setProgress('Particle profile certified. Normal payment policy is now active.');
-              })
-            }
-          >
-            3. Pay tiny canary and certify
-          </Button>
-        </section>
-      ) : null}
-
-      {stage === 'certified' ? (
-        <InlineAlert title="Particle payment gate is certified" tone="success">
-          New customers can now use the normal Magic + Particle checkout. Payment still becomes
-          final only after Railway indexes the matching canonical OrderPaid event.
-        </InlineAlert>
       ) : null}
     </div>
   );

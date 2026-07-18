@@ -11,6 +11,7 @@ type AccountSetupService = Pick<
   | 'evaluateWalletPreparation'
   | 'getSponsorChallengeConfig'
   | 'prepareWalletAccount'
+  | 'prepareSelfFundedWalletAccount'
 >;
 
 export function AccountSetupPanel({
@@ -20,7 +21,7 @@ export function AccountSetupPanel({
   onReady(): void;
   service: AccountSetupService;
 }) {
-  const [stage, setStage] = useState<'checking' | 'eligibility' | 'grant'>('checking');
+  const [stage, setStage] = useState<'checking' | 'choice' | 'grant'>('checking');
   const [siteKey, setSiteKey] = useState<string>();
   const [token, setToken] = useState<string>();
   const [pending, setPending] = useState(false);
@@ -37,43 +38,64 @@ export function AccountSetupPanel({
           return;
         }
         setSiteKey(challenge.siteKey);
-        setStage('eligibility');
+        setStage('choice');
       })
       .catch((caught: unknown) => {
         if (!active) return;
         setError(
           caught instanceof Error ? caught.message : 'Account readiness could not be checked.',
         );
-        setStage('eligibility');
+        setStage('choice');
       });
     return () => {
       active = false;
     };
   }, [onReady, service]);
 
-  const continueSetup = async () => {
+  const confirmReadiness = async (challengeToken?: string) => {
+    const readiness =
+      challengeToken === undefined
+        ? await service.prepareWalletAccount()
+        : await service.prepareWalletAccount(challengeToken);
+    if (!readiness.ready || readiness.blockers.length > 0) {
+      throw new Error('Account setup is not confirmed yet.');
+    }
+    onReady();
+  };
+
+  const continueSelfFundedSetup = async () => {
+    if (stage === 'checking') return;
+    setPending(true);
+    setError(undefined);
+    try {
+      const readiness = await service.prepareSelfFundedWalletAccount();
+      if (!readiness.ready || readiness.blockers.length > 0) {
+        throw new Error('Account setup is not confirmed yet.');
+      }
+      onReady();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Account setup could not continue.');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const continueSponsoredSetup = async () => {
     if (stage === 'checking' || token === undefined) return;
     setPending(true);
     setError(undefined);
     try {
-      if (stage === 'eligibility') {
+      if (stage === 'choice') {
         const result = await service.evaluateWalletPreparation(token);
+        setToken(undefined);
         if (result.grantRequired) {
-          setToken(undefined);
           setStage('grant');
           return;
         }
-        const readiness = await service.prepareWalletAccount();
-        if (!readiness.ready || readiness.blockers.length > 0) {
-          throw new Error('Account setup is not canonically confirmed yet.');
-        }
+        await confirmReadiness();
       } else {
-        const readiness = await service.prepareWalletAccount(token);
-        if (!readiness.ready || readiness.blockers.length > 0) {
-          throw new Error('Account setup is not canonically confirmed yet.');
-        }
+        await confirmReadiness(token);
       }
-      onReady();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Account setup could not continue.');
     } finally {
@@ -89,9 +111,22 @@ export function AccountSetupPanel({
         <p>Your address stays the same. Every commercial operation still requires exact review.</p>
       </header>
       {stage === 'checking' ? <p aria-live="polite">Checking account readiness…</p> : null}
+      {stage !== 'checking' ? (
+        <InlineAlert title="Use your existing Arbitrum fee balance" tone="info">
+          <p>
+            If this address has enough ETH on Arbitrum, prepare it directly. OpenTab still uses the
+            exact server-approved account setup plan and verifies the result onchain.
+          </p>
+        </InlineAlert>
+      ) : null}
+      {stage !== 'checking' ? (
+        <Button loading={pending} onClick={() => void continueSelfFundedSetup()} size="large">
+          Prepare with my Arbitrum ETH
+        </Button>
+      ) : null}
       {stage !== 'checking' && siteKey === undefined ? (
-        <InlineAlert title="Protected setup unavailable" tone="danger">
-          <p>No setup grant was requested because the security challenge is not configured.</p>
+        <InlineAlert title="Sponsored setup unavailable" tone="info">
+          <p>The optional setup grant is off. Self-funded account preparation remains available.</p>
         </InlineAlert>
       ) : null}
       {stage !== 'checking' && siteKey !== undefined ? (
@@ -107,14 +142,15 @@ export function AccountSetupPanel({
           <p>{error}</p>
         </InlineAlert>
       )}
-      {stage === 'checking' ? null : (
+      {stage === 'checking' || siteKey === undefined ? null : (
         <Button
-          disabled={siteKey === undefined || token === undefined}
+          disabled={token === undefined}
           loading={pending}
-          onClick={() => void continueSetup()}
+          onClick={() => void continueSponsoredSetup()}
           size="large"
+          variant="secondary"
         >
-          {stage === 'eligibility' ? 'Check setup eligibility' : 'Prepare account'}
+          {stage === 'choice' ? 'Check sponsored setup' : 'Request one-time setup grant'}
         </Button>
       )}
     </section>

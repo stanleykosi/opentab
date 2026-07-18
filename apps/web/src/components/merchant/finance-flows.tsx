@@ -68,6 +68,10 @@ function safeMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function maskedPayoutAddress(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
 export function RefundFlow({
   features,
   initialResult,
@@ -185,7 +189,7 @@ export function RefundFlow({
         <CanonicalStatus label={full ? 'Refunded' : 'Partially refunded'} tone="refunded" />
         <h2>Refund confirmed</h2>
         <p>
-          The canonical refund event confirms <MoneyAmount baseUnits={amountBaseUnits} /> returned.
+          The confirmed refund event records <MoneyAmount baseUnits={amountBaseUnits} /> returned.
           The original receipt remains visible with its updated status.
         </p>
       </section>
@@ -289,7 +293,7 @@ export function RefundFlow({
           <InlineAlert title="Confirm exact refund" tone="warning">
             <p>
               Refund <MoneyAmount baseUnits={amountBaseUnits} /> to this order’s payer. This cannot
-              be undone after canonical execution.
+              be undone after confirmed execution.
             </p>
           </InlineAlert>
           {preview === undefined ? null : (
@@ -374,6 +378,7 @@ export function WithdrawalFlow({
     features.withdrawals &&
     fresh &&
     (features.mode === 'deterministic' || (features.mode === 'live' && liveActions !== undefined));
+  const payoutAddress = maskedPayoutAddress(dashboard.payoutAddress);
 
   const prepare = async () => {
     if (amountBaseUnits === undefined) return;
@@ -438,7 +443,9 @@ export function WithdrawalFlow({
         <h2>Funds sent</h2>
         <p>
           The confirmed withdrawal event records <MoneyAmount baseUnits={amountBaseUnits} /> sent to
-          the locked destination ending 91C0.
+          {payoutAddress === undefined
+            ? ' the configured merchant payout destination.'
+            : ` merchant payout ${payoutAddress}.`}
         </p>
       </section>
     );
@@ -511,9 +518,7 @@ export function WithdrawalFlow({
       ) : null}
       {!fresh ? (
         <InlineAlert title="Fresh settlement data required" tone="warning">
-          <p>
-            Withdrawal stays disabled until the indexed balance agrees with the canonical records.
-          </p>
+          <p>Withdrawal stays disabled until the indexed balance agrees with confirmed records.</p>
         </InlineAlert>
       ) : null}
       {features.mode === 'live' && liveActions === undefined ? (
@@ -538,7 +543,11 @@ export function WithdrawalFlow({
       <dl className="destination-lock">
         <div>
           <dt>Destination</dt>
-          <dd>Merchant payout ending 91C0</dd>
+          <dd>
+            {payoutAddress === undefined
+              ? 'Configured merchant payout destination'
+              : `Merchant payout ${payoutAddress}`}
+          </dd>
         </div>
         <div>
           <dt>Available</dt>

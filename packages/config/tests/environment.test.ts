@@ -542,21 +542,22 @@ describe('server environment safety', () => {
     ).toThrow(/local\/test/);
   });
 
-  it.each(['preview', 'staging', 'production'] as const)(
-    'rejects private-key order signing in %s even with the demo opt-in',
-    (environment) => {
-      expect(() =>
-        parseServerEnvironment({
-          APP_ENV: environment,
-          NEXT_PUBLIC_APP_ENV: environment,
-          NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
-          PROVIDER_MODE: 'live',
-          DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED: 'true',
-          ORDER_SIGNER_MODE: 'private-key',
-        }),
-      ).toThrow(/demo-mainnet/);
-    },
-  );
+  it.each([
+    'preview',
+    'staging',
+    'production',
+  ] as const)('rejects private-key order signing in %s even with the demo opt-in', (environment) => {
+    expect(() =>
+      parseServerEnvironment({
+        APP_ENV: environment,
+        NEXT_PUBLIC_APP_ENV: environment,
+        NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
+        PROVIDER_MODE: 'live',
+        DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED: 'true',
+        ORDER_SIGNER_MODE: 'private-key',
+      }),
+    ).toThrow(/demo-mainnet/);
+  });
 
   it('requires an explicit opt-in for demo-mainnet private-key order signing', () => {
     expect(() =>
@@ -930,19 +931,16 @@ describe('server environment safety', () => {
     }
   });
 
-  it('requires a strong server-only certification token for prod-like live Particle mode', () => {
+  it('keeps live Particle reads available without composing operator activation', () => {
     const base = {
       ...LIVE_CANARY_ENVIRONMENT,
       APP_ENV: 'demo-mainnet',
       NEXT_PUBLIC_APP_ENV: 'demo-mainnet',
     } as const;
-    const missing = ServerEnvironmentSchema.safeParse(base);
-    expect(missing.success).toBe(false);
-    if (!missing.success) {
-      expect(missing.error.issues.map((issue) => issue.path.join('.'))).toContain(
-        'PARTICLE_CERTIFICATION_TOKEN',
-      );
-    }
+    expect(() => parseServerEnvironment(base)).not.toThrow();
+    expect(() =>
+      parseServerEnvironment({ ...base, PARTICLE_CERTIFICATION_TOKEN: 'too-short' }),
+    ).toThrow(/PARTICLE_CERTIFICATION_TOKEN/);
     expect(() =>
       parseServerEnvironment({
         ...base,

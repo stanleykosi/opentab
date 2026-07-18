@@ -9,9 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default function SystemStatusPage() {
+  const features = getServerFeatureState();
   return (
-    <CustomerShell features={getServerFeatureState()}>
-      <StatusPage />
+    <CustomerShell features={features}>
+      <StatusPage features={features} />
     </CustomerShell>
   );
 }

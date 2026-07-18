@@ -13,7 +13,12 @@ import { ProductPageView } from './storefront';
 
 type LoadState =
   | { status: 'loading' }
-  | { status: 'ready'; record: PublicProductRecord; allowedMediaOrigins: readonly string[] }
+  | {
+      status: 'ready';
+      record: PublicProductRecord;
+      allowedMediaOrigins: readonly string[];
+      checkoutEnabled: boolean;
+    }
   | { status: 'error'; message: string; reference?: string };
 
 export function LiveProductPage({
@@ -25,7 +30,7 @@ export function LiveProductPage({
   merchantSlug: string;
   paymentsEnabled: boolean;
   productSlug: string;
-  service?: Pick<PublicSessionApplicationService, 'getPublicMediaOrigins' | 'getPublicProduct'>;
+  service?: Pick<PublicSessionApplicationService, 'getPublicCheckoutContext' | 'getPublicProduct'>;
 }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
 
@@ -33,10 +38,16 @@ export function LiveProductPage({
     let active = true;
     void Promise.all([
       service.getPublicProduct(merchantSlug, productSlug),
-      service.getPublicMediaOrigins(),
+      service.getPublicCheckoutContext(),
     ])
-      .then(([record, allowedMediaOrigins]) => {
-        if (active) setState({ status: 'ready', record, allowedMediaOrigins });
+      .then(([record, context]) => {
+        if (active)
+          setState({
+            status: 'ready',
+            record,
+            allowedMediaOrigins: context.allowedMediaOrigins,
+            checkoutEnabled: context.checkoutEnabled,
+          });
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -71,7 +82,7 @@ export function LiveProductPage({
   return (
     <ProductPageView
       mode="live"
-      paymentsEnabled={paymentsEnabled}
+      paymentsEnabled={paymentsEnabled && state.checkoutEnabled}
       product={mapPublicProductToView(state.record, {
         origin: window.location.origin,
         allowedMediaOrigins: state.allowedMediaOrigins,
