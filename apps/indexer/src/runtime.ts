@@ -9,7 +9,11 @@ import type { Logger } from 'pino';
 import { type IndexerRuntimeConfig, parseIndexerRuntimeConfig } from './config.js';
 import { OpenTabContractLogDecoder } from './decoder.js';
 import { FailoverArbitrumReadPort } from './failover.js';
-import { createIndexerHealthServer, IndexerHealthTracker } from './health.js';
+import {
+  createIndexerHealthServer,
+  IndexerHealthTracker,
+  type IndexerParticleProfileReadiness,
+} from './health.js';
 import { createPostgresIndexerPersistence } from './persistence.js';
 import { BullMqPaymentReconciliationRuntime } from './reconciliation-runtime.js';
 import { IndexerRunner } from './runner.js';
@@ -27,6 +31,7 @@ export interface IndexerRuntimeDependencies {
     readonly redisUrl: string;
     readonly operationsForOwner: (ownerAddress: EvmAddress) => UniversalOperationPort;
   };
+  readonly particleProfile?: IndexerParticleProfileReadiness;
   readonly close?: () => Promise<void>;
 }
 
@@ -79,13 +84,12 @@ export async function startIndexerRuntime(input: {
     );
   }
   if (
-    config.writesEnabled &&
-    config.reconciliationEnabled &&
-    dependencies.reconciliation === undefined
+    dependencies.particleProfile !== undefined &&
+    dependencies.particleProfile.profileScopeId !== config.profileScopeId
   ) {
     throw new AppError(
       'CONFIGURATION_INVALID',
-      'Enabled indexer reconciliation dependencies were not injected.',
+      'The loaded Particle profile is bound to a different compatibility scope.',
     );
   }
 
@@ -147,6 +151,9 @@ export async function startIndexerRuntime(input: {
     maxReadyLagBlocks: config.maxReadyLagBlocks,
     staleAfterMs: config.staleAfterMs,
     maxConsecutiveFailures: config.maxConsecutiveFailures,
+    ...(dependencies.particleProfile === undefined
+      ? {}
+      : { particleProfile: dependencies.particleProfile }),
   });
   const healthServer = createIndexerHealthServer({
     tracker: health,
@@ -214,6 +221,14 @@ export async function startIndexerRuntime(input: {
     const completion = (async () => {
       try {
         const result = await scanner.scanOnce();
+        if (result.kind === 'lease_standby') {
+          health.recordStandby();
+          throw new AppError(
+            'INDEXER_LAGGING',
+            'The run-once indexer could not acquire the stream lease.',
+            { retryable: true },
+          );
+        }
         const sponsorResult = await sponsorReconciler?.reconcileOnce();
         health.recordSuccess(result);
         input.logger.info(
@@ -250,6 +265,16 @@ export async function startIndexerRuntime(input: {
           },
         }),
     onError: (error) => input.logger.error({ err: error }, 'Indexer scan failed'),
+    onStandby: (result) =>
+      input.logger.info(
+        { stream: config.stream, nextBlock: result.nextBlock.toString() },
+        'OpenTab indexer is standing by for the active stream lease',
+      ),
+    onLeaseAcquired: (result) =>
+      input.logger.info(
+        { stream: config.stream, nextBlock: result.nextBlock.toString() },
+        'OpenTab indexer resumed after stream lease handoff',
+      ),
   });
   const completion = runner.run(controller.signal).finally(close);
   input.logger.info(

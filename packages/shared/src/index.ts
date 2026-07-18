@@ -11,6 +11,7 @@ export * from './ids.js';
 export * from './judge.js';
 export * from './merchant.js';
 export * from './money.js';
+export * from './particle-certification.js';
 export * from './provider.js';
 export * from './split.js';
 

@@ -179,7 +179,10 @@ describe('bounded generated-ABI operation templates', () => {
         expiresAt: expiry,
       });
       const template = createMerchantProductOperationTemplate(binding);
-      expect(template).toMatchObject({ kind: 'product_mutation', ownerAddress: owner });
+      const expectedKind = mutation.action.includes('merchant')
+        ? 'merchant_mutation'
+        : 'product_mutation';
+      expect(template).toMatchObject({ kind: expectedKind, ownerAddress: owner });
       expect(template.calls).toHaveLength(1);
       expect(template.calls[0]).toMatchObject({ to: checkout, valueWei: '0' });
       const decoded = decodeFunctionData({

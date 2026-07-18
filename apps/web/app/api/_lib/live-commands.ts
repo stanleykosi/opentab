@@ -41,6 +41,7 @@ import {
   BaseUnitAmountSchema,
   BoundOperationTemplateSchema,
   CheckoutSessionIdSchema,
+  type CurrentUser,
   DelegationStatusSchema,
   EvidenceDigestSchema,
   EvmAddressSchema,
@@ -89,6 +90,7 @@ type Context = Parameters<BackendApiCommandPort['createMerchant']>[0];
 interface SubmissionRegistrationState {
   readonly status: string;
   readonly providerOperationId?: string;
+  readonly transactionHash?: string;
 }
 
 function submissionRegistrationState(
@@ -104,15 +106,18 @@ function submissionRegistrationState(
   const record = value as Readonly<Record<string, unknown>>;
   const status = record.status;
   const providerOperationId = record.providerOperationId;
+  const transactionHash = record.transactionHash;
   if (
     typeof status !== 'string' ||
-    (providerOperationId !== undefined && typeof providerOperationId !== 'string')
+    (providerOperationId !== undefined && typeof providerOperationId !== 'string') ||
+    (transactionHash !== undefined && typeof transactionHash !== 'string')
   ) {
     throw new AppError('INTERNAL_ERROR', `${resourceLabel} state is invalid.`);
   }
   return {
     status,
     ...(providerOperationId === undefined ? {} : { providerOperationId }),
+    ...(transactionHash === undefined ? {} : { transactionHash }),
   };
 }
 
@@ -122,9 +127,20 @@ function assertExistingSubmissionRegistration(input: {
   readonly requestedStatus: 'submitted' | 'submitted_unknown';
   readonly submittedStatus?: 'submitted' | 'confirming';
   readonly requestedProviderOperationId?: string;
+  readonly requestedTransactionHash?: string;
   readonly allowedTransitionStatuses?: readonly string[];
 }): { readonly idempotent: boolean } {
   const current = submissionRegistrationState(input.current, input.resourceLabel);
+  if (
+    input.requestedTransactionHash !== undefined &&
+    current.transactionHash !== undefined &&
+    current.transactionHash.toLowerCase() !== input.requestedTransactionHash.toLowerCase()
+  ) {
+    throw new AppError(
+      'IDEMPOTENCY_CONFLICT',
+      `A different transaction is already attached to ${input.resourceLabel}.`,
+    );
+  }
   const settledStatus =
     input.requestedStatus === 'submitted'
       ? (input.submittedStatus ?? 'submitted')
@@ -185,6 +201,12 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
       readonly createProduct: CreateProductUseCase;
       readonly createCheckoutSession: CreateCheckoutSessionUseCase;
       readonly createPaymentAttempt: CreatePaymentAttemptUseCase;
+      readonly authorizePaymentSubmission?: (input: {
+        readonly actor: CurrentUser;
+        readonly workflow: NonNullable<
+          Awaited<ReturnType<BackendApiQueryPort['getPaymentWorkflowForActor']>>
+        >;
+      }) => void | Promise<void>;
       readonly recordPreparedAttempt: RecordPreparedAttemptUseCase;
       readonly startSubmission: StartSubmissionUseCase;
       readonly attachSubmission: AttachSubmissionUseCase;
@@ -754,13 +776,26 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
     return this.#idempotent(
       input,
       `payment-submission:start:${input.actor.id}:${attemptId}`,
-      async () => ({
-        attempt: await this.dependencies.startSubmission.execute({
+      async () => {
+        const workflow = await this.dependencies.queries.getPaymentWorkflowForActor(
           attemptId,
+          input.actor,
+        );
+        if (workflow === undefined) {
+          throw new AppError('NOT_FOUND', 'The payment attempt was not found.');
+        }
+        await this.dependencies.authorizePaymentSubmission?.({
           actor: input.actor,
-          ...body,
-        }),
-      }),
+          workflow,
+        });
+        return {
+          attempt: await this.dependencies.startSubmission.execute({
+            attemptId,
+            actor: input.actor,
+            ...body,
+          }),
+        };
+      },
     );
   }
 
@@ -1484,6 +1519,26 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
     input: Parameters<BackendApiCommandPort['registerContractOperationSubmission']>[0],
   ) {
     const body = ContractOperationSubmissionBodySchema.parse(input.body);
+    const expectedMagicDirectId = `magic-direct:${input.operationId}`;
+    if (
+      body.providerOperationId.startsWith('magic-direct:') &&
+      body.providerOperationId !== expectedMagicDirectId
+    ) {
+      throw new AppError(
+        'OPERATION_PLAN_INVALID',
+        'The Magic transaction reference does not match the contract operation.',
+      );
+    }
+    if (
+      body.status !== 'submission_started' &&
+      body.providerOperationId === expectedMagicDirectId &&
+      body.transactionHash === undefined
+    ) {
+      throw new AppError(
+        'OPERATION_PLAN_INVALID',
+        'A Magic-direct submission must persist its transaction hash.',
+      );
+    }
     return this.#idempotent(
       input,
       `contract-operation:submission:${input.operationId}:${body.status}`,
@@ -1519,6 +1574,9 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
             resourceLabel: 'The contract operation',
             requestedStatus: body.status,
             requestedProviderOperationId: body.providerOperationId,
+            ...(body.transactionHash === undefined
+              ? {}
+              : { requestedTransactionHash: body.transactionHash }),
             ...(body.status === 'submitted'
               ? { allowedTransitionStatuses: ['submission_started', 'submitted_unknown'] }
               : {}),

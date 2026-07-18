@@ -6,6 +6,7 @@ import {
   CurrentUserSchema,
   EvidenceDigestSchema,
   EvmAddressSchema,
+  TransactionHashSchema,
   UserIdSchema,
 } from '@opentab/shared';
 import { eq, inArray } from 'drizzle-orm';
@@ -121,15 +122,43 @@ describe.skipIf(databaseUrl === undefined)('persisted contract operation transit
       operationId: operation.id,
       status: 'submitted_unknown',
       providerOperationId: 'provider-operation-one',
+      transactionHash: TransactionHashSchema.parse(`0x${'4'.repeat(64)}`),
     });
-    expect(unknown.status).toBe('submitted_unknown');
+    expect(unknown).toMatchObject({
+      status: 'submitted_unknown',
+      transactionHash: `0x${'4'.repeat(64)}`,
+    });
+    await expect(
+      store.registerContractOperationSubmission({
+        actor,
+        operationId: operation.id,
+        status: 'submitted_unknown',
+        providerOperationId: 'provider-operation-one',
+        transactionHash: TransactionHashSchema.parse(`0x${'4'.repeat(64)}`),
+      }),
+    ).resolves.toMatchObject({
+      status: 'submitted_unknown',
+      transactionHash: `0x${'4'.repeat(64)}`,
+    });
+    await expect(
+      store.registerContractOperationSubmission({
+        actor,
+        operationId: operation.id,
+        status: 'submitted_unknown',
+        providerOperationId: 'provider-operation-one',
+        transactionHash: TransactionHashSchema.parse(`0x${'5'.repeat(64)}`),
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
     const submitted = await store.registerContractOperationSubmission({
       actor,
       operationId: operation.id,
       status: 'submitted',
       providerOperationId: 'provider-operation-one',
     });
-    expect(submitted.status).toBe('submitted');
+    expect(submitted).toMatchObject({
+      status: 'submitted',
+      transactionHash: `0x${'4'.repeat(64)}`,
+    });
     await expect(
       store.registerContractOperationSubmission({
         actor,
@@ -153,6 +182,18 @@ describe.skipIf(databaseUrl === undefined)('persisted contract operation transit
         status: 'submitted',
         providerOperationId: 'provider-operation-one',
       }),
-    ).resolves.toMatchObject({ status: 'submitted' });
+    ).resolves.toMatchObject({
+      status: 'submitted',
+      transactionHash: `0x${'4'.repeat(64)}`,
+    });
+    await expect(
+      store.registerContractOperationSubmission({
+        actor,
+        operationId: operation.id,
+        status: 'submitted',
+        providerOperationId: 'provider-operation-one',
+        transactionHash: TransactionHashSchema.parse(`0x${'6'.repeat(64)}`),
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
   });
 });

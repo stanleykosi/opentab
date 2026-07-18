@@ -188,6 +188,20 @@ where namespace.nspname = 'public'
   and not attribute.attisdropped
 \gexec
 
+-- Compatibility profiles and release bindings are directly read-only. The
+-- authenticated operator endpoint can append one stage only through the
+-- migration-owned, validating SECURITY DEFINER function.
+select format(
+  'revoke insert, update, delete, truncate, references, trigger on table public.particle_compatibility_profiles, public.particle_profile_release_bindings from %I',
+  :'runtime_role'
+)
+\gexec
+select format(
+  'grant execute on function public.certify_particle_compatibility_profile(jsonb, jsonb) to %I',
+  :'runtime_role'
+)
+\gexec
+
 -- Arbitrum/indexer projections and issued receipts are authoritative. The web
 -- role reads them but only the separately credentialed indexer may mutate them.
 select format(
@@ -336,7 +350,9 @@ select
         'indexer_cursors',
         'canonical_logs',
         'reorg_incidents',
-        'receipts'
+        'receipts',
+        'particle_compatibility_profiles',
+        'particle_profile_release_bindings'
       )
       and not (
         pg_catalog.has_table_privilege(role.oid, application_table.oid, 'SELECT')
@@ -367,6 +383,21 @@ select
     acceptance_table.oid,
     'REFERENCES'
   )
+  and pg_catalog.has_table_privilege(
+    role.oid,
+    'public.particle_compatibility_profiles',
+    'SELECT'
+  )
+  and pg_catalog.has_table_privilege(
+    role.oid,
+    'public.particle_profile_release_bindings',
+    'SELECT'
+  )
+  and pg_catalog.has_function_privilege(
+    role.oid,
+    'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+    'EXECUTE'
+  )
   and not exists (
     select 1
     from pg_catalog.pg_class protected_table
@@ -378,7 +409,9 @@ select
         'indexer_cursors',
         'canonical_logs',
         'reorg_incidents',
-        'receipts'
+        'receipts',
+        'particle_compatibility_profiles',
+        'particle_profile_release_bindings'
       )
       and (
         pg_catalog.has_table_privilege(role.oid, protected_table.oid, 'INSERT')

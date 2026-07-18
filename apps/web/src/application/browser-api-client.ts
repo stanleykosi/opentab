@@ -9,6 +9,7 @@ import {
   MerchantSchema,
   OrderIdSchema,
   OrderKeySchema,
+  type ParticleCompatibilityProfileSchema,
   PaymentAttemptIdSchema,
   PaymentAttemptStatusSchema,
   ProductSchema,
@@ -52,6 +53,78 @@ const SplitCapabilityReferenceSchema = z
   .min(33)
   .max(401)
   .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+
+const ParticleCertificationStatusSchema = z
+  .object({
+    environment: z.enum(['demo-mainnet', 'production']),
+    profileScopeId: z.string().regex(/^[0-9a-f]{40}$/),
+    chainId: z.literal('42161'),
+    captureConfig: z
+      .object({
+        projectId: z.string().min(1).max(256),
+        projectClientKey: z.string().min(1).max(512),
+        projectAppUuid: z.string().min(1).max(256),
+        particleRpcUrl: z.string().url().optional(),
+        arbitrumRpcUrl: z.string().url(),
+        checkoutAddress: EvmAddressSchema,
+        passAddress: EvmAddressSchema,
+        tokenAddress: EvmAddressSchema,
+        maximumSlippageBps: z.number().int().min(0).max(500),
+        maximumFeeUsdMicros: UnsignedIntegerSchema,
+        delegationPlanTtlSeconds: z.number().int().min(30).max(600),
+        allowedSourceChainIds: z.array(UnsignedIntegerSchema).min(2).max(30),
+        allowedSourceAssets: z
+          .array(z.enum(['USDC', 'USDT', 'ETH']))
+          .min(1)
+          .max(3),
+        allowedSourceTokens: z
+          .array(
+            z
+              .object({
+                chainId: UnsignedIntegerSchema,
+                asset: z.enum(['USDC', 'USDT', 'ETH']),
+                address: EvmAddressSchema,
+              })
+              .strict(),
+          )
+          .max(60),
+        useEIP7702: z.literal(true),
+      })
+      .strict(),
+    certification: z.discriminatedUnion('stage', [
+      z.object({ stage: z.literal('uncertified'), subjectMatches: z.literal(false) }).strict(),
+      z
+        .object({
+          stage: z.enum(['bootstrap', 'canary_ready', 'certified']),
+          profileId: z.string().min(3).max(128),
+          profileDigest: EvidenceDigestSchema,
+          subjectMatches: z.boolean(),
+          canaryProductId: UnsignedIntegerSchema,
+          canaryMaxBaseUnits: UnsignedIntegerSchema,
+          boundAt: DateTimeSchema,
+        })
+        .strict(),
+    ]),
+    effectiveCapabilities: z
+      .object({
+        captureBootstrap: z.boolean(),
+        captureCanaryPreview: z.boolean(),
+        runCanary: z.boolean(),
+        payments: z.boolean(),
+      })
+      .strict(),
+    requestId: RequestIdSchema,
+  })
+  .strict();
+
+const ParticleCertificationPublicStatusSchema = ParticleCertificationStatusSchema.omit({
+  captureConfig: true,
+});
+
+export type ParticleCertificationStatus = z.infer<typeof ParticleCertificationStatusSchema>;
+export type ParticleCertificationPublicStatus = z.infer<
+  typeof ParticleCertificationPublicStatusSchema
+>;
 
 function safeSegment(value: string): string {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) {
@@ -1012,6 +1085,7 @@ export class BrowserApiClient {
     input: {
       status: 'submission_started' | 'submitted' | 'submitted_unknown';
       providerOperationId: string;
+      transactionHash?: string;
     },
     idempotencyKey: string,
   ): Promise<ContractOperationRecord> {
@@ -1249,6 +1323,66 @@ export class BrowserApiClient {
     return this.#request(
       `/api/v1/payment-attempts/${safeSegment(paymentAttemptId)}/recovery`,
       PaymentWorkflowResponseSchema,
+    );
+  }
+
+  async getParticleCertificationStatus(): Promise<ParticleCertificationPublicStatus> {
+    return this.#request(
+      '/api/v1/operator/particle-certification',
+      ParticleCertificationPublicStatusSchema,
+    );
+  }
+
+  async unlockParticleCertification(operatorToken: string): Promise<ParticleCertificationStatus> {
+    return this.#request(
+      '/api/v1/operator/particle-certification/unlock',
+      ParticleCertificationStatusSchema,
+      {
+        method: 'POST',
+        body: { operatorToken },
+        csrf: true,
+      },
+    );
+  }
+
+  async certifyParticleCompatibility(
+    input: {
+      readonly operatorToken: string;
+      readonly profile: z.infer<typeof ParticleCompatibilityProfileSchema>;
+      readonly productId: string;
+    },
+    idempotencyKey: string,
+  ): Promise<ParticleCertificationStatus> {
+    return this.#request(
+      '/api/v1/operator/particle-certification',
+      ParticleCertificationStatusSchema,
+      {
+        method: 'POST',
+        body: input,
+        csrf: true,
+        idempotencyKey,
+      },
+    );
+  }
+
+  async finalizeParticleCertification(
+    input: {
+      readonly operatorToken: string;
+      readonly paymentAttemptId: string;
+      readonly submissionEvidenceDigest: string;
+      readonly statusEvidenceDigest: string;
+    },
+    idempotencyKey: string,
+  ): Promise<ParticleCertificationStatus> {
+    return this.#request(
+      '/api/v1/operator/particle-certification/finalize',
+      ParticleCertificationStatusSchema,
+      {
+        method: 'POST',
+        body: input,
+        csrf: true,
+        idempotencyKey,
+      },
     );
   }
 

@@ -97,7 +97,7 @@ select format('grant connect on database %I to %I', current_database(), :'eviden
 select format('grant usage on schema public to %I', :'evidence_writer_role')
 \gexec
 select format(
-  'grant select on table public.user_identities, public.merchants, public.products, public.signed_order_intents, public.orders, public.payment_attempts, public.provider_operations, public.canonical_logs, public.receipts, public.wallet_accounts, public.delegation_records, public.bootstrap_grants, public.live_acceptance_evidence to %I',
+  'grant select on table public.user_identities, public.merchants, public.products, public.signed_order_intents, public.orders, public.payment_attempts, public.provider_operations, public.canonical_logs, public.receipts, public.wallet_accounts, public.delegation_records, public.bootstrap_grants, public.live_acceptance_evidence, public.particle_compatibility_profiles, public.particle_profile_release_bindings to %I',
   :'evidence_writer_role'
 )
 \gexec
@@ -120,7 +120,9 @@ with required_read(relation_name) as (
     ('wallet_accounts'),
     ('delegation_records'),
     ('bootstrap_grants'),
-    ('live_acceptance_evidence')
+    ('live_acceptance_evidence'),
+    ('particle_compatibility_profiles'),
+    ('particle_profile_release_bindings')
 )
 select
   role.rolcanlogin
@@ -173,6 +175,11 @@ select
         pg_catalog.has_table_privilege(role.oid, readable_relation.oid, 'SELECT')
         or pg_catalog.has_any_column_privilege(role.oid, readable_relation.oid, 'SELECT')
       )
+  )
+  and not pg_catalog.has_function_privilege(
+    role.oid,
+    'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+    'EXECUTE'
   )
   and pg_catalog.has_table_privilege(role.oid, acceptance_table.oid, 'INSERT')
   and not pg_catalog.has_table_privilege(role.oid, acceptance_table.oid, 'UPDATE')

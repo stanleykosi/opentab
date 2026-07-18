@@ -58,6 +58,8 @@ export async function assertIndexerDatabasePrivileges(db: OpenTabDatabase): Prom
         ('merchants'),
         ('orders'),
         ('outbox_events'),
+        ('particle_compatibility_profiles'),
+        ('particle_profile_release_bindings'),
         ('payment_attempts'),
         ('products'),
         ('provider_operations'),

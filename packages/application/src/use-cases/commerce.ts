@@ -43,6 +43,8 @@ import type {
   UserRepositoryPort,
 } from '../ports/index.js';
 import type {
+  AuthoritativeProduct,
+  CheckoutSessionRecord,
   CheckoutWorkflowStorePort,
   FinancialWorkflowStorePort,
   SplitCapabilityIssuerPort,
@@ -292,6 +294,16 @@ export class CreatePaymentAttemptUseCase {
       platformFeeBps: string;
       signerKeyId: string;
       attemptTtlSeconds: number;
+      /**
+       * Server-authoritative release/canary policy. This runs after the
+       * checkout and product projections have been locked and validated, but
+       * before an order intent is signed or any payment rows are created.
+       */
+      authorize?: (input: {
+        user: CurrentUser;
+        session: CheckoutSessionRecord;
+        authoritative: AuthoritativeProduct;
+      }) => void | Promise<void>;
     },
   ) {}
 
@@ -343,6 +355,11 @@ export class CreatePaymentAttemptUseCase {
     ) {
       throw new AppError('PRODUCT_UNAVAILABLE', 'The item details changed. Start a new checkout.');
     }
+    await this.dependencies.authorize?.({
+      user: input.user,
+      session,
+      authoritative,
+    });
     const recipient = session.receiptRecipient ?? input.user.walletAddress;
     const attemptId = PaymentAttemptIdSchema.parse(this.dependencies.random.opaqueId('pay'));
     const orderId = OrderIdSchema.parse(this.dependencies.random.opaqueId('ord'));

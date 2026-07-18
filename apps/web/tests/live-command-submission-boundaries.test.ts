@@ -16,8 +16,13 @@ const REFUND_ID = `rfd_${ULID}`;
 const WITHDRAWAL_ID = `wdr_${ULID}`;
 const SPLIT_PAYMENT_ID = `spa_${ULID}`;
 const PROVIDER_OPERATION_ID = 'particle-operation-started-0001';
+const TRANSACTION_HASH = `0x${'12'.repeat(32)}`;
 
-type MutableRegistration = { status: string; providerOperationId?: string };
+type MutableRegistration = {
+  status: string;
+  providerOperationId?: string;
+  transactionHash?: string;
+};
 
 function context(body: Readonly<Record<string, unknown>>, suffix: string) {
   return {
@@ -82,11 +87,15 @@ function commands(input: {
     async (request: {
       status: 'submission_started' | 'submitted' | 'submitted_unknown';
       providerOperationId: string;
+      transactionHash?: string;
     }) => {
       const operation = input.operation;
       if (operation === undefined) throw new AppError('NOT_FOUND', 'Operation not found.');
       operation.status = request.status;
       operation.providerOperationId = request.providerOperationId;
+      if (request.transactionHash !== undefined) {
+        operation.transactionHash = request.transactionHash;
+      }
       return { ...operation };
     },
   );
@@ -310,6 +319,7 @@ describe('live command submission-result boundaries', () => {
       kind: 'refund',
       status: 'prepared',
     };
+    const magicProviderOperationId = `magic-direct:${operation.id}`;
     const { instance, spies } = commands({
       payment: { status: 'prepared' },
       refund: { status: 'prepared' },
@@ -321,30 +331,48 @@ describe('live command submission-result boundaries', () => {
 
     await instance.registerContractOperationSubmission({
       ...context(
-        { status: 'submission_started', providerOperationId: PROVIDER_OPERATION_ID },
+        { status: 'submission_started', providerOperationId: magicProviderOperationId },
         'contract-start',
       ),
       operationId: operation.id,
     });
     expect(operation).toMatchObject({
       status: 'submission_started',
-      providerOperationId: PROVIDER_OPERATION_ID,
+      providerOperationId: magicProviderOperationId,
     });
 
     policy.refunds = false;
+    await expectCode(
+      instance.registerContractOperationSubmission({
+        ...context(
+          { status: 'submitted', providerOperationId: magicProviderOperationId },
+          'contract-magic-result-without-hash',
+        ),
+        operationId: operation.id,
+      }),
+      'OPERATION_PLAN_INVALID',
+    );
     await instance.registerContractOperationSubmission({
       ...context(
-        { status: 'submitted', providerOperationId: PROVIDER_OPERATION_ID },
+        {
+          status: 'submitted',
+          providerOperationId: magicProviderOperationId,
+          transactionHash: TRANSACTION_HASH,
+        },
         'contract-provider-result-after-kill-switch',
       ),
       operationId: operation.id,
     });
-    expect(operation.status).toBe('submitted');
+    expect(operation).toMatchObject({ status: 'submitted', transactionHash: TRANSACTION_HASH });
     expect(spies.registerContractOperationSubmission).toHaveBeenCalledTimes(2);
 
     await instance.registerContractOperationSubmission({
       ...context(
-        { status: 'submitted', providerOperationId: PROVIDER_OPERATION_ID },
+        {
+          status: 'submitted',
+          providerOperationId: magicProviderOperationId,
+          transactionHash: TRANSACTION_HASH,
+        },
         'contract-provider-result-idempotent',
       ),
       operationId: operation.id,
@@ -355,6 +383,20 @@ describe('live command submission-result boundaries', () => {
         ...context(
           { status: 'submitted', providerOperationId: 'different-operation' },
           'contract-provider-result-mismatch',
+        ),
+        operationId: operation.id,
+      }),
+      'IDEMPOTENCY_CONFLICT',
+    );
+    await expectCode(
+      instance.registerContractOperationSubmission({
+        ...context(
+          {
+            status: 'submitted',
+            providerOperationId: magicProviderOperationId,
+            transactionHash: `0x${'34'.repeat(32)}`,
+          },
+          'contract-transaction-mismatch',
         ),
         operationId: operation.id,
       }),

@@ -437,6 +437,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   PRIVACY_SUBJECT_HASH_SECRET: optionalString,
   JUDGE_SHARE_TOKEN_SECRET: optionalString,
   LIVE_ACCEPTANCE_ATTESTATION_SECRET: optionalString,
+  PARTICLE_CERTIFICATION_TOKEN: optionalString,
   APPLICATION_RELEASE_ID: optionalGitReleaseId,
   SESSION_MAX_AGE_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
   CHECKOUT_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
@@ -615,7 +616,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   ) {
     requireConfigured(
       'APPLICATION_RELEASE_ID',
-      'APPLICATION_RELEASE_ID must be the exact lowercase 40-hex deployed Git commit',
+      'APPLICATION_RELEASE_ID identifies the deployed Vercel commit for application and Judge evidence; Vercel supplies VERCEL_GIT_COMMIT_SHA automatically',
     );
   }
 
@@ -627,6 +628,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
     'PRIVACY_SUBJECT_HASH_SECRET',
     'JUDGE_SHARE_TOKEN_SECRET',
     'LIVE_ACCEPTANCE_ATTESTATION_SECRET',
+    'PARTICLE_CERTIFICATION_TOKEN',
   ] as const) {
     const value = config[secret];
     if (value !== undefined && (placeholderPattern.test(value) || value.length < 32)) {
@@ -673,6 +675,13 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
     ] as const) {
       requireSecuritySecret(name, 'Production application security material is required');
     }
+  }
+
+  if (config.PARTICLE_LIVE_ENABLED || config.PAYMENTS_ENABLED) {
+    requireConfigured(
+      'APPLICATION_RELEASE_ID',
+      'APPLICATION_RELEASE_ID identifies the Vercel application build used for live-payment and Judge evidence; Vercel supplies VERCEL_GIT_COMMIT_SHA automatically',
+    );
   }
 
   if (config.PAYMENTS_ENABLED) {
@@ -745,16 +754,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
         message: 'Primary and fallback Arbitrum RPC providers must use independent hosts',
       });
     }
-    if (
-      !config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS.includes(ARBITRUM_ONE_CHAIN_ID) ||
-      !config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS.some((chainId) => chainId !== ARBITRUM_ONE_CHAIN_ID)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_ALLOWED_SOURCE_CHAIN_IDS'],
-        message: 'Live payments require Arbitrum One plus at least one approved source chain',
-      });
-    }
     if (config.PARTICLE_MAX_FEE_USD_MICROS <= 0n) {
       context.addIssue({
         code: 'custom',
@@ -810,25 +809,11 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
     ] as const) {
       requireConfigured(name, `${name} is required for live Particle reads and previews`);
     }
-    for (const name of [
-      'PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS',
-      'PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH',
-      'PARTICLE_RESPONSE_PROFILE_ID',
-      'PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST',
-      'PARTICLE_AUTH_FIXTURE_DIGEST',
-      'PARTICLE_SUBMISSION_FIXTURE_DIGEST',
-      'PARTICLE_STATUS_FIXTURE_DIGEST',
-      'PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET',
-      'PARTICLE_DELEGATION_PLAN_TTL_SECONDS',
-    ] as const) {
-      requireConfigured(name, `${name} is required for the live Particle adapter`);
-    }
-    if (config.PARTICLE_RESPONSE_PROFILE_PROVENANCE !== 'recorded_live') {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_RESPONSE_PROFILE_PROVENANCE'],
-        message: 'Live Particle calls require a sanitized recorded-live response profile',
-      });
+    if (['demo-mainnet', 'production'].includes(config.APP_ENV)) {
+      requireConfigured(
+        'PARTICLE_CERTIFICATION_TOKEN',
+        'PARTICLE_CERTIFICATION_TOKEN is required for live Particle certification and rotation',
+      );
     }
     if (config.NEXT_PUBLIC_ARBITRUM_CHAIN_ID !== ARBITRUM_ONE_CHAIN_ID) {
       context.addIssue({
@@ -868,96 +853,12 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
         message: 'Live Particle preview RPC failover must use an independent provider host',
       });
     }
-    if (
-      !config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS.includes(ARBITRUM_ONE_CHAIN_ID) ||
-      !config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS.some((chainId) => chainId !== ARBITRUM_ONE_CHAIN_ID)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_ALLOWED_SOURCE_CHAIN_IDS'],
-        message: 'Live Particle previews require Arbitrum One and an approved source chain',
-      });
-    }
     if (config.PARTICLE_MAX_FEE_USD_MICROS <= 0n) {
       context.addIssue({
         code: 'custom',
         path: ['PARTICLE_MAX_FEE_USD_MICROS'],
         message: 'Live Particle previews require a positive hard fee ceiling',
       });
-    }
-    if (
-      config.PARTICLE_RESPONSE_PROFILE_ID !== undefined &&
-      !/^[A-Za-z0-9_.:/-]{3,120}$/.test(config.PARTICLE_RESPONSE_PROFILE_ID)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_RESPONSE_PROFILE_ID'],
-        message: 'Particle response profile ID is invalid',
-      });
-    }
-    if (
-      config.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS !== undefined &&
-      zeroAddressPattern.test(config.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS'],
-        message: 'Particle EIP-7702 implementation cannot be zero',
-      });
-    }
-    if (
-      config.PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH !== undefined &&
-      /^0x0{64}$/i.test(config.PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH'],
-        message: 'Particle EIP-7702 implementation code hash cannot be zero',
-      });
-    }
-    if (config.PARTICLE_ALLOWED_SOURCE_TOKENS.length === 0) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_ALLOWED_SOURCE_TOKENS'],
-        message: 'Live Particle calls require at least one exact source-token address',
-      });
-    }
-    if (config.PARTICLE_SOURCE_CALL_PROFILES_JSON.length === 0) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PARTICLE_SOURCE_CALL_PROFILES_JSON'],
-        message: 'Live cross-chain Particle calls require reviewed source-call profiles',
-      });
-    }
-    for (const profile of config.PARTICLE_SOURCE_CALL_PROFILES_JSON) {
-      if (
-        profile.chainId === ARBITRUM_ONE_CHAIN_ID ||
-        !config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS.includes(profile.chainId) ||
-        !config.PARTICLE_ALLOWED_SOURCE_TOKENS.some(
-          (token) =>
-            token.chainId === profile.chainId &&
-            token.asset === profile.asset &&
-            token.address.toLowerCase() === profile.tokenAddress.toLowerCase(),
-        )
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['PARTICLE_SOURCE_CALL_PROFILES_JSON'],
-          message: 'Every source-call profile must bind an approved non-Arbitrum chain and token',
-        });
-      }
-    }
-    for (const source of config.PARTICLE_ALLOWED_SOURCE_TOKENS) {
-      if (
-        !config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS.includes(source.chainId) ||
-        !config.PARTICLE_ALLOWED_SOURCE_ASSETS.includes(source.asset)
-      ) {
-        context.addIssue({
-          code: 'custom',
-          path: ['PARTICLE_ALLOWED_SOURCE_TOKENS'],
-          message: 'Every exact source token must be inside the approved chain and asset policy',
-        });
-      }
     }
   }
 
@@ -1217,6 +1118,7 @@ export const IndexerEnvironmentSchema = z
     ARBITRUM_RPC_URL: optionalUrl,
     ARBITRUM_FALLBACK_RPC_URL: urlWithDefault('https://arbitrum-one-rpc.publicnode.com'),
     NEXT_PUBLIC_ARBITRUM_CHAIN_ID: ChainIdSchema.default(ARBITRUM_ONE_CHAIN_ID),
+    NEXT_PUBLIC_USDC_ADDRESS: EvmAddressSchema.default(ARBITRUM_ONE_USDC),
     NEXT_PUBLIC_CHECKOUT_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_CHECKOUT),
     NEXT_PUBLIC_PASS_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_PASS),
     NEXT_PUBLIC_SPLIT_ADDRESS: addressWithDefault(ARBITRUM_ONE_OPENTAB_SPLIT),
@@ -1314,31 +1216,8 @@ export const IndexerEnvironmentSchema = z
         'NEXT_PUBLIC_PARTICLE_PROJECT_ID',
         'NEXT_PUBLIC_PARTICLE_CLIENT_KEY',
         'NEXT_PUBLIC_PARTICLE_APP_UUID',
-        'PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS',
-        'PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH',
-        'PARTICLE_RESPONSE_PROFILE_ID',
-        'PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST',
-        'PARTICLE_AUTH_FIXTURE_DIGEST',
-        'PARTICLE_SUBMISSION_FIXTURE_DIGEST',
-        'PARTICLE_STATUS_FIXTURE_DIGEST',
-        'PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET',
-        'PARTICLE_DELEGATION_PLAN_TTL_SECONDS',
       ] as const) {
         required(name, `${name} is required by indexer reconciliation`);
-      }
-      if (config.PARTICLE_ALLOWED_SOURCE_TOKENS.length === 0) {
-        context.addIssue({
-          code: 'custom',
-          path: ['PARTICLE_ALLOWED_SOURCE_TOKENS'],
-          message: 'Indexer reconciliation requires exact source-token policy',
-        });
-      }
-      if (config.PARTICLE_SOURCE_CALL_PROFILES_JSON.length === 0) {
-        context.addIssue({
-          code: 'custom',
-          path: ['PARTICLE_SOURCE_CALL_PROFILES_JSON'],
-          message: 'Indexer reconciliation requires reviewed source-call profiles',
-        });
       }
     }
     const productionLike = ['preview', 'staging', 'demo-mainnet', 'production'].includes(

@@ -7,4 +7,5 @@ export * from './browser-operations.js';
 export * from './evidence.js';
 export * from './magic-client.js';
 export * from './particle.js';
+export * from './particle-certification.js';
 export { mapMagicError, mapParticleError } from './vendor-errors.js';

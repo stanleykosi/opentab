@@ -2,19 +2,46 @@ import type { MagicWalletPort } from '@opentab/application';
 import {
   AppError,
   ARBITRUM_ONE_CHAIN_ID,
+  type BoundOperationTemplate,
+  BoundOperationTemplateSchema,
   type EvmAddress,
   EvmAddressSchema,
   sameEvmAddress,
+  type TransactionHash,
+  TransactionHashSchema,
   type ValidatedOperationPlan,
   ValidatedOperationPlanSchema,
   type VerifiedDelegationPlan,
   VerifiedDelegationPlanSchema,
 } from '@opentab/shared';
 import { BrowserProvider, getBytes, Signature, verifyMessage } from 'ethers';
+import { getAbiItem, toFunctionSelector } from 'viem';
 import { z } from 'zod';
+import { openTabCheckoutOperationAbi } from './generated/operation-abis.js';
 import { mapMagicError } from './vendor-errors.js';
 
 const ARBITRUM_CHAIN_NUMBER = Number(ARBITRUM_ONE_CHAIN_ID);
+const ZERO_ADDRESS = EvmAddressSchema.parse('0x0000000000000000000000000000000000000000');
+
+export const MagicOperatorBootstrapActionSchema = z.enum([
+  'create_merchant',
+  'create_product',
+  'set_product_active',
+]);
+
+export type MagicOperatorBootstrapAction = z.infer<typeof MagicOperatorBootstrapActionSchema>;
+
+const OPERATOR_BOOTSTRAP_SELECTORS = {
+  create_merchant: toFunctionSelector(
+    getAbiItem({ abi: openTabCheckoutOperationAbi, name: 'createMerchant' }),
+  ),
+  create_product: toFunctionSelector(
+    getAbiItem({ abi: openTabCheckoutOperationAbi, name: 'createProduct' }),
+  ),
+  set_product_active: toFunctionSelector(
+    getAbiItem({ abi: openTabCheckoutOperationAbi, name: 'setProductActive' }),
+  ),
+} satisfies Record<MagicOperatorBootstrapAction, `0x${string}`>;
 
 const MagicUserMetadataSchema = z.object({
   issuer: z.string().nullable(),
@@ -411,6 +438,52 @@ export class MagicBrowserWalletAdapter implements MagicWalletPort {
     }
   }
 
+  /**
+   * One-time operator certification probe. Magic may return either the EOA
+   * nonce or the authorization nonce depending on its release convention. We
+   * validate the signed envelope but intentionally discard its signature and
+   * expose only the non-secret convention fields to the capture adapter.
+   */
+  async probeDelegationAuthorizationNonce(input: {
+    ownerAddress: EvmAddress;
+    implementationAddress: EvmAddress;
+  }): Promise<{
+    chainId: typeof ARBITRUM_ONE_CHAIN_ID;
+    implementationAddress: EvmAddress;
+    nonce: string;
+  }> {
+    await this.#assertCurrentOwner(input.ownerAddress);
+    if ((await this.getChainId()) !== ARBITRUM_ONE_CHAIN_ID) {
+      throw new AppError('WALLET_CHAIN_SWITCH_FAILED', 'Switch to Arbitrum before certification.');
+    }
+    try {
+      const magic = await this.loader(this.config);
+      const authorization = SignedAuthorizationSchema.parse(
+        await magic.wallet.sign7702Authorization({
+          contractAddress: input.implementationAddress,
+          chainId: ARBITRUM_CHAIN_NUMBER,
+        }),
+      );
+      if (
+        authorization.chainId !== ARBITRUM_CHAIN_NUMBER ||
+        !sameEvmAddress(authorization.contractAddress, input.implementationAddress)
+      ) {
+        throw new AppError(
+          'OPERATION_PLAN_INVALID',
+          'Magic returned a mismatched certification authorization.',
+        );
+      }
+      return {
+        chainId: ARBITRUM_ONE_CHAIN_ID,
+        implementationAddress: EvmAddressSchema.parse(authorization.contractAddress),
+        nonce: authorization.nonce.toString(),
+      };
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw mapMagicError(error, 'WALLET_SIGNATURE_REJECTED');
+    }
+  }
+
   async authorizeDelegation(
     planInput: VerifiedDelegationPlan,
   ): Promise<{ authorization: unknown }> {
@@ -517,6 +590,77 @@ export class MagicBrowserWalletAdapter implements MagicWalletPort {
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw mapMagicError(error, 'WALLET_SIGNATURE_REJECTED');
+    }
+  }
+
+  /**
+   * Sends one server-bound operator bootstrap mutation directly through the
+   * authenticated Magic EOA. This deliberately excludes payments, refunds,
+   * withdrawals, arbitrary targets, native value, and multi-call execution.
+   */
+  async submitOperatorBootstrapMutation(input: {
+    template: BoundOperationTemplate;
+    action: MagicOperatorBootstrapAction;
+    checkoutAddress: EvmAddress;
+  }): Promise<{ transactionHash: TransactionHash }> {
+    const template = BoundOperationTemplateSchema.parse(input.template);
+    const action = MagicOperatorBootstrapActionSchema.parse(input.action);
+    const checkoutAddress = EvmAddressSchema.parse(input.checkoutAddress);
+    const call = template.calls[0];
+    const expectedKind = action === 'create_merchant' ? 'merchant_mutation' : 'product_mutation';
+
+    if (
+      template.kind !== expectedKind ||
+      template.chainId !== ARBITRUM_ONE_CHAIN_ID ||
+      template.calls.length !== 1 ||
+      call === undefined ||
+      call.valueWei !== '0' ||
+      sameEvmAddress(checkoutAddress, ZERO_ADDRESS) ||
+      !sameEvmAddress(call.to, checkoutAddress) ||
+      call.data.slice(0, 10).toLowerCase() !== OPERATOR_BOOTSTRAP_SELECTORS[action].toLowerCase()
+    ) {
+      throw new AppError(
+        'OPERATION_PLAN_INVALID',
+        'The operator bootstrap action violates the direct-send policy.',
+      );
+    }
+    assertUnexpired(template.expiresAt);
+    await this.#assertCurrentOwner(template.ownerAddress);
+    if ((await this.getChainId()) !== ARBITRUM_ONE_CHAIN_ID) {
+      throw new AppError(
+        'WALLET_CHAIN_SWITCH_FAILED',
+        'Switch to Arbitrum before sending the operator action.',
+      );
+    }
+
+    try {
+      const magic = await this.loader(this.config);
+      const provider = new BrowserProvider(magic.rpcProvider);
+      const signer = await provider.getSigner();
+      const signerAddress = EvmAddressSchema.parse(await signer.getAddress());
+      if (!sameEvmAddress(signerAddress, template.ownerAddress)) {
+        throw new AppError(
+          'WALLET_ADDRESS_MISMATCH',
+          'The Magic signer does not own this operator action.',
+        );
+      }
+      const rawHash = await signer.sendUncheckedTransaction({
+        to: checkoutAddress,
+        data: call.data,
+        value: 0n,
+      });
+      const parsedHash = TransactionHashSchema.safeParse(rawHash);
+      if (!parsedHash.success) {
+        throw new AppError(
+          'RPC_INCONSISTENT',
+          'Magic returned an invalid operator transaction hash.',
+          { submissionPossible: true, cause: parsedHash.error },
+        );
+      }
+      return { transactionHash: parsedHash.data };
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw mapMagicError(error, 'RPC_UNAVAILABLE', { submissionPossible: true });
     }
   }
 

@@ -93,7 +93,7 @@ export interface ContractLogDecoder {
   decode(log: RawContractLog): DecodeResult;
 }
 
-export interface IndexerScanResult {
+export interface IndexerActiveScanResult {
   readonly kind: 'idle' | 'processed' | 'reorg_rewound';
   readonly latestBlock: bigint;
   readonly safeHead: bigint;
@@ -102,6 +102,14 @@ export interface IndexerScanResult {
   readonly processedLogs: number;
   readonly lagBlocks: bigint;
 }
+
+/** A healthy passive worker waiting for the single active stream lease. */
+export interface IndexerLeaseStandbyResult {
+  readonly kind: 'lease_standby';
+  readonly nextBlock: bigint;
+}
+
+export type IndexerScanResult = IndexerActiveScanResult | IndexerLeaseStandbyResult;
 
 export type IndexerChainSource = ArbitrumReadPort;
 

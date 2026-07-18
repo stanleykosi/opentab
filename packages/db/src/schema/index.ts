@@ -1,4 +1,8 @@
-import type { LiveAcceptanceEvidenceInput } from '@opentab/shared';
+import type {
+  LiveAcceptanceEvidenceInput,
+  ParticleCompatibilityProfile,
+  ParticleProfileReleaseBinding,
+} from '@opentab/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -1601,6 +1605,157 @@ export const liveAcceptanceEvidence = pgTable(
     check(
       'live_acceptance_evidence_attestation_version_check',
       sql`${table.attestationVersion} = 'hmac-sha256-v1'`,
+    ),
+  ],
+);
+
+/**
+ * User-agnostic, sanitized compatibility evidence captured by the protected
+ * Particle operator flow. Stages are append-only; no raw response, signature,
+ * credential, or authenticated wallet address is stored here.
+ */
+export const particleCompatibilityProfiles = pgTable(
+  'particle_compatibility_profiles',
+  {
+    profileId: varchar('profile_id', { length: 128 }).primaryKey(),
+    schemaVersion: integer('schema_version').notNull(),
+    stage: varchar('stage', { length: 20 })
+      .$type<ParticleCompatibilityProfile['stage']>()
+      .notNull(),
+    environment: featureFlagEnvironmentEnum('environment').notNull(),
+    chainId: amount('chain_id').notNull(),
+    particleSdkVersion: varchar('particle_sdk_version', { length: 20 }).notNull(),
+    particleProtocolVersion: varchar('particle_protocol_version', { length: 40 }).notNull(),
+    particleProjectConfigDigest: digest('particle_project_config_digest').notNull(),
+    useEip7702: boolean('use_eip7702').notNull(),
+    delegateAddress: evmAddress('delegate_address').notNull(),
+    delegateCodeHash: digest('delegate_code_hash').notNull(),
+    responseDigests: jsonb('response_digests')
+      .$type<ParticleCompatibilityProfile['responseDigests']>()
+      .notNull(),
+    nonceConvention: jsonb('nonce_convention')
+      .$type<ParticleCompatibilityProfile['nonceConvention']>()
+      .notNull(),
+    sourceTokenProfile:
+      jsonb('source_token_profile').$type<
+        NonNullable<ParticleCompatibilityProfile['sourceTokenProfile']>
+      >(),
+    canonicalCanaryEvidence: jsonb('canonical_canary_evidence').$type<
+      NonNullable<ParticleCompatibilityProfile['canonicalCanaryEvidence']>
+    >(),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    profileDigest: digest('profile_digest').notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex('particle_compatibility_profiles_digest_unique').on(table.profileDigest),
+    index('particle_compatibility_profiles_lookup_idx').on(
+      table.environment,
+      table.chainId,
+      table.stage,
+      table.capturedAt,
+    ),
+    check('particle_compatibility_profiles_version_check', sql`${table.schemaVersion} = 1`),
+    check(
+      'particle_compatibility_profiles_id_check',
+      sql`${table.profileId} ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{2,127}$'`,
+    ),
+    check(
+      'particle_compatibility_profiles_stage_check',
+      sql`${table.stage} in ('bootstrap', 'canary_ready', 'certified')`,
+    ),
+    check(
+      'particle_compatibility_profiles_environment_check',
+      sql`${table.environment} in ('demo-mainnet', 'production')`,
+    ),
+    check('particle_compatibility_profiles_chain_check', sql`${table.chainId} = 42161`),
+    check('particle_compatibility_profiles_sdk_check', sql`${table.particleSdkVersion} = '2.0.3'`),
+    check('particle_compatibility_profiles_eip7702_check', sql`${table.useEip7702} = true`),
+    check(
+      'particle_compatibility_profiles_delegate_check',
+      sql`${table.delegateAddress} ~ '^0x[0-9a-f]{40}$'`,
+    ),
+    check(
+      'particle_compatibility_profiles_digests_check',
+      sql`${table.particleProjectConfigDigest} ~ '^0x[0-9a-f]{64}$' and ${table.delegateCodeHash} ~ '^0x[0-9a-f]{64}$' and ${table.profileDigest} ~ '^0x[0-9a-f]{64}$'`,
+    ),
+    check(
+      'particle_compatibility_profiles_json_check',
+      sql`jsonb_typeof(${table.responseDigests}) = 'object' and jsonb_typeof(${table.nonceConvention}) = 'object' and (${table.sourceTokenProfile} is null or jsonb_typeof(${table.sourceTokenProfile}) = 'object') and (${table.canonicalCanaryEvidence} is null or jsonb_typeof(${table.canonicalCanaryEvidence}) = 'object')`,
+    ),
+    check(
+      'particle_compatibility_profiles_stage_evidence_check',
+      sql`(
+        (${table.stage} = 'bootstrap' and ${table.sourceTokenProfile} is null and ${table.canonicalCanaryEvidence} is null and not (${table.responseDigests} ? 'submission') and not (${table.responseDigests} ? 'status'))
+        or (${table.stage} = 'canary_ready' and ${table.sourceTokenProfile} is not null and ${table.canonicalCanaryEvidence} is null and not (${table.responseDigests} ? 'submission') and not (${table.responseDigests} ? 'status'))
+        or (${table.stage} = 'certified' and ${table.sourceTokenProfile} is not null and ${table.canonicalCanaryEvidence} is not null and (${table.responseDigests} ? 'submission') and (${table.responseDigests} ? 'status'))
+      )`,
+    ),
+  ],
+);
+
+/**
+ * Append-only release bindings. A release receives at most one row per stage;
+ * the loader deterministically chooses certified, then canary-ready, then
+ * bootstrap without mutating or hiding the audit history.
+ */
+export const particleProfileReleaseBindings = pgTable(
+  'particle_profile_release_bindings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    schemaVersion: integer('schema_version').notNull(),
+    environment: featureFlagEnvironmentEnum('environment').notNull(),
+    applicationReleaseId: varchar('application_release_id', { length: 40 }).notNull(),
+    chainId: amount('chain_id').notNull(),
+    stage: varchar('stage', { length: 20 })
+      .$type<ParticleProfileReleaseBinding['stage']>()
+      .notNull(),
+    profileId: varchar('profile_id', { length: 128 })
+      .notNull()
+      .references(() => particleCompatibilityProfiles.profileId, { onDelete: 'restrict' }),
+    profileDigest: digest('profile_digest').notNull(),
+    certifiedSubjectHash: digest('certified_subject_hash').notNull(),
+    canaryProductId: amount('canary_product_id').notNull(),
+    canaryMaxBaseUnits: amount('canary_max_base_units').notNull(),
+    boundAt: timestamp('bound_at', { withTimezone: true }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    uniqueIndex('particle_profile_release_bindings_profile_unique').on(table.profileId),
+    uniqueIndex('particle_profile_release_bindings_stage_unique').on(
+      table.environment,
+      table.applicationReleaseId,
+      table.chainId,
+      table.stage,
+    ),
+    index('particle_profile_release_bindings_lookup_idx').on(
+      table.environment,
+      table.applicationReleaseId,
+      table.chainId,
+      table.boundAt,
+      table.id,
+    ),
+    check('particle_profile_release_bindings_version_check', sql`${table.schemaVersion} = 1`),
+    check(
+      'particle_profile_release_bindings_environment_check',
+      sql`${table.environment} in ('demo-mainnet', 'production')`,
+    ),
+    check('particle_profile_release_bindings_chain_check', sql`${table.chainId} = 42161`),
+    check(
+      'particle_profile_release_bindings_release_check',
+      sql`${table.applicationReleaseId} ~ '^[0-9a-f]{40}$'`,
+    ),
+    check(
+      'particle_profile_release_bindings_stage_check',
+      sql`${table.stage} in ('bootstrap', 'canary_ready', 'certified')`,
+    ),
+    check(
+      'particle_profile_release_bindings_digests_check',
+      sql`${table.profileDigest} ~ '^0x[0-9a-f]{64}$' and ${table.certifiedSubjectHash} ~ '^0x[0-9a-f]{64}$'`,
+    ),
+    check(
+      'particle_profile_release_bindings_canary_check',
+      sql`${table.canaryProductId} > 0 and ${table.canaryMaxBaseUnits} > 0 and ${table.canaryMaxBaseUnits} <= 1000000`,
     ),
   ],
 );

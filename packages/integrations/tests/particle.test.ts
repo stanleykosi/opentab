@@ -302,6 +302,42 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
     ]);
   });
 
+  it('accepts staged evidence and a certified semantic source-call policy', async () => {
+    const fake = sdk(template);
+    const adapter = new ParticleUniversalAccountAdapter(
+      fake,
+      config({
+        sourceCallProfiles: [],
+        sourceCallPolicies: [
+          {
+            policyId: 'base-usdc-approve-v1',
+            chainId: '8453',
+            asset: 'USDC',
+            tokenAddress: sourceToken,
+            uaType: 'evm',
+            target: sourceToken,
+            functionSelector: sourceApprovalData.slice(0, 10) as `0x${string}`,
+            nativeValueAllowed: false,
+            maxCalls: 1,
+            capturedFixtureDigest: Bytes32Schema.parse(digest('e')),
+          },
+        ],
+        responseProfile: {
+          profileId: profile.profileId,
+          provenance: profile.provenance,
+          deploymentsFixtureDigest: profile.deploymentsFixtureDigest,
+          authFixtureDigest: profile.authFixtureDigest,
+          magicAuthorizationNonceOffset: profile.magicAuthorizationNonceOffset,
+          delegationPlanTtlSeconds: profile.delegationPlanTtlSeconds,
+        },
+      }),
+    );
+    const prepared = await adapter.prepareOperation(template);
+    await expect(adapter.validateOperation({ template, prepared })).resolves.toMatchObject({
+      quote: { amountBaseUnits: '1000000' },
+    });
+  });
+
   it('rejects injected destination calls before signing', async () => {
     const fake = sdk(template);
     const destinationOp = fake.state.prepared.userOps[0];

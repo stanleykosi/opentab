@@ -122,6 +122,8 @@ export const PublicBrowserConfigSchema = z
           projectId: z.string().min(1).max(256),
           projectClientKey: z.string().min(1).max(512),
           projectAppUuid: z.string().min(1).max(256),
+          certificationStage: z.enum(['canary_ready', 'certified']),
+          profileDigest: EvidenceDigestSchema,
           expectedImplementationAddress: EvmAddressSchema,
           expectedImplementationCodeHash: EvidenceDigestSchema,
           slippageBps: z.number().int().min(0).max(500),
@@ -142,32 +144,20 @@ export const PublicBrowserConfigSchema = z
                 .strict(),
             )
             .max(32),
-          sourceCallProfiles: z
+          sourceCallPolicies: z
             .array(
               z
                 .object({
-                  profileId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+                  policyId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
                   chainId: UnsignedIntegerSchema.refine((value) => BigInt(value) > 0n),
                   asset: z.enum(['USDC', 'USDT', 'ETH']),
                   tokenAddress: EvmAddressSchema,
-                  sourceAmount: z
-                    .string()
-                    .regex(/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/)
-                    .max(100),
-                  fixtureDigest: EvidenceDigestSchema,
-                  calls: z
-                    .array(
-                      z
-                        .object({
-                          uaType: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
-                          to: EvmAddressSchema,
-                          data: z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/),
-                          valueWei: UnsignedIntegerSchema,
-                        })
-                        .strict(),
-                    )
-                    .min(1)
-                    .max(16),
+                  uaType: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
+                  target: EvmAddressSchema,
+                  functionSelector: z.string().regex(/^0x[0-9a-fA-F]{8}$/),
+                  nativeValueAllowed: z.boolean(),
+                  maxCalls: z.number().int().min(1).max(16),
+                  capturedFixtureDigest: EvidenceDigestSchema,
                 })
                 .strict(),
             )
@@ -179,8 +169,8 @@ export const PublicBrowserConfigSchema = z
               provenance: z.enum(['deterministic', 'recorded_live']),
               deploymentsFixtureDigest: EvidenceDigestSchema,
               authFixtureDigest: EvidenceDigestSchema,
-              submissionFixtureDigest: EvidenceDigestSchema,
-              statusFixtureDigest: EvidenceDigestSchema,
+              submissionFixtureDigest: EvidenceDigestSchema.optional(),
+              statusFixtureDigest: EvidenceDigestSchema.optional(),
               magicAuthorizationNonceOffset: z.union([z.literal(0), z.literal(1)]),
               delegationPlanTtlSeconds: z.number().int().min(30).max(600),
             })

@@ -37,6 +37,8 @@ import {
   DrizzleProductRepository,
   DrizzleUserRepository,
   hashOpaqueSecret,
+  type LoadedParticleCompatibilityProfile,
+  loadParticleCompatibilityProfileForRelease,
   opaqueId,
   PostgresBackendApiQueryStore,
   PostgresBackendApiStore,
@@ -72,18 +74,27 @@ import {
   AppError,
   Bytes32Schema,
   type CurrentUser,
+  deriveParticleCompatibilityScopeId,
   digestLiveAcceptanceDeploymentConfig,
+  digestParticleProjectConfiguration,
   digestUnknown,
   EvidenceDigestSchema,
   EvmAddressSchema,
   type OrderIntent,
+  ParticleCompatibilityProfileSchema,
   type SplitReimbursementIntent,
   TransactionHashSchema,
 } from '@opentab/shared';
 import type { DeterministicBackendParts } from './deterministic-composition.js';
 import { LiveBackendApiCommands } from './live-commands.js';
 import { LiveBackendApiResourceQueries } from './live-resource-queries.js';
-import { type BackendApiRegistry, installBackendApiRegistry } from './registry.js';
+import { LiveParticleCertificationService } from './particle-certification-service.js';
+import { ParticleReleasePaymentPolicy } from './particle-payment-policy.js';
+import {
+  type BackendApiRegistry,
+  installBackendApiRegistry,
+  replaceBackendApiRegistry,
+} from './registry.js';
 
 function requiredSecret(
   value: string | undefined,
@@ -182,7 +193,7 @@ export function resolveApplicationReleaseId(
 
 function createLiveArbitrumChain(
   config: ServerEnvironment,
-  particle: EnabledParticleBrowserConfig,
+  expectedDelegationImplementation: string,
 ): ArbitrumReadPort {
   const splitAddress = /^0x0{40}$/i.test(config.NEXT_PUBLIC_SPLIT_ADDRESS)
     ? undefined
@@ -197,9 +208,7 @@ function createLiveArbitrumChain(
     checkoutAddress: config.NEXT_PUBLIC_CHECKOUT_ADDRESS,
     passAddress: config.NEXT_PUBLIC_PASS_ADDRESS,
     ...(splitAddress === undefined ? {} : { splitAddress }),
-    expectedDelegationImplementation: EvmAddressSchema.parse(
-      particle.expectedImplementationAddress,
-    ),
+    expectedDelegationImplementation: EvmAddressSchema.parse(expectedDelegationImplementation),
     deploymentBlock: config.INDEXER_DEPLOYMENT_BLOCK,
     maxLogRange: BigInt(Math.min(config.REORG_WINDOW_BLOCKS, 10_000)),
     maxOrderLookupBlocks: BigInt(Math.max(config.REORG_WINDOW_BLOCKS, 100_000)),
@@ -269,82 +278,86 @@ function publicConfig(
   config: ServerEnvironment,
   deterministicParts: DeterministicBackendParts | undefined,
   applicationReleaseId: string,
+  compatibility: LoadedParticleCompatibilityProfile | undefined,
 ): PublicBrowserConfig {
   const deterministic = deterministicParts !== undefined;
   const capabilities = deriveServerFeatureCapabilities(config);
-  if (!deterministic && !config.PARTICLE_LIVE_ENABLED) {
+  const liveProfile = compatibility?.profile;
+  const liveReady =
+    config.PARTICLE_LIVE_ENABLED &&
+    liveProfile !== undefined &&
+    liveProfile.stage !== 'bootstrap' &&
+    liveProfile.sourceTokenProfile !== undefined;
+  const mediaOrigins = [
+    new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
+    ...config.PRODUCT_MEDIA_ALLOWED_ORIGINS.filter(
+      (origin) => origin !== new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
+    ),
+  ];
+  const common = {
+    applicationReleaseId,
+    magic: {
+      publishableKey: config.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY,
+      rpcUrl: config.NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL,
+    },
+    challenge: {
+      ...(config.NEXT_PUBLIC_TURNSTILE_SITE_KEY === undefined
+        ? {}
+        : { turnstileSiteKey: config.NEXT_PUBLIC_TURNSTILE_SITE_KEY }),
+    },
+    environment: config.APP_ENV,
+    media: { allowedOrigins: mediaOrigins },
+    features: {
+      checkout: capabilities.checkoutSubmission && (deterministic || liveReady),
+      bootstrapGas: config.BOOTSTRAP_SPONSOR_ENABLED,
+      splits: config.SPLITS_ENABLED,
+      loyalty: config.MERCHANT_MUTATIONS_ENABLED,
+      judgeMode: config.JUDGE_MODE_ENABLED,
+    },
+  } satisfies Omit<PublicBrowserConfig, 'particle' | 'liveAcceptanceConfigDigest'>;
+
+  if (!deterministic && !liveReady) {
     return {
-      applicationReleaseId,
-      magic: {
-        publishableKey: config.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY,
-        rpcUrl: config.NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL,
-      },
-      challenge: {
-        ...(config.NEXT_PUBLIC_TURNSTILE_SITE_KEY === undefined
-          ? {}
-          : { turnstileSiteKey: config.NEXT_PUBLIC_TURNSTILE_SITE_KEY }),
-      },
+      ...common,
       particle: { enabled: false },
-      environment: config.APP_ENV,
-      media: {
-        allowedOrigins: [
-          new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
-          ...config.PRODUCT_MEDIA_ALLOWED_ORIGINS.filter(
-            (origin) => origin !== new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
-          ),
-        ],
-      },
-      features: {
-        checkout: capabilities.checkoutSubmission,
-        bootstrapGas: config.BOOTSTRAP_SPONSOR_ENABLED,
-        splits: config.SPLITS_ENABLED,
-        loyalty: config.MERCHANT_MUTATIONS_ENABLED,
-        judgeMode: config.JUDGE_MODE_ENABLED,
-      },
     };
   }
-  const requiredLive = <T>(value: T | undefined, name: string): T => {
-    if (value === undefined) {
-      throw new AppError(
-        'CONFIGURATION_INVALID',
-        `${name} is required by the public client config.`,
-      );
-    }
-    return value;
-  };
+
   const expectedImplementationAddress =
     deterministicParts !== undefined
       ? deterministicParts.implementationAddress
-      : requiredLive(
-          config.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS,
-          'PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS',
-        );
+      : EvmAddressSchema.parse(liveProfile?.delegateAddress);
   const expectedImplementationCodeHash =
     deterministicParts !== undefined
       ? deterministicParts.implementationCodeHash
-      : requiredLive(
-          config.PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH,
-          'PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH',
-        );
-  const particleFixtureSetDigest = digestUnknown({
-    deployments:
-      deterministicParts?.fixtureDigest ??
-      requiredLive(
-        config.PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST,
-        'PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST',
-      ),
-    authorization:
-      deterministicParts?.fixtureDigest ??
-      requiredLive(config.PARTICLE_AUTH_FIXTURE_DIGEST, 'PARTICLE_AUTH_FIXTURE_DIGEST'),
-    submission:
-      deterministicParts?.fixtureDigest ??
-      requiredLive(config.PARTICLE_SUBMISSION_FIXTURE_DIGEST, 'PARTICLE_SUBMISSION_FIXTURE_DIGEST'),
-    status:
-      deterministicParts?.fixtureDigest ??
-      requiredLive(config.PARTICLE_STATUS_FIXTURE_DIGEST, 'PARTICLE_STATUS_FIXTURE_DIGEST'),
-  });
+      : EvidenceDigestSchema.parse(liveProfile?.delegateCodeHash);
+  const responseDigests =
+    deterministicParts === undefined
+      ? ParticleCompatibilityProfileSchema.parse(liveProfile).responseDigests
+      : {
+          deployments: deterministicParts.fixtureDigest,
+          auth: deterministicParts.fixtureDigest,
+          submission: deterministicParts.fixtureDigest,
+          status: deterministicParts.fixtureDigest,
+        };
+  const sourceTokenProfile =
+    deterministicParts === undefined
+      ? ParticleCompatibilityProfileSchema.parse(liveProfile).sourceTokenProfile
+      : undefined;
+  const profileId =
+    deterministicParts?.responseProfileId ??
+    ParticleCompatibilityProfileSchema.parse(liveProfile).profileId;
+  const profileDigest = compatibility?.binding.profileDigest ?? deterministicParts?.fixtureDigest;
+  if (profileDigest === undefined) {
+    throw new AppError(
+      'CONFIGURATION_INVALID',
+      'The Particle compatibility digest is unavailable.',
+    );
+  }
+  const particleFixtureSetDigest = digestUnknown(responseDigests);
   const liveAcceptanceEligible =
     !deterministic &&
+    liveProfile?.stage === 'certified' &&
     ['demo-mainnet', 'production'].includes(config.APP_ENV) &&
     /^[0-9a-fA-F]{40}$/.test(applicationReleaseId);
   const liveAcceptanceConfigDigest = liveAcceptanceEligible
@@ -359,12 +372,11 @@ function publicConfig(
         expectedDelegationImplementation: expectedImplementationAddress,
         expectedDelegationCodeHash: expectedImplementationCodeHash,
         particleSdkVersion: '2.0.3',
-        particleResponseProfileId: requiredLive(
-          config.PARTICLE_RESPONSE_PROFILE_ID,
-          'PARTICLE_RESPONSE_PROFILE_ID',
-        ),
+        particleResponseProfileId: profileId,
         particleFixtureSetDigest,
-        particleSourceCallProfilesDigest: digestUnknown(config.PARTICLE_SOURCE_CALL_PROFILES_JSON),
+        particleSourceCallProfilesDigest: digestUnknown(
+          sourceTokenProfile?.sourceCallPolicies ?? [],
+        ),
         confirmationDepth: config.CONFIRMATION_DEPTH.toString(),
         maximumSlippageBps: config.PARTICLE_MAX_SLIPPAGE_BPS.toString(),
         allowedSourceChainIds: config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS,
@@ -372,90 +384,51 @@ function publicConfig(
       })
     : undefined;
   return {
-    applicationReleaseId,
+    ...common,
     ...(liveAcceptanceConfigDigest === undefined ? {} : { liveAcceptanceConfigDigest }),
-    magic: {
-      publishableKey: config.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY,
-      rpcUrl: config.NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL,
-    },
-    challenge: {
-      ...(config.NEXT_PUBLIC_TURNSTILE_SITE_KEY === undefined
-        ? {}
-        : { turnstileSiteKey: config.NEXT_PUBLIC_TURNSTILE_SITE_KEY }),
-    },
     particle: {
       enabled: true,
       projectId: config.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
       projectClientKey: config.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
       projectAppUuid: config.NEXT_PUBLIC_PARTICLE_APP_UUID,
+      certificationStage: deterministic
+        ? 'certified'
+        : (liveProfile?.stage as 'canary_ready' | 'certified'),
+      profileDigest,
       expectedImplementationAddress,
       expectedImplementationCodeHash,
       slippageBps: config.PARTICLE_MAX_SLIPPAGE_BPS,
       maxFeeUsdMicros: config.PARTICLE_MAX_FEE_USD_MICROS.toString(),
-      allowedSourceChainIds: config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS,
-      allowedSourceAssets: config.PARTICLE_ALLOWED_SOURCE_ASSETS,
+      allowedSourceChainIds:
+        sourceTokenProfile?.allowedSourceChainIds ?? config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS,
+      allowedSourceAssets:
+        sourceTokenProfile?.allowedSourceAssets ?? config.PARTICLE_ALLOWED_SOURCE_ASSETS,
       allowedSourceTokens:
-        deterministicParts?.allowedSourceTokens ?? config.PARTICLE_ALLOWED_SOURCE_TOKENS,
-      sourceCallProfiles: deterministic ? [] : config.PARTICLE_SOURCE_CALL_PROFILES_JSON,
+        deterministicParts?.allowedSourceTokens ?? sourceTokenProfile?.allowedSourceTokens ?? [],
+      sourceCallPolicies: sourceTokenProfile?.sourceCallPolicies ?? [],
+      ...(config.PARTICLE_RPC_URL === undefined ? {} : { rpcUrl: config.PARTICLE_RPC_URL }),
       responseProfile: {
-        profileId:
-          deterministicParts !== undefined
-            ? deterministicParts.responseProfileId
-            : requiredLive(config.PARTICLE_RESPONSE_PROFILE_ID, 'PARTICLE_RESPONSE_PROFILE_ID'),
+        profileId,
         provenance: deterministic ? 'deterministic' : 'recorded_live',
-        deploymentsFixtureDigest:
-          deterministicParts !== undefined
-            ? deterministicParts.fixtureDigest
-            : requiredLive(
-                config.PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST,
-                'PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST',
-              ),
-        authFixtureDigest:
-          deterministicParts !== undefined
-            ? deterministicParts.fixtureDigest
-            : requiredLive(config.PARTICLE_AUTH_FIXTURE_DIGEST, 'PARTICLE_AUTH_FIXTURE_DIGEST'),
-        submissionFixtureDigest:
-          deterministicParts !== undefined
-            ? deterministicParts.fixtureDigest
-            : requiredLive(
-                config.PARTICLE_SUBMISSION_FIXTURE_DIGEST,
-                'PARTICLE_SUBMISSION_FIXTURE_DIGEST',
-              ),
-        statusFixtureDigest:
-          deterministicParts !== undefined
-            ? deterministicParts.fixtureDigest
-            : requiredLive(config.PARTICLE_STATUS_FIXTURE_DIGEST, 'PARTICLE_STATUS_FIXTURE_DIGEST'),
+        deploymentsFixtureDigest: responseDigests.deployments,
+        authFixtureDigest: responseDigests.auth,
+        ...(responseDigests.submission === undefined
+          ? {}
+          : { submissionFixtureDigest: responseDigests.submission }),
+        ...(responseDigests.status === undefined
+          ? {}
+          : { statusFixtureDigest: responseDigests.status }),
         magicAuthorizationNonceOffset:
           deterministicParts !== undefined
             ? deterministicParts.magicAuthorizationNonceOffset
-            : requiredLive(
-                config.PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET,
-                'PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET',
-              ),
+            : ParticleCompatibilityProfileSchema.parse(liveProfile).nonceConvention
+                .magicAuthorizationNonceOffset,
         delegationPlanTtlSeconds:
           deterministicParts !== undefined
             ? deterministicParts.delegationPlanTtlSeconds
-            : requiredLive(
-                config.PARTICLE_DELEGATION_PLAN_TTL_SECONDS,
-                'PARTICLE_DELEGATION_PLAN_TTL_SECONDS',
-              ),
+            : ParticleCompatibilityProfileSchema.parse(liveProfile).nonceConvention
+                .delegationPlanTtlSeconds,
       },
-    },
-    environment: config.APP_ENV,
-    media: {
-      allowedOrigins: [
-        new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
-        ...config.PRODUCT_MEDIA_ALLOWED_ORIGINS.filter(
-          (origin) => origin !== new URL(config.NEXT_PUBLIC_APP_ORIGIN).origin,
-        ),
-      ],
-    },
-    features: {
-      checkout: capabilities.checkoutSubmission,
-      bootstrapGas: config.BOOTSTRAP_SPONSOR_ENABLED,
-      splits: config.SPLITS_ENABLED,
-      loyalty: config.MERCHANT_MUTATIONS_ENABLED,
-      judgeMode: config.JUDGE_MODE_ENABLED,
     },
   };
 }
@@ -477,24 +450,17 @@ function operationsFactory(
       maxFeeUsdMicros: BigInt(particle.maxFeeUsdMicros),
       allowedSourceChainIds: particle.allowedSourceChainIds,
       allowedSourceAssets: particle.allowedSourceAssets,
-      sourceCallProfiles: particle.sourceCallProfiles.map((profile) => ({
-        profileId: profile.profileId,
-        chainId: profile.chainId,
-        asset: profile.asset,
-        tokenAddress: EvmAddressSchema.parse(profile.tokenAddress),
-        sourceAmount: profile.sourceAmount,
-        fixtureDigest: Bytes32Schema.parse(profile.fixtureDigest),
-        calls: profile.calls.map((call) => ({
-          uaType: call.uaType,
-          to: EvmAddressSchema.parse(call.to),
-          data: call.data as `0x${string}`,
-          valueWei: call.valueWei,
-        })),
+      sourceCallPolicies: particle.sourceCallPolicies.map((policy) => ({
+        ...policy,
+        tokenAddress: EvmAddressSchema.parse(policy.tokenAddress),
+        target: EvmAddressSchema.parse(policy.target),
+        functionSelector: policy.functionSelector as `0x${string}`,
+        capturedFixtureDigest: Bytes32Schema.parse(policy.capturedFixtureDigest),
       })),
-      ...(config.PARTICLE_ALLOWED_SOURCE_TOKENS.length === 0
+      ...(particle.allowedSourceTokens.length === 0
         ? {}
         : {
-            allowedSourceTokens: config.PARTICLE_ALLOWED_SOURCE_TOKENS.map((token) => ({
+            allowedSourceTokens: particle.allowedSourceTokens.map((token) => ({
               chainId: token.chainId,
               asset: token.asset,
               address: token.address,
@@ -502,22 +468,39 @@ function operationsFactory(
           }),
       responseProfile: {
         ...particle.responseProfile,
+        certificationStage: particle.certificationStage,
         deploymentsFixtureDigest: particle.responseProfile
           .deploymentsFixtureDigest as `0x${string}`,
         authFixtureDigest: particle.responseProfile.authFixtureDigest as `0x${string}`,
-        submissionFixtureDigest: particle.responseProfile.submissionFixtureDigest as `0x${string}`,
-        statusFixtureDigest: particle.responseProfile.statusFixtureDigest as `0x${string}`,
+        ...(particle.responseProfile.submissionFixtureDigest === undefined
+          ? {}
+          : {
+              submissionFixtureDigest: particle.responseProfile
+                .submissionFixtureDigest as `0x${string}`,
+            }),
+        ...(particle.responseProfile.statusFixtureDigest === undefined
+          ? {}
+          : {
+              statusFixtureDigest: particle.responseProfile.statusFixtureDigest as `0x${string}`,
+            }),
       },
       ...(config.PARTICLE_RPC_URL === undefined ? {} : { rpcUrl: config.PARTICLE_RPC_URL }),
     });
 }
 
-export function featureFlags(config: ServerEnvironment): FeatureFlagPort {
+export function featureFlags(
+  config: ServerEnvironment,
+  compatibility?: LoadedParticleCompatibilityProfile,
+  deterministic = config.PROVIDER_MODE === 'deterministic',
+): FeatureFlagPort {
   const capabilities = deriveServerFeatureCapabilities(config);
+  const releaseBound = deterministic || compatibility !== undefined;
+  const particleReady =
+    deterministic || (compatibility !== undefined && compatibility.profile.stage !== 'bootstrap');
   const flags: Readonly<Record<string, boolean>> = {
-    'particle-reads': capabilities.particleReads,
-    'checkout-preview': capabilities.checkoutPreview,
-    'checkout-submit': capabilities.checkoutSubmission,
+    'particle-reads': capabilities.particleReads && particleReady,
+    'checkout-preview': capabilities.checkoutPreview && releaseBound,
+    'checkout-submit': capabilities.checkoutSubmission && releaseBound,
     'merchant-mutations': capabilities.merchantMutations,
     refunds: capabilities.refunds,
     withdrawals: capabilities.withdrawals,
@@ -729,6 +712,14 @@ export async function createBackendApiRegistry(
     deterministicParts,
     'privacy',
   );
+  const particleCertificationSubjectHash = (actor: CurrentUser) =>
+    EvidenceDigestSchema.parse(
+      `0x${hashOpaqueSecret({
+        domain: 'particle-certification-subject',
+        pepper: privacySecret,
+        value: actor.id,
+      })}`,
+    );
   const judgeShareTokenSecret = config.JUDGE_MODE_ENABLED
     ? requiredSecret(
         config.JUDGE_SHARE_TOKEN_SECRET,
@@ -757,6 +748,46 @@ export async function createBackendApiRegistry(
     }
   }
   const uow = new PostgresUnitOfWork(database.db);
+  const compatibilityEnvironment =
+    config.APP_ENV === 'demo-mainnet' || config.APP_ENV === 'production'
+      ? config.APP_ENV
+      : undefined;
+  const particleCompatibilityScopeId =
+    compatibilityEnvironment === undefined
+      ? applicationReleaseId
+      : deriveParticleCompatibilityScopeId({
+          environment: compatibilityEnvironment,
+          chainId: config.NEXT_PUBLIC_ARBITRUM_CHAIN_ID,
+          projectId: config.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
+          projectClientKey: config.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
+          projectAppUuid: config.NEXT_PUBLIC_PARTICLE_APP_UUID,
+          checkoutAddress: config.NEXT_PUBLIC_CHECKOUT_ADDRESS,
+          passAddress: config.NEXT_PUBLIC_PASS_ADDRESS,
+          tokenAddress: config.NEXT_PUBLIC_USDC_ADDRESS,
+        });
+  const compatibility =
+    deterministic || compatibilityEnvironment === undefined
+      ? undefined
+      : await loadParticleCompatibilityProfileForRelease(database.db, {
+          environment: compatibilityEnvironment,
+          applicationReleaseId: particleCompatibilityScopeId,
+          chainId: '42161',
+        });
+  if (
+    compatibility !== undefined &&
+    compatibility.profile.particleProjectConfigDigest.toLowerCase() !==
+      digestParticleProjectConfiguration({
+        projectId: config.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
+        projectClientKey: config.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
+        projectAppUuid: config.NEXT_PUBLIC_PARTICLE_APP_UUID,
+      }).toLowerCase()
+  ) {
+    await database.close();
+    throw new AppError(
+      'CONFIGURATION_INVALID',
+      'The project-scoped Particle profile belongs to another Particle project.',
+    );
+  }
   const redis = createRedis(redisUrl);
   const managedSignerLocks = new RedisDistributedLock(redis);
   const idempotency = new PostgresIdempotencyRepository(uow);
@@ -777,7 +808,7 @@ export async function createBackendApiRegistry(
   const products = new DrizzleProductRepository(uow);
   const workflow = new PostgresWorkflowStore(uow);
   const capabilities = new PostgresSplitCapabilityStore(uow, capabilityPepper);
-  const browser = publicConfig(config, deterministicParts, applicationReleaseId);
+  const browser = publicConfig(config, deterministicParts, applicationReleaseId, compatibility);
   const queries = new PostgresBackendApiQueryStore(
     uow,
     capabilityPepper,
@@ -843,17 +874,49 @@ export async function createBackendApiRegistry(
         : undefined;
   const chain =
     deterministicParts?.chain ??
-    (browser.particle.enabled
-      ? createLiveArbitrumChain(config, browser.particle)
+    (compatibilityEnvironment !== undefined &&
+    (config.PARTICLE_LIVE_ENABLED ||
+      config.PAYMENTS_ENABLED ||
+      config.PARTICLE_CERTIFICATION_TOKEN !== undefined)
+      ? createLiveArbitrumChain(
+          config,
+          compatibility?.profile.delegateAddress ?? config.NEXT_PUBLIC_CHECKOUT_ADDRESS,
+        )
       : unavailableArbitrumChain());
   const platformFeeBps = (config.PLATFORM_FEE_BPS ?? 0).toString();
-  if (config.PAYMENTS_ENABLED) {
+  if (compatibility !== undefined) {
+    if (chain.getCodeHash === undefined) {
+      throw new AppError(
+        'CONFIGURATION_INVALID',
+        'The runtime cannot independently verify the certified Particle delegate.',
+      );
+    }
+    const observedDelegateCodeHash = await chain.getCodeHash(compatibility.profile.delegateAddress);
+    if (
+      observedDelegateCodeHash.toLowerCase() !==
+      compatibility.profile.delegateCodeHash.toLowerCase()
+    ) {
+      throw new AppError(
+        'UA_CONFIGURATION_INVALID',
+        'The certified Particle delegate bytecode changed onchain.',
+      );
+    }
+  }
+  if (config.PAYMENTS_ENABLED && (deterministic || compatibility !== undefined)) {
     await assertPlatformFeeParity(
       chain,
       requireRuntimeValue(config.PLATFORM_FEE_BPS, 'PLATFORM_FEE_BPS'),
     );
   }
   const clock = { now: () => new Date() };
+  const paymentPolicy =
+    deterministicParts !== undefined
+      ? undefined
+      : new ParticleReleasePaymentPolicy({
+          loaded: compatibility,
+          queries,
+          subjectHash: particleCertificationSubjectHash,
+        });
   const judgeEvidence =
     judgeShareTokenSecret === undefined
       ? undefined
@@ -1041,12 +1104,20 @@ export async function createBackendApiRegistry(
     platformFeeBps,
     signerKeyId: signer.keyId,
     attemptTtlSeconds: config.PAYMENT_INTENT_TTL_SECONDS,
+    ...(paymentPolicy === undefined
+      ? {}
+      : { authorize: (input) => paymentPolicy.authorizeCreation(input) }),
   });
   const commands = new LiveBackendApiCommands({
     createMerchant,
     createProduct,
     createCheckoutSession,
     createPaymentAttempt,
+    ...(paymentPolicy === undefined
+      ? {}
+      : {
+          authorizePaymentSubmission: (input) => paymentPolicy.authorizeSubmission(input),
+        }),
     recordPreparedAttempt: new RecordPreparedAttemptUseCase({ store: workflow, clock }),
     startSubmission: new StartSubmissionUseCase({ store: workflow, clock }),
     attachSubmission: new AttachSubmissionUseCase({ store: workflow, clock }),
@@ -1148,6 +1219,42 @@ export async function createBackendApiRegistry(
       },
     },
   });
+  const particleCertification =
+    deterministicParts !== undefined ||
+    compatibilityEnvironment === undefined ||
+    config.PARTICLE_CERTIFICATION_TOKEN === undefined
+      ? undefined
+      : new LiveParticleCertificationService({
+          db: database.db,
+          workflow,
+          queries,
+          chain,
+          operatorToken: config.PARTICLE_CERTIFICATION_TOKEN,
+          subjectHash: particleCertificationSubjectHash,
+          config: {
+            environment: compatibilityEnvironment,
+            profileScopeId: particleCompatibilityScopeId,
+            particleLiveEnabled: config.PARTICLE_LIVE_ENABLED,
+            paymentsEnabled: config.PAYMENTS_ENABLED,
+            projectId: config.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
+            projectClientKey: config.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
+            projectAppUuid: config.NEXT_PUBLIC_PARTICLE_APP_UUID,
+            ...(config.PARTICLE_RPC_URL === undefined
+              ? {}
+              : { particleRpcUrl: config.PARTICLE_RPC_URL }),
+            arbitrumRpcUrl: config.NEXT_PUBLIC_ARBITRUM_PUBLIC_RPC_URL,
+            checkoutAddress: config.NEXT_PUBLIC_CHECKOUT_ADDRESS,
+            passAddress: config.NEXT_PUBLIC_PASS_ADDRESS,
+            tokenAddress: config.NEXT_PUBLIC_USDC_ADDRESS,
+            maximumSlippageBps: config.PARTICLE_MAX_SLIPPAGE_BPS,
+            maximumFeeUsdMicros: config.PARTICLE_MAX_FEE_USD_MICROS.toString(),
+            delegationPlanTtlSeconds: config.PARTICLE_DELEGATION_PLAN_TTL_SECONDS,
+            allowedSourceChainIds: config.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS,
+            allowedSourceAssets: config.PARTICLE_ALLOWED_SOURCE_ASSETS,
+            allowedSourceTokens: config.PARTICLE_ALLOWED_SOURCE_TOKENS,
+          },
+          reloadRuntime: () => reloadComposedBackendApiRegistry(process.env),
+        });
   const secureCookies = new URL(config.NEXT_PUBLIC_APP_ORIGIN).protocol === 'https:';
   return {
     sessions,
@@ -1165,7 +1272,7 @@ export async function createBackendApiRegistry(
     queries,
     resourceQueries,
     commands,
-    featureFlags: featureFlags(config),
+    featureFlags: featureFlags(config, compatibility, deterministic),
     rateLimits,
     requestLog: {
       info: (fields) => apiLogger.info(fields, 'API request completed'),
@@ -1178,6 +1285,23 @@ export async function createBackendApiRegistry(
     digestSecret: (domain, value) =>
       hashOpaqueSecret({ domain: `api-${domain}`.slice(0, 64), pepper: privacySecret, value }),
     networkSubject: (request) => trustedNetworkSubject(request, config.APP_ENV),
+    ...(particleCertification === undefined ? {} : { particleCertification }),
+    ...(compatibilityEnvironment === undefined
+      ? {}
+      : {
+          refreshRuntime: async () => {
+            const latest = await loadParticleCompatibilityProfileForRelease(database.db, {
+              environment: compatibilityEnvironment,
+              applicationReleaseId: particleCompatibilityScopeId,
+              chainId: '42161',
+            });
+            const currentDigest = compatibility?.binding.profileDigest.toLowerCase();
+            const latestDigest = latest?.binding.profileDigest.toLowerCase();
+            if (currentDigest !== latestDigest) {
+              await reloadComposedBackendApiRegistry(env);
+            }
+          },
+        }),
     async close() {
       await Promise.allSettled([redis.quit(), database.close()]);
     },
@@ -1185,6 +1309,7 @@ export async function createBackendApiRegistry(
 }
 
 let installedClose: (() => Promise<void>) | undefined;
+let reloadInFlight: Promise<void> | undefined;
 
 export async function installComposedBackendApiRegistry(
   env: Record<string, string | undefined> = process.env,
@@ -1194,8 +1319,29 @@ export async function installComposedBackendApiRegistry(
   installedClose = () => composed.close();
 }
 
+export async function reloadComposedBackendApiRegistry(
+  env: Record<string, string | undefined> = process.env,
+): Promise<void> {
+  reloadInFlight ??= (async () => {
+    const replacement = await createBackendApiRegistry(env);
+    const previousClose = installedClose;
+    replaceBackendApiRegistry(replacement);
+    installedClose = () => replacement.close();
+    if (previousClose !== undefined) {
+      const timer = setTimeout(() => {
+        void previousClose();
+      }, 10_000);
+      timer.unref();
+    }
+  })().finally(() => {
+    reloadInFlight = undefined;
+  });
+  await reloadInFlight;
+}
+
 export async function closeComposedBackendApiRegistry(): Promise<void> {
   const close = installedClose;
   installedClose = undefined;
+  reloadInFlight = undefined;
   await close?.();
 }

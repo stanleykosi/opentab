@@ -41,6 +41,8 @@ function publicConfig(provenance: 'deterministic' | 'recorded_live' = 'recorded_
       projectId: 'particle-project',
       projectClientKey: 'particle-client',
       projectAppUuid: 'particle-app',
+      certificationStage: 'certified' as const,
+      profileDigest: digest,
       expectedImplementationAddress: '0x2222222222222222222222222222222222222222',
       expectedImplementationCodeHash: digest,
       slippageBps: 50,
@@ -54,22 +56,18 @@ function publicConfig(provenance: 'deterministic' | 'recorded_live' = 'recorded_
           address: '0x3333333333333333333333333333333333333333',
         },
       ],
-      sourceCallProfiles: [
+      sourceCallPolicies: [
         {
-          profileId: 'base-usdc-test-v1',
+          policyId: 'base-usdc-test-v1',
           chainId: '8453',
           asset: 'USDC' as const,
           tokenAddress: '0x3333333333333333333333333333333333333333',
-          sourceAmount: '1',
-          fixtureDigest: digest,
-          calls: [
-            {
-              uaType: 'evm',
-              to: '0x3333333333333333333333333333333333333333',
-              data: '0x1234',
-              valueWei: '0',
-            },
-          ],
+          uaType: 'evm',
+          target: '0x3333333333333333333333333333333333333333',
+          functionSelector: '0x12345678',
+          nativeValueAllowed: false,
+          maxCalls: 1,
+          capturedFixtureDigest: digest,
         },
       ],
       responseProfile: {
@@ -209,7 +207,7 @@ const validatedPlan = ValidatedOperationPlanSchema.parse({
 });
 
 const merchantMutationTemplate = BoundOperationTemplateSchema.parse({
-  kind: 'product_mutation',
+  kind: 'merchant_mutation',
   ownerAddress: owner,
   chainId: '42161',
   calls: [{ to: binding.checkoutAddress, data: '0x34', valueWei: '0' }],
@@ -769,5 +767,286 @@ describe('browser application service boundaries', () => {
     expect(result.kind).toBe('submitted');
     expect(events).toEqual(['server:submission_started', 'provider:send', 'server:submitted']);
     expect(account.submitValidated).toHaveBeenCalledTimes(1);
+  });
+
+  it('bootstraps the fixed canary through durable Magic-direct operations without duplicate sends', async () => {
+    type BootstrapAction = 'create_merchant' | 'create_product' | 'set_product_active';
+    type OperationStatus = ReturnType<typeof contractOperationRecord>['status'];
+    const profileScopeId = '0123456789abcdef0123456789abcdef01234567';
+    const checkoutAddress = binding.checkoutAddress;
+    const operationIds: Record<BootstrapAction, string> = {
+      create_merchant: `cop_${'0'.repeat(25)}1`,
+      create_product: `cop_${'0'.repeat(25)}2`,
+      set_product_active: `cop_${'0'.repeat(25)}3`,
+    };
+    const transactionHashes: Record<BootstrapAction, `0x${string}`> = {
+      create_merchant: `0x${'21'.repeat(32)}`,
+      create_product: `0x${'22'.repeat(32)}`,
+      set_product_active: `0x${'23'.repeat(32)}`,
+    };
+    const statuses = new Map<BootstrapAction, OperationStatus>([
+      ['create_merchant', 'prepared'],
+      ['create_product', 'prepared'],
+      ['set_product_active', 'prepared'],
+    ]);
+    let merchantCreated = false;
+    let productCreated = false;
+    let productActive = false;
+    const events: string[] = [];
+    const merchant = (active: boolean) => ({
+      id: merchantId,
+      ownerUserId: user.id,
+      slug: 'opentab-canary-11111111',
+      displayName: 'OpenTab Release Canary',
+      supportContact: 'OpenTab release operator',
+      payoutAddress: owner,
+      status: active ? ('active' as const) : ('draft' as const),
+      createdAt: '2026-07-14T01:00:00.000Z',
+      updatedAt: '2026-07-14T01:00:01.000Z',
+    });
+    const product = () => ({
+      id: productId,
+      merchantId,
+      ...(productCreated ? { onchainProductId: '7' } : {}),
+      version: '1',
+      slug: 'opentab-release-canary',
+      title: 'OpenTab 10¢ Release Canary',
+      description: 'A tiny release certification product.',
+      unitPriceBaseUnits: '100000',
+      maxSupply: '100',
+      sold: '0',
+      maxPerOrder: '1',
+      startsAt: '2025-01-01T00:00:00.000Z',
+      refundWindowSeconds: '0',
+      loyaltyPoints: '1',
+      metadataHash: digest,
+      status: productActive
+        ? ('active' as const)
+        : productCreated
+          ? ('publishing' as const)
+          : ('draft' as const),
+      createdAt: '2026-07-14T01:00:00.000Z',
+      updatedAt: '2026-07-14T01:00:01.000Z',
+    });
+    const bootstrapOperation = (action: BootstrapAction) => {
+      const status = statuses.get(action) ?? 'prepared';
+      const kind = action === 'create_merchant' ? 'merchant_mutation' : 'product_mutation';
+      const operationTemplate = BoundOperationTemplateSchema.parse({
+        kind,
+        ownerAddress: owner,
+        chainId: '42161',
+        calls: [{ to: checkoutAddress, data: '0x1234', valueWei: '0' }],
+        bindingDigest: digest,
+        expiresAt: future,
+      });
+      return {
+        id: operationIds[action],
+        kind,
+        aggregateType: action === 'create_merchant' ? ('merchant' as const) : ('product' as const),
+        aggregateId: action === 'create_merchant' ? merchantId : productId,
+        binding: { mutation: { action } },
+        template: operationTemplate,
+        bindingDigest: digest,
+        status,
+        ...(status === 'prepared'
+          ? {}
+          : {
+              providerOperationId: `magic-direct:${operationIds[action]}`,
+              transactionHash: transactionHashes[action],
+            }),
+        ...(status === 'confirmed'
+          ? {
+              canonicalEventName:
+                action === 'create_merchant' ? 'MerchantCreated' : 'ProductCreated',
+            }
+          : {}),
+        expiresAt: future,
+        createdAt: '2026-07-14T01:00:00.000Z',
+        updatedAt: '2026-07-14T01:00:01.000Z',
+      };
+    };
+    const actionForOperationId = (operationId: string): BootstrapAction => {
+      const entry = Object.entries(operationIds).find(([, id]) => id === operationId);
+      if (entry === undefined) throw new Error(`Unknown operation ${operationId}`);
+      return entry[0] as BootstrapAction;
+    };
+    const certificationStatus = {
+      environment: 'demo-mainnet' as const,
+      profileScopeId,
+      chainId: '42161' as const,
+      captureConfig: {
+        projectId: 'particle-project',
+        projectClientKey: 'particle-client',
+        projectAppUuid: 'particle-app',
+        arbitrumRpcUrl: 'https://arb.example/rpc',
+        checkoutAddress,
+        passAddress: '0x5555555555555555555555555555555555555555',
+        tokenAddress: '0x3333333333333333333333333333333333333333',
+        maximumSlippageBps: 50,
+        maximumFeeUsdMicros: '500000',
+        delegationPlanTtlSeconds: 120,
+        allowedSourceChainIds: ['8453', '42161'],
+        allowedSourceAssets: ['USDC'] as const,
+        allowedSourceTokens: [],
+        useEIP7702: true as const,
+      },
+      certification: { stage: 'uncertified' as const, subjectMatches: false as const },
+      effectiveCapabilities: {
+        captureBootstrap: true,
+        captureCanaryPreview: false,
+        runCanary: false,
+        payments: false,
+      },
+      requestId: 'req_certification_unlock',
+    };
+    const fetcher = vi.fn<typeof fetch>(async (path, init) => {
+      const pathname = String(path);
+      const method = init?.method ?? 'GET';
+      if (pathname === '/api/v1/auth/session/refresh') return json(session());
+      if (pathname === '/api/v1/config/public') {
+        return json({ ...publicConfig(), particle: { enabled: false } });
+      }
+      if (pathname === '/api/v1/operator/particle-certification/unlock') {
+        return json(certificationStatus);
+      }
+      if (pathname === '/api/v1/merchant/profile' && method === 'GET') {
+        if (!merchantCreated) {
+          return json(
+            {
+              error: {
+                code: 'NOT_FOUND',
+                message: 'Merchant not found.',
+                retryable: false,
+                submissionPossible: false,
+                requestId: 'req_merchant_missing',
+              },
+            },
+            404,
+          );
+        }
+        return json({ merchant: merchant(true), requestId: 'req_merchant_profile' });
+      }
+      if (pathname === '/api/v1/merchant/profile' && method === 'POST') {
+        return json(
+          {
+            merchant: merchant(false),
+            operation: bootstrapOperation('create_merchant'),
+            requestId: 'req_merchant_create',
+          },
+          201,
+        );
+      }
+      if (pathname === '/api/v1/merchant/products?limit=100') {
+        return json({
+          items: productCreated ? [product()] : [],
+          requestId: 'req_products_list',
+        });
+      }
+      if (pathname === '/api/v1/merchant/products' && method === 'POST') {
+        return json(
+          {
+            product: product(),
+            optimisticVersion: '1',
+            operation: bootstrapOperation('create_product'),
+            requestId: 'req_product_create',
+          },
+          202,
+        );
+      }
+      if (pathname === `/api/v1/merchant/products/${productId}`) {
+        return json({
+          product: product(),
+          optimisticVersion: '1',
+          chainSyncStatus: productCreated ? 'confirmed' : 'pending',
+          operation: bootstrapOperation(productActive ? 'set_product_active' : 'create_product'),
+          requestId: 'req_product_detail',
+        });
+      }
+      if (pathname === `/api/v1/merchant/products/${productId}/publish`) {
+        return json(
+          {
+            id: productId,
+            status: 'publishing',
+            operation: bootstrapOperation('set_product_active'),
+            requestId: 'req_product_publish',
+          },
+          202,
+        );
+      }
+      const operationMatch =
+        /^\/api\/v1\/contract-operations\/(cop_[0-9A-HJKMNP-TV-Z]{26})(\/submission)?$/.exec(
+          pathname,
+        );
+      if (operationMatch !== null) {
+        const action = actionForOperationId(operationMatch[1] ?? '');
+        if (operationMatch[2] === '/submission') {
+          const body = JSON.parse(String(init?.body)) as {
+            status: OperationStatus;
+            providerOperationId: string;
+            transactionHash?: string;
+          };
+          events.push(`server:${action}:${body.status}`);
+          if (body.status !== 'submission_started') {
+            expect(body.transactionHash).toBe(transactionHashes[action]);
+          }
+          statuses.set(action, body.status);
+          return json({ operation: bootstrapOperation(action), requestId: 'req_operation_submit' });
+        }
+        if (statuses.get(action) === 'submitted') {
+          statuses.set(action, 'confirmed');
+          if (action === 'create_merchant') merchantCreated = true;
+          if (action === 'create_product') productCreated = true;
+          if (action === 'set_product_active') productActive = true;
+        }
+        return json({ operation: bootstrapOperation(action), requestId: 'req_operation_get' });
+      }
+      throw new Error(`Unexpected test request: ${method} ${pathname}`);
+    });
+    const submitOperatorBootstrapMutation = vi.fn(async (input: { action: BootstrapAction }) => {
+      events.push(`magic:${input.action}`);
+      return { transactionHash: transactionHashes[input.action] };
+    });
+    const wallet = {
+      ...magicWallet(),
+      submitOperatorBootstrapMutation,
+    };
+    const service = new BrowserApplicationService({
+      api: new BrowserApiClient({ fetcher }),
+      loadIntegrations: async () => ({
+        createCheckoutOperationTemplate: () => template,
+        digestUnknown: () => digest as EvidenceDigest,
+        validateBrowserContractOperation: (input) => input.template,
+        createMagicBrowserWallet: () => wallet,
+        createParticleUniversalAccountAdapter: () => universalAccount(),
+        createParticleOperatorCertificationAdapter: () => {
+          throw new Error('not used');
+        },
+      }),
+      continuationStore: continuationStore(),
+      origin: () => 'https://opentab.example',
+      wait: async () => undefined,
+    });
+
+    const first = await service.bootstrapParticleCertificationCanary({
+      operatorToken: 'o'.repeat(48),
+    });
+    const second = await service.bootstrapParticleCertificationCanary({
+      operatorToken: 'o'.repeat(48),
+    });
+
+    expect(first).toMatchObject({ ownerAddress: owner, product: { status: 'active' } });
+    expect(second.product.id).toBe(first.product.id);
+    expect(events).toEqual([
+      'server:create_merchant:submission_started',
+      'magic:create_merchant',
+      'server:create_merchant:submitted',
+      'server:create_product:submission_started',
+      'magic:create_product',
+      'server:create_product:submitted',
+      'server:set_product_active:submission_started',
+      'magic:set_product_active',
+      'server:set_product_active:submitted',
+    ]);
+    expect(submitOperatorBootstrapMutation).toHaveBeenCalledTimes(3);
   });
 });

@@ -164,11 +164,18 @@ describe('indexer health readiness', () => {
       maxReadyLagBlocks: 3n,
       staleAfterMs: 1_000,
       maxConsecutiveFailures: 2,
+      particleProfile: {
+        profileScopeId: 'a'.repeat(40),
+        profileId: 'particle-profile-v1',
+        profileDigest: `0x${'b'.repeat(64)}`,
+        stage: 'canary_ready',
+      },
     });
     const health = createIndexerHealthServer({ tracker, host: '127.0.0.1', port: 0 });
     await health.listen();
     const address = health.server.address();
-    if (address === null || typeof address === 'string') throw new Error('Health port unavailable.');
+    if (address === null || typeof address === 'string')
+      throw new Error('Health port unavailable.');
 
     try {
       const origin = `http://127.0.0.1:${address.port}`;
@@ -184,13 +191,19 @@ describe('indexer health readiness', () => {
         live: true,
         ready: false,
         reason: 'starting',
+        particleProfile: {
+          profileScopeId: 'a'.repeat(40),
+          profileId: 'particle-profile-v1',
+          profileDigest: `0x${'b'.repeat(64)}`,
+          stage: 'canary_ready',
+        },
       });
     } finally {
       await health.close();
     }
   });
 
-  it('distinguishes starting, ready, stale, failing, lagging, and draining states', () => {
+  it('distinguishes starting, standby, ready, stale, failing, lagging, and draining states', () => {
     let current = new Date('2026-07-14T00:00:00.000Z');
     const tracker = new IndexerHealthTracker({
       maxReadyLagBlocks: 3n,
@@ -199,6 +212,13 @@ describe('indexer health readiness', () => {
       now: () => current,
     });
     expect(tracker.snapshot()).toMatchObject({ ready: false, reason: 'starting' });
+
+    tracker.recordStandby();
+    expect(tracker.snapshot()).toMatchObject({
+      ready: false,
+      reason: 'standby',
+      consecutiveFailures: 0,
+    });
 
     tracker.recordSuccess({
       kind: 'idle',

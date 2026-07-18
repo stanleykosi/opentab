@@ -1,5 +1,10 @@
 import { parseIndexerEnvironment } from '@opentab/config';
-import { AppError, ARBITRUM_ONE_CHAIN_ID, type EvmAddressSchema } from '@opentab/shared';
+import {
+  AppError,
+  ARBITRUM_ONE_CHAIN_ID,
+  deriveParticleCompatibilityScopeId,
+  type EvmAddressSchema,
+} from '@opentab/shared';
 import { z } from 'zod';
 
 const integer = (minimum: number, maximum: number, fallback: number) =>
@@ -29,7 +34,7 @@ const IndexerProcessEnvironmentSchema = z.object({
     .string()
     .regex(/^[a-z0-9_-]{1,80}$/)
     .default('opentab-contracts-v3'),
-  INDEXER_LEASE_OWNER: z.string().min(1).max(120).optional(),
+  INDEXER_LEASE_OWNER: z.string().min(1).max(100).optional(),
 });
 
 const zeroAddress = /^0x0{40}$/i;
@@ -39,6 +44,7 @@ export interface IndexerRuntimeConfig {
   readonly writesEnabled: boolean;
   readonly reconciliationEnabled: boolean;
   readonly environment: string;
+  readonly profileScopeId?: string;
   readonly logLevel: string;
   readonly databaseUrl?: string;
   readonly chainId: typeof ARBITRUM_ONE_CHAIN_ID;
@@ -68,7 +74,15 @@ export interface IndexerRuntimeConfig {
 
 function defaultLeaseOwner(): string {
   const deployment = process.env['VERCEL_DEPLOYMENT_ID'] ?? process.env['HOSTNAME'] ?? 'local';
-  return `indexer-${deployment}-${process.pid}`.slice(0, 120);
+  return `indexer-${deployment}-${process.pid}`.slice(0, 100);
+}
+
+function particleProfileEnvironment(value: string): 'demo-mainnet' | 'production' {
+  if (value === 'demo-mainnet' || value === 'production') return value;
+  throw new AppError(
+    'CONFIGURATION_INVALID',
+    'Live Particle indexer profiles are restricted to demo-mainnet or production.',
+  );
 }
 
 export function parseIndexerRuntimeConfig(
@@ -98,11 +112,24 @@ export function parseIndexerRuntimeConfig(
       'The checkout and pass deployment addresses are required by the indexer.',
     );
   }
+  const profileScopeId = indexer.PARTICLE_LIVE_ENABLED
+    ? deriveParticleCompatibilityScopeId({
+        environment: particleProfileEnvironment(indexer.APP_ENV),
+        chainId: indexer.NEXT_PUBLIC_ARBITRUM_CHAIN_ID,
+        projectId: indexer.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
+        projectClientKey: indexer.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
+        projectAppUuid: indexer.NEXT_PUBLIC_PARTICLE_APP_UUID,
+        checkoutAddress: indexer.NEXT_PUBLIC_CHECKOUT_ADDRESS,
+        passAddress: indexer.NEXT_PUBLIC_PASS_ADDRESS,
+        tokenAddress: indexer.NEXT_PUBLIC_USDC_ADDRESS,
+      })
+    : undefined;
   return {
     enabled: indexer.INDEXER_ENABLED,
     writesEnabled: indexer.INDEXER_WRITES_ENABLED,
     reconciliationEnabled: indexer.INDEXER_RECONCILIATION_ENABLED,
     environment: indexer.APP_ENV,
+    ...(profileScopeId === undefined ? {} : { profileScopeId }),
     logLevel: indexer.LOG_LEVEL,
     ...(indexer.DATABASE_URL_INDEXER === undefined
       ? {}

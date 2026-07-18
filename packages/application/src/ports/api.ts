@@ -267,6 +267,18 @@ export interface ContractOperationPreparedResult {
   readonly operation: ContractOperationRecord;
 }
 
+export type ContractOperationSubmissionBody =
+  | {
+      readonly status: 'submission_started';
+      readonly providerOperationId: string;
+    }
+  | {
+      readonly status: 'submitted' | 'submitted_unknown';
+      readonly providerOperationId: string;
+      /** Destination-chain hash when the submitting wallet exposes it immediately. */
+      readonly transactionHash?: string;
+    };
+
 /** Stable response contracts consumed by the browser application boundary. */
 export interface CheckoutSessionCreatedResult {
   readonly sessionId: CheckoutSessionId;
@@ -342,6 +354,8 @@ export interface PublicBrowserConfig {
         readonly projectId: string;
         readonly projectClientKey: string;
         readonly projectAppUuid: string;
+        readonly certificationStage: 'canary_ready' | 'certified';
+        readonly profileDigest: string;
         readonly expectedImplementationAddress: string;
         readonly expectedImplementationCodeHash: string;
         readonly slippageBps: number;
@@ -353,19 +367,17 @@ export interface PublicBrowserConfig {
           readonly asset: 'USDC' | 'USDT' | 'ETH';
           readonly address: string;
         }[];
-        readonly sourceCallProfiles: readonly {
-          readonly profileId: string;
+        readonly sourceCallPolicies: readonly {
+          readonly policyId: string;
           readonly chainId: string;
           readonly asset: 'USDC' | 'USDT' | 'ETH';
           readonly tokenAddress: string;
-          readonly sourceAmount: string;
-          readonly fixtureDigest: string;
-          readonly calls: readonly {
-            readonly uaType: string;
-            readonly to: string;
-            readonly data: string;
-            readonly valueWei: string;
-          }[];
+          readonly uaType: string;
+          readonly target: string;
+          readonly functionSelector: string;
+          readonly nativeValueAllowed: boolean;
+          readonly maxCalls: number;
+          readonly capturedFixtureDigest: string;
         }[];
         readonly rpcUrl?: string;
         readonly responseProfile: {
@@ -373,8 +385,8 @@ export interface PublicBrowserConfig {
           readonly provenance: 'deterministic' | 'recorded_live';
           readonly deploymentsFixtureDigest: string;
           readonly authFixtureDigest: string;
-          readonly submissionFixtureDigest: string;
-          readonly statusFixtureDigest: string;
+          readonly submissionFixtureDigest?: string;
+          readonly statusFixtureDigest?: string;
           readonly magicAuthorizationNonceOffset: 0 | 1;
           readonly delegationPlanTtlSeconds: number;
         };
@@ -483,7 +495,10 @@ export interface BackendApiCommandPort {
     input: ApiMutationContext & { splitPaymentAttemptId: string; body: ApiOperationResult },
   ): Promise<ApiOperationResult>;
   registerContractOperationSubmission(
-    input: ApiMutationContext & { operationId: string; body: ApiOperationResult },
+    input: ApiMutationContext & {
+      operationId: string;
+      body: ContractOperationSubmissionBody;
+    },
   ): Promise<ContractOperationPreparedResult>;
   materializeJudgeEvidence(
     input: ApiMutationContext & { orderId: OrderId },

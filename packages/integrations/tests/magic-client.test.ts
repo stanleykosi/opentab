@@ -7,7 +7,14 @@ import {
 } from '@opentab/shared';
 import { getBytes, Wallet } from 'ethers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MagicBrowserWalletAdapter } from '../src/magic-client.js';
+import {
+  MagicBrowserWalletAdapter,
+  type MagicOperatorBootstrapAction,
+} from '../src/magic-client.js';
+import {
+  createMerchantProductOperationTemplate,
+  MerchantProductOperationBindingSchema,
+} from '../src/operation-templates.js';
 
 const wallet = new Wallet(`0x${'13'.repeat(32)}`);
 const owner = EvmAddressSchema.parse(wallet.address);
@@ -51,6 +58,8 @@ function createFake() {
       if (typeof message !== 'string') throw new Error('personal_sign message missing');
       return wallet.signMessage(getBytes(message));
     }
+    if (input.method === 'eth_estimateGas') return '0x0186a0';
+    if (input.method === 'eth_sendTransaction') return transactionHash;
     throw new Error(`Unexpected RPC method: ${input.method}`);
   });
   return {
@@ -145,6 +154,47 @@ function validatedPlan() {
   });
 }
 
+function operatorBootstrapTemplate(action: MagicOperatorBootstrapAction = 'create_merchant') {
+  const mutation =
+    action === 'create_merchant'
+      ? {
+          action,
+          payoutAddress: owner,
+          metadataHash: bytes32('c'),
+        }
+      : action === 'create_product'
+        ? {
+            action,
+            merchantOnchainId: '7',
+            product: {
+              unitPriceBaseUnits: '1000000',
+              startsAt: '1784030400',
+              endsAt: '1784116800',
+              maxSupply: '100',
+              maxPerWallet: '4',
+              loyaltyPoints: '25',
+              refundWindowSeconds: '3600',
+              metadataHash: bytes32('d'),
+              passUri: 'ipfs://opentab-operator-product',
+            },
+          }
+        : {
+            action,
+            merchantOnchainId: '7',
+            productOnchainId: '8',
+            active: true,
+          };
+  return createMerchantProductOperationTemplate(
+    MerchantProductOperationBindingSchema.parse({
+      ownerAddress: owner,
+      chainId: ARBITRUM_ONE_CHAIN_ID,
+      checkoutAddress: implementation,
+      mutation,
+      expiresAt: '2099-07-14T12:05:00.000Z',
+    }),
+  );
+}
+
 describe('Magic browser wallet adapter', () => {
   beforeEach(() => vi.restoreAllMocks());
 
@@ -208,6 +258,26 @@ describe('Magic browser wallet adapter', () => {
     await expect(adapter.getChainId()).resolves.toBe(ARBITRUM_ONE_CHAIN_ID);
   });
 
+  it('returns only sanitized nonce convention fields from the operator authorization probe', async () => {
+    const fake = createFake();
+    fake.controls.setChain('0xa4b1');
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+    await expect(
+      adapter.probeDelegationAuthorizationNonce({
+        ownerAddress: owner,
+        implementationAddress: implementation,
+      }),
+    ).resolves.toEqual({
+      chainId: ARBITRUM_ONE_CHAIN_ID,
+      implementationAddress: implementation,
+      nonce: '0',
+    });
+    expect(fake.controls.sign7702Authorization).toHaveBeenCalledWith({
+      contractAddress: implementation,
+      chainId: 42161,
+    });
+  });
+
   it('binds the installed 7702 authorization and Type-4 response to the verified plan', async () => {
     const fake = createFake();
     fake.controls.setChain('0xa4b1');
@@ -237,6 +307,123 @@ describe('Magic browser wallet adapter', () => {
     const signed = await adapter.signValidatedRoot(validatedPlan());
     expect(signed.recoveredOwner.toLowerCase()).toBe(owner.toLowerCase());
     expect(signed.signature).toMatch(/^0x[0-9a-f]+$/i);
+  });
+
+  it('directly sends only the exact server-bound operator bootstrap call', async () => {
+    const fake = createFake();
+    fake.controls.setChain('0xa4b1');
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+    const template = operatorBootstrapTemplate();
+
+    await expect(
+      adapter.submitOperatorBootstrapMutation({
+        template,
+        action: 'create_merchant',
+        checkoutAddress: implementation,
+      }),
+    ).resolves.toEqual({ transactionHash });
+
+    const submission = fake.controls.rpcRequest.mock.calls.find(
+      ([input]) => input.method === 'eth_sendTransaction',
+    )?.[0];
+    expect(submission).toMatchObject({
+      method: 'eth_sendTransaction',
+      params: [
+        {
+          from: owner.toLowerCase(),
+          to: implementation.toLowerCase(),
+          data: template.calls[0]?.data,
+          value: '0x0',
+        },
+      ],
+    });
+  });
+
+  it.each([
+    'create_product',
+    'set_product_active',
+  ] as const)('allows the server-bound %s selector', async (action) => {
+    const fake = createFake();
+    fake.controls.setChain('0xa4b1');
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+
+    await expect(
+      adapter.submitOperatorBootstrapMutation({
+        template: operatorBootstrapTemplate(action),
+        action,
+        checkoutAddress: implementation,
+      }),
+    ).resolves.toEqual({ transactionHash });
+  });
+
+  it('rejects mismatched actions, targets, value, multiple calls, and stale templates', async () => {
+    const fake = createFake();
+    fake.controls.setChain('0xa4b1');
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+    const template = operatorBootstrapTemplate();
+    const call = template.calls[0];
+    if (call === undefined) throw new Error('operator template call missing');
+    const submit = (candidate: typeof template, action: 'create_merchant' | 'create_product') =>
+      adapter.submitOperatorBootstrapMutation({
+        template: candidate,
+        action,
+        checkoutAddress: implementation,
+      });
+
+    await expect(submit(template, 'create_product')).rejects.toMatchObject({
+      code: 'OPERATION_PLAN_INVALID',
+    });
+    await expect(
+      submit(
+        BoundOperationTemplateSchema.parse({
+          ...template,
+          calls: [{ ...call, to: other }],
+        }),
+        'create_merchant',
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_PLAN_INVALID' });
+    await expect(
+      submit(
+        BoundOperationTemplateSchema.parse({
+          ...template,
+          calls: [{ ...call, valueWei: '1' }],
+        }),
+        'create_merchant',
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_PLAN_INVALID' });
+    await expect(
+      submit(
+        BoundOperationTemplateSchema.parse({
+          ...template,
+          calls: [call, call],
+        }),
+        'create_merchant',
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_PLAN_INVALID' });
+    await expect(
+      submit(
+        BoundOperationTemplateSchema.parse({
+          ...template,
+          expiresAt: '2020-07-14T12:05:00.000Z',
+        }),
+        'create_merchant',
+      ),
+    ).rejects.toMatchObject({ code: 'UA_QUOTE_EXPIRED' });
+
+    await expect(
+      submit(
+        BoundOperationTemplateSchema.parse({ ...template, ownerAddress: other }),
+        'create_merchant',
+      ),
+    ).rejects.toMatchObject({ code: 'WALLET_ADDRESS_MISMATCH' });
+
+    fake.controls.setChain('0x1');
+    await expect(submit(template, 'create_merchant')).rejects.toMatchObject({
+      code: 'WALLET_CHAIN_SWITCH_FAILED',
+    });
+    expect(fake.controls.rpcRequest).not.toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'eth_sendTransaction' }),
+    );
   });
 
   it('rejects insecure production RPCs and callback origins at construction', () => {

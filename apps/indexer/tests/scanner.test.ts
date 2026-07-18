@@ -378,17 +378,14 @@ describe('IndexerScanner deterministic range processing', () => {
     expect(store.cursor.nextBlock).toBe(7n);
   });
 
-  it('rejects a competing worker without releasing a lease it never owned', async () => {
+  it('enters standby for a competing worker without releasing a lease it never owned', async () => {
     const source = new MemorySource();
     const store = new MemoryStore();
     store.leaseAvailable = false;
 
-    await expect(
-      new IndexerScanner(source, store, decoder, options()).scanOnce(),
-    ).rejects.toMatchObject({
-      code: 'INDEXER_LAGGING',
-      retryable: true,
-    });
+    await expect(new IndexerScanner(source, store, decoder, options()).scanOnce()).resolves.toEqual(
+      { kind: 'lease_standby', nextBlock: 1n },
+    );
     expect(store.commits).toHaveLength(0);
     expect(store.releases).toBe(0);
   });

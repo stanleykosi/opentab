@@ -100,7 +100,7 @@ Contract-only checks are available through `pnpm contracts:build`,
 
 ## Deployment topology
 
-- Vercel runs `apps/web` and its API routes on the isolated Node 24.x profile
+- Vercel runs `apps/web` and its API routes on the pinned Node 25.0.0 profile
   with pnpm 9.15.1 and the frozen monorepo lockfile.
 - Railway runs the indexer image on exact Node 25.0.0 and pnpm 9.15.1.
 - Supabase provides dedicated PostgreSQL. Vercel uses its transaction pooler;
@@ -109,11 +109,13 @@ Contract-only checks are available through `pnpm contracts:build`,
 - One authenticated TLS Redis endpoint is shared by Vercel and Railway; Upstash
   Redis is the default documented choice.
 
-Paste [`SUPABASE_SQL_EDITOR_SETUP.sql`](SUPABASE_SQL_EDITOR_SETUP.sql) into the
-Supabase SQL Editor, then validate configured URLs with
-`pnpm supabase:check:target`. Vercel must use the generated `opentab_runtime`
-transaction-pooler URL on port `6543`; Railway must use the separate
-`opentab_indexer` session-pooler URL on port `5432`.
+For a new database, paste
+[`SUPABASE_SQL_EDITOR_SETUP.sql`](SUPABASE_SQL_EDITOR_SETUP.sql) into the
+Supabase SQL Editor. For the already-created OpenTab database, paste only
+[`SUPABASE_SQL_EDITOR_PARTICLE_CERTIFICATION.sql`](SUPABASE_SQL_EDITOR_PARTICLE_CERTIFICATION.sql).
+Vercel must use the `opentab_runtime` transaction-pooler URL on port `6543`;
+Railway must use the separate `opentab_indexer` session/direct URL on port
+`5432`.
 
 ## Arbitrum One deployment
 
@@ -136,17 +138,19 @@ canary has not run and the money-moving flags remain disabled.
 ### Railway dashboard handoff
 
 Create the indexer from the GitHub repository with config path
-`/railway.indexer.json`, one replica, and no public domain. First deploy the
-safe chain scanner with:
+`/railway.indexer.json` and one replica. GitHub pushes automatically redeploy
+both Railway and Vercel. Railway needs a public domain only for the
+`/health/live` and `/health/ready` operator checks. Configure:
 
 ```text
 APP_ENV=demo-mainnet
-INDEXER_ENABLED=true
-INDEXER_WRITES_ENABLED=true
-INDEXER_RECONCILIATION_ENABLED=false
 DATABASE_URL_INDEXER=<Supabase opentab_indexer session/direct URL>
 REDIS_URL=<shared authenticated rediss:// URL>
 ARBITRUM_RPC_URL=<authenticated Arbitrum One primary RPC>
+PARTICLE_LIVE_ENABLED=true
+NEXT_PUBLIC_PARTICLE_PROJECT_ID=<Particle project ID>
+NEXT_PUBLIC_PARTICLE_CLIENT_KEY=<Particle client key>
+NEXT_PUBLIC_PARTICLE_APP_UUID=<Particle app UUID>
 ```
 
 Chain `42161`, native USDC, checkout/pass/split addresses, PublicNode fallback,
@@ -154,36 +158,42 @@ and block `484866936` are source defaults documented in
 [`42161.public.env`](packages/contracts/deployments/42161.public.env); they are
 not additional mandatory Railway variables.
 
+`INDEXER_ENABLED`, writes, reconciliation, chain `42161`, native USDC,
+checkout/pass/split addresses, PublicNode fallback, and block `484866936` are
+safe source defaults rather than dashboard variables.
+
 Railway's deployment health check uses `/health/live`, because a newly started
 worker is alive while it catches up from the deployment block. During that
 catch-up, `/health/ready` correctly returns HTTP 503 with reason `starting` or
-`lagging`; enable reconciliation only after it returns HTTP 200 with
-`"ready": true`.
-
-After the scanner is healthy and the recorded-live Particle profile is
-reviewed, switch `APP_ENV=production`, set
-`INDEXER_RECONCILIATION_ENABLED=true` and `PARTICLE_LIVE_ENABLED=true`, then
-add:
-
-```text
-NEXT_PUBLIC_PARTICLE_PROJECT_ID=<Particle project ID>
-NEXT_PUBLIC_PARTICLE_CLIENT_KEY=<Particle client key>
-NEXT_PUBLIC_PARTICLE_APP_UUID=<Particle app UUID>
-PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS=<reviewed address>
-PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH=<reviewed code hash>
-PARTICLE_RESPONSE_PROFILE_ID=<recorded-live profile ID>
-PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST=<sha256 digest>
-PARTICLE_AUTH_FIXTURE_DIGEST=<sha256 digest>
-PARTICLE_SUBMISSION_FIXTURE_DIGEST=<sha256 digest>
-PARTICLE_STATUS_FIXTURE_DIGEST=<sha256 digest>
-PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET=<verified integer>
-PARTICLE_DELEGATION_PLAN_TTL_SECONDS=<reviewed seconds>
-PARTICLE_ALLOWED_SOURCE_TOKENS=<exact chain:asset:token entries>
-PARTICLE_SOURCE_CALL_PROFILES_JSON=<reviewed compact JSON>
-```
+`lagging`; during a rolling deployment it may briefly report `standby` while
+the previous container owns the single-active-worker lease. Standby is live,
+does not count as a scan failure, and takes over automatically after handoff.
+Wait for HTTP 200 with `"ready": true` before the canary. The
+reconciliation worker starts safely without a profile and discovers each new
+immutable Supabase certification stage within 15 seconds—no Railway restart or
+profile environment-variable copy is required.
 
 No Magic secret, DID token, KMS credential/identifier, private key, session
 secret, or Vercel OIDC credential belongs in the Railway indexer.
+
+### One-time Particle certification
+
+Push the configured GitHub branch and wait for its automatic Vercel and Railway
+deployments, then visit `/operator/particle`. Sign in with the Magic account used as operator
+and enter `PARTICLE_CERTIFICATION_TOKEN`. On a fresh database, the page first
+creates a 0.10-USDC canary merchant/product using exact server-bound Magic
+transactions; fund the displayed Magic EOA with a small amount of Arbitrum ETH
+for those three one-time setup transactions. Then run the three certification
+actions: capture bootstrap compatibility, approve the constrained cross-chain
+preview, and pay the tiny canary.
+
+The profile is stored centrally in Supabase and bound to the Particle project,
+Arbitrum contracts/token, operator subject, delegate code hash, source-token
+policy, and canary product. It is deliberately reused across ordinary Git
+redeploys during this run. Railway and every warm Vercel instance reload it
+automatically. Normal checkout opens only after Particle reports success and
+Railway has indexed the confirmed canonical `OrderPaid` event and issued pass.
+Customers never repeat this operator certification.
 
 ## Live-provider safety
 

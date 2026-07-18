@@ -1,15 +1,32 @@
-import type { ArbitrumReadPort } from '@opentab/application';
+import type { ArbitrumReadPort, UniversalOperationPort } from '@opentab/application';
 import { parseIndexerEnvironment } from '@opentab/config';
 import {
   type ArbitrumAdapterConfig,
   createParticleUniversalAccountAdapter,
   createViemArbitrumReadAdapter,
 } from '@opentab/integrations/indexer';
-import { AppError, type ProductId } from '@opentab/shared';
+import {
+  AppError,
+  ARBITRUM_ONE_CHAIN_ID,
+  digestParticleProjectConfiguration,
+  type EvmAddress,
+  type ParticleCompatibilityProfile,
+  type ProductId,
+} from '@opentab/shared';
 import { parseIndexerRuntimeConfig } from './config.js';
+import {
+  type IndexerParticleProfileLoader,
+  type LoadedIndexerParticleProfile,
+  loadIndexerParticleProfile,
+} from './particle-profile.js';
 import type { IndexerRuntimeDependencies } from './runtime.js';
 
 export type IndexerChainFactory = (config: ArbitrumAdapterConfig) => ArbitrumReadPort;
+export type IndexerParticleOperationsFactory = (
+  config: Parameters<typeof createParticleUniversalAccountAdapter>[0],
+) => UniversalOperationPort;
+
+const PARTICLE_PROFILE_CACHE_MS = 15_000;
 
 function required<T>(value: T | undefined, name: string): T {
   if (value === undefined) {
@@ -18,15 +35,112 @@ function required<T>(value: T | undefined, name: string): T {
   return value;
 }
 
+function profileEnvironment(value: string): 'demo-mainnet' | 'production' {
+  if (value === 'demo-mainnet' || value === 'production') return value;
+  throw new AppError(
+    'CONFIGURATION_INVALID',
+    'Live Particle indexer profiles are restricted to demo-mainnet or production.',
+  );
+}
+
+function assertScopedProfile(input: {
+  readonly loaded: LoadedIndexerParticleProfile | undefined;
+  readonly environment: 'demo-mainnet' | 'production';
+  readonly profileScopeId: string;
+  readonly expectedProjectConfigDigest: string;
+}): LoadedIndexerParticleProfile | undefined {
+  const loaded = input.loaded;
+  if (loaded === undefined) return undefined;
+  const { profile, binding } = loaded;
+  if (
+    binding.environment !== input.environment ||
+    profile.environment !== input.environment ||
+    binding.profileScopeId !== input.profileScopeId ||
+    binding.chainId !== ARBITRUM_ONE_CHAIN_ID ||
+    profile.chainId !== ARBITRUM_ONE_CHAIN_ID ||
+    binding.profileId !== profile.profileId ||
+    binding.stage !== profile.stage ||
+    profile.particleSdkVersion !== '2.0.3' ||
+    profile.useEIP7702 !== true ||
+    profile.particleProjectConfigDigest.toLowerCase() !==
+      input.expectedProjectConfigDigest.toLowerCase()
+  ) {
+    throw new AppError(
+      'CONFIGURATION_INVALID',
+      'The loaded Particle profile does not match this compatibility scope, chain, SDK, or project.',
+    );
+  }
+  return loaded;
+}
+
+function particleResponseProfile(profile: ParticleCompatibilityProfile) {
+  return {
+    profileId: profile.profileId,
+    provenance: 'recorded_live' as const,
+    certificationStage: profile.stage,
+    deploymentsFixtureDigest: profile.responseDigests.deployments,
+    authFixtureDigest: profile.responseDigests.auth,
+    ...(profile.responseDigests.submission === undefined
+      ? {}
+      : { submissionFixtureDigest: profile.responseDigests.submission }),
+    ...(profile.responseDigests.status === undefined
+      ? {}
+      : { statusFixtureDigest: profile.responseDigests.status }),
+    magicAuthorizationNonceOffset: profile.nonceConvention.magicAuthorizationNonceOffset,
+    delegationPlanTtlSeconds: profile.nonceConvention.delegationPlanTtlSeconds,
+  };
+}
+
+function requireReconciliationProfile(
+  loaded: LoadedIndexerParticleProfile | undefined,
+): LoadedIndexerParticleProfile {
+  if (loaded === undefined || loaded.profile.stage === 'bootstrap') {
+    throw new AppError(
+      'CONFIGURATION_INVALID',
+      'Particle reconciliation requires a canary-ready or certified compatibility profile.',
+    );
+  }
+  required(loaded.profile.sourceTokenProfile, 'Particle source-token profile');
+  return loaded;
+}
+
+function createLazyParticleOperations(input: {
+  readonly ownerAddress: EvmAddress;
+  readonly resolveProfile: () => Promise<LoadedIndexerParticleProfile>;
+  readonly createOperations: (
+    ownerAddress: EvmAddress,
+    profile: ParticleCompatibilityProfile,
+  ) => UniversalOperationPort;
+}): UniversalOperationPort {
+  const resolveOperations = async () => {
+    const loaded = await input.resolveProfile();
+    return input.createOperations(input.ownerAddress, loaded.profile);
+  };
+  return {
+    getAccount: async () => (await resolveOperations()).getAccount(),
+    getUnifiedBalance: async () => (await resolveOperations()).getUnifiedBalance(),
+    getDelegation: async () => (await resolveOperations()).getDelegation(),
+    prepareDelegation: async () => (await resolveOperations()).prepareDelegation(),
+    prepareOperation: async (template) => (await resolveOperations()).prepareOperation(template),
+    validateOperation: async (operationInput) =>
+      (await resolveOperations()).validateOperation(operationInput),
+    submitValidated: async (operationInput) =>
+      (await resolveOperations()).submitValidated(operationInput),
+    getOperation: async (id) => (await resolveOperations()).getOperation(id),
+  };
+}
+
 /**
- * Builds the executable's live dependencies from the same validated process
- * environment as the runtime. Each failover leg prefers a different RPC
- * provider; the integration adapter still retains a bounded secondary retry.
+ * Builds the executable's live dependencies from one validated environment
+ * and one stable compatibility scope. Legacy profile env values are
+ * deliberately ignored: the database binding is authoritative.
  */
-export function createProductionIndexerDependencies(
+export async function createProductionIndexerDependencies(
   env: Record<string, string | undefined>,
   factory: IndexerChainFactory = createViemArbitrumReadAdapter,
-): IndexerRuntimeDependencies {
+  profileLoader: IndexerParticleProfileLoader = loadIndexerParticleProfile,
+  operationsFactory: IndexerParticleOperationsFactory = createParticleUniversalAccountAdapter,
+): Promise<IndexerRuntimeDependencies> {
   const runtime = parseIndexerRuntimeConfig(env);
   if (!runtime.enabled) {
     throw new AppError(
@@ -37,14 +151,76 @@ export function createProductionIndexerDependencies(
   const server = parseIndexerEnvironment(env);
   const primaryRpcUrl = required(server.ARBITRUM_RPC_URL, 'ARBITRUM_RPC_URL');
   const fallbackRpcUrl = required(server.ARBITRUM_FALLBACK_RPC_URL, 'ARBITRUM_FALLBACK_RPC_URL');
+  const environment = server.PARTICLE_LIVE_ENABLED ? profileEnvironment(server.APP_ENV) : undefined;
+  const profileScopeId = runtime.profileScopeId;
+  const expectedProjectConfigDigest = server.PARTICLE_LIVE_ENABLED
+    ? digestParticleProjectConfiguration({
+        projectId: server.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
+        projectClientKey: server.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
+        projectAppUuid: server.NEXT_PUBLIC_PARTICLE_APP_UUID,
+      })
+    : undefined;
+  const profileLoadInput =
+    profileScopeId === undefined || environment === undefined
+      ? undefined
+      : {
+          databaseUrl: required(runtime.databaseUrl, 'DATABASE_URL_INDEXER'),
+          environment,
+          profileScopeId,
+          chainId: ARBITRUM_ONE_CHAIN_ID,
+        };
+  const validateLoadedProfile = (loaded: LoadedIndexerParticleProfile | undefined) => {
+    if (profileScopeId === undefined || environment === undefined) return undefined;
+    return assertScopedProfile({
+      loaded,
+      environment,
+      profileScopeId,
+      expectedProjectConfigDigest: required(
+        expectedProjectConfigDigest,
+        'Particle project configuration digest',
+      ),
+    });
+  };
+  const loadedProfile =
+    profileLoadInput === undefined
+      ? undefined
+      : validateLoadedProfile(await profileLoader(profileLoadInput));
+  const profile = loadedProfile?.profile;
+  let cachedReconciliationProfile =
+    loadedProfile === undefined || loadedProfile.profile.stage === 'bootstrap'
+      ? undefined
+      : { loaded: loadedProfile, expiresAt: Date.now() + PARTICLE_PROFILE_CACHE_MS };
+  let profileLoadInFlight: Promise<LoadedIndexerParticleProfile | undefined> | undefined;
+  const resolveReconciliationProfile = async (): Promise<LoadedIndexerParticleProfile> => {
+    if (
+      cachedReconciliationProfile !== undefined &&
+      cachedReconciliationProfile.expiresAt > Date.now()
+    ) {
+      return cachedReconciliationProfile.loaded;
+    }
+    if (profileLoadInput === undefined) {
+      return requireReconciliationProfile(undefined);
+    }
+    const pendingLoad =
+      profileLoadInFlight ?? profileLoader(profileLoadInput).then(validateLoadedProfile);
+    profileLoadInFlight = pendingLoad;
+    try {
+      const resolved = requireReconciliationProfile(await pendingLoad);
+      cachedReconciliationProfile = {
+        loaded: resolved,
+        expiresAt: Date.now() + PARTICLE_PROFILE_CACHE_MS,
+      };
+      return resolved;
+    } finally {
+      if (profileLoadInFlight === pendingLoad) profileLoadInFlight = undefined;
+    }
+  };
   const common = {
     environment: server.APP_ENV,
     checkoutAddress: server.NEXT_PUBLIC_CHECKOUT_ADDRESS,
     passAddress: server.NEXT_PUBLIC_PASS_ADDRESS,
     ...(runtime.addresses.length > 2 ? { splitAddress: server.NEXT_PUBLIC_SPLIT_ADDRESS } : {}),
-    ...(server.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS === undefined
-      ? {}
-      : { expectedDelegationImplementation: server.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS }),
+    ...(profile === undefined ? {} : { expectedDelegationImplementation: profile.delegateAddress }),
     deploymentBlock: runtime.startBlock,
     maxLogRange: BigInt(runtime.maxBlockRange),
     maxOrderLookupBlocks: 5_000_000n,
@@ -57,67 +233,44 @@ export function createProductionIndexerDependencies(
     },
   } satisfies Omit<ArbitrumAdapterConfig, 'primaryRpcUrl' | 'fallbackRpcUrl'>;
 
-  const reconciliation = !runtime.reconciliationEnabled
-    ? undefined
-    : {
-        redisUrl: required(server.REDIS_URL, 'REDIS_URL'),
-        operationsForOwner: (
-          ownerAddress: Parameters<typeof createParticleUniversalAccountAdapter>[0]['ownerAddress'],
-        ) =>
-          createParticleUniversalAccountAdapter({
-            projectId: server.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
-            projectClientKey: server.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
-            projectAppUuid: server.NEXT_PUBLIC_PARTICLE_APP_UUID,
-            ownerAddress,
-            expectedImplementationAddress: required(
-              server.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS,
-              'PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS',
-            ),
-            expectedImplementationCodeHash: required(
-              server.PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH,
-              'PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH',
-            ) as `0x${string}`,
-            environment: server.APP_ENV,
-            slippageBps: server.PARTICLE_MAX_SLIPPAGE_BPS,
-            maxFeeUsdMicros: server.PARTICLE_MAX_FEE_USD_MICROS,
-            allowedSourceChainIds: server.PARTICLE_ALLOWED_SOURCE_CHAIN_IDS,
-            allowedSourceAssets: server.PARTICLE_ALLOWED_SOURCE_ASSETS,
-            allowedSourceTokens: server.PARTICLE_ALLOWED_SOURCE_TOKENS,
-            sourceCallProfiles: server.PARTICLE_SOURCE_CALL_PROFILES_JSON,
-            responseProfile: {
-              profileId: required(
-                server.PARTICLE_RESPONSE_PROFILE_ID,
-                'PARTICLE_RESPONSE_PROFILE_ID',
-              ),
-              provenance: 'recorded_live' as const,
-              deploymentsFixtureDigest: required(
-                server.PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST,
-                'PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST',
-              ) as `0x${string}`,
-              authFixtureDigest: required(
-                server.PARTICLE_AUTH_FIXTURE_DIGEST,
-                'PARTICLE_AUTH_FIXTURE_DIGEST',
-              ) as `0x${string}`,
-              submissionFixtureDigest: required(
-                server.PARTICLE_SUBMISSION_FIXTURE_DIGEST,
-                'PARTICLE_SUBMISSION_FIXTURE_DIGEST',
-              ) as `0x${string}`,
-              statusFixtureDigest: required(
-                server.PARTICLE_STATUS_FIXTURE_DIGEST,
-                'PARTICLE_STATUS_FIXTURE_DIGEST',
-              ) as `0x${string}`,
-              magicAuthorizationNonceOffset: required(
-                server.PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET,
-                'PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET',
-              ),
-              delegationPlanTtlSeconds: required(
-                server.PARTICLE_DELEGATION_PLAN_TTL_SECONDS,
-                'PARTICLE_DELEGATION_PLAN_TTL_SECONDS',
-              ),
-            },
-            ...(server.PARTICLE_RPC_URL === undefined ? {} : { rpcUrl: server.PARTICLE_RPC_URL }),
-          }),
-      };
+  const createOperations = (
+    ownerAddress: EvmAddress,
+    liveProfile: ParticleCompatibilityProfile,
+  ) => {
+    const sourceTokenProfile = required(
+      liveProfile.sourceTokenProfile,
+      'Particle source-token profile',
+    );
+    return operationsFactory({
+      projectId: server.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
+      projectClientKey: server.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
+      projectAppUuid: server.NEXT_PUBLIC_PARTICLE_APP_UUID,
+      ownerAddress,
+      expectedImplementationAddress: liveProfile.delegateAddress,
+      expectedImplementationCodeHash: liveProfile.delegateCodeHash,
+      environment: server.APP_ENV,
+      slippageBps: server.PARTICLE_MAX_SLIPPAGE_BPS,
+      maxFeeUsdMicros: server.PARTICLE_MAX_FEE_USD_MICROS,
+      allowedSourceChainIds: sourceTokenProfile.allowedSourceChainIds,
+      allowedSourceAssets: sourceTokenProfile.allowedSourceAssets,
+      allowedSourceTokens: sourceTokenProfile.allowedSourceTokens,
+      sourceCallPolicies: sourceTokenProfile.sourceCallPolicies,
+      responseProfile: particleResponseProfile(liveProfile),
+      ...(server.PARTICLE_RPC_URL === undefined ? {} : { rpcUrl: server.PARTICLE_RPC_URL }),
+    });
+  };
+  const reconciliation =
+    !runtime.reconciliationEnabled || !server.PARTICLE_LIVE_ENABLED
+      ? undefined
+      : {
+          redisUrl: required(server.REDIS_URL, 'REDIS_URL'),
+          operationsForOwner: (ownerAddress: EvmAddress) =>
+            createLazyParticleOperations({
+              ownerAddress,
+              resolveProfile: resolveReconciliationProfile,
+              createOperations,
+            }),
+        };
 
   return {
     primaryChain: factory({
@@ -131,5 +284,15 @@ export function createProductionIndexerDependencies(
       fallbackRpcUrl: primaryRpcUrl,
     }),
     ...(reconciliation === undefined ? {} : { reconciliation }),
+    ...(loadedProfile === undefined
+      ? {}
+      : {
+          particleProfile: {
+            profileScopeId: loadedProfile.binding.profileScopeId,
+            profileId: loadedProfile.binding.profileId,
+            profileDigest: loadedProfile.binding.profileDigest,
+            stage: loadedProfile.binding.stage,
+          },
+        }),
   };
 }

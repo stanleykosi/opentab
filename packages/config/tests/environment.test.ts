@@ -16,11 +16,13 @@ const LIVE_CANARY_ENVIRONMENT = {
   DETERMINISTIC_DEMO_ENABLED: 'false',
   PAYMENTS_ENABLED: 'false',
   PARTICLE_LIVE_ENABLED: 'true',
+  APPLICATION_RELEASE_ID: 'b'.repeat(40),
   MERCHANT_MUTATIONS_ENABLED: 'false',
   NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY: 'pk_live_staging_opentab',
   NEXT_PUBLIC_PARTICLE_PROJECT_ID: 'particle-project-staging',
   NEXT_PUBLIC_PARTICLE_CLIENT_KEY: 'particle-client-staging',
   NEXT_PUBLIC_PARTICLE_APP_UUID: 'particle-app-staging',
+  NEXT_PUBLIC_USDC_ADDRESS: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
   NEXT_PUBLIC_CHECKOUT_ADDRESS: '0x1111111111111111111111111111111111111111',
   NEXT_PUBLIC_PASS_ADDRESS: '0x2222222222222222222222222222222222222222',
   ARBITRUM_RPC_URL: 'https://arb-primary.example/rpc',
@@ -81,21 +83,7 @@ const RAILWAY_INDEXER_ENVIRONMENT = {
   NEXT_PUBLIC_PARTICLE_PROJECT_ID: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_PARTICLE_PROJECT_ID,
   NEXT_PUBLIC_PARTICLE_CLIENT_KEY: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_PARTICLE_CLIENT_KEY,
   NEXT_PUBLIC_PARTICLE_APP_UUID: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_PARTICLE_APP_UUID,
-  PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS:
-    LIVE_CANARY_ENVIRONMENT.PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS,
-  PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH:
-    LIVE_CANARY_ENVIRONMENT.PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH,
-  PARTICLE_RESPONSE_PROFILE_ID: LIVE_CANARY_ENVIRONMENT.PARTICLE_RESPONSE_PROFILE_ID,
-  PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST,
-  PARTICLE_AUTH_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_AUTH_FIXTURE_DIGEST,
-  PARTICLE_SUBMISSION_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_SUBMISSION_FIXTURE_DIGEST,
-  PARTICLE_STATUS_FIXTURE_DIGEST: LIVE_CANARY_ENVIRONMENT.PARTICLE_STATUS_FIXTURE_DIGEST,
-  PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET:
-    LIVE_CANARY_ENVIRONMENT.PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET,
-  PARTICLE_DELEGATION_PLAN_TTL_SECONDS:
-    LIVE_CANARY_ENVIRONMENT.PARTICLE_DELEGATION_PLAN_TTL_SECONDS,
-  PARTICLE_ALLOWED_SOURCE_TOKENS: LIVE_CANARY_ENVIRONMENT.PARTICLE_ALLOWED_SOURCE_TOKENS,
-  PARTICLE_SOURCE_CALL_PROFILES_JSON: LIVE_CANARY_ENVIRONMENT.PARTICLE_SOURCE_CALL_PROFILES_JSON,
+  NEXT_PUBLIC_USDC_ADDRESS: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_USDC_ADDRESS,
 } as const;
 
 it('keeps route fixtures disabled unless the dedicated demo flag is explicit', () => {
@@ -177,13 +165,16 @@ describe('platform environment normalization', () => {
     ).toThrow();
   });
 
-  it('starts a Railway indexer only with an explicit live Particle profile', () => {
-    expect(parseIndexerEnvironment(RAILWAY_INDEXER_ENVIRONMENT)).toMatchObject({
+  it('starts a Railway indexer from stable Particle scope inputs without a release ID', () => {
+    const indexer = parseIndexerEnvironment(RAILWAY_INDEXER_ENVIRONMENT);
+    expect(indexer).toMatchObject({
       APP_ENV: 'production',
       INDEXER_ENABLED: true,
       INDEXER_WRITES_ENABLED: true,
       PARTICLE_LIVE_ENABLED: true,
+      NEXT_PUBLIC_USDC_ADDRESS: LIVE_CANARY_ENVIRONMENT.NEXT_PUBLIC_USDC_ADDRESS,
     });
+    expect(indexer).not.toHaveProperty('APPLICATION_RELEASE_ID');
     expect(
       parseIndexerEnvironment({
         RAILWAY_SERVICE_ID: 'service-indexer',
@@ -200,7 +191,7 @@ describe('platform environment normalization', () => {
     });
   });
 
-  it('uses the reviewed live profile mode and a bounded delegation TTL by default', () => {
+  it('continues parsing optional legacy profile fields during the transition', () => {
     expect(
       parseServerEnvironment({
         ...LIVE_CANARY_ENVIRONMENT,
@@ -211,12 +202,9 @@ describe('platform environment normalization', () => {
       PARTICLE_RESPONSE_PROFILE_PROVENANCE: 'recorded_live',
       PARTICLE_DELEGATION_PLAN_TTL_SECONDS: 300,
     });
-    expect(
-      parseIndexerEnvironment({
-        ...RAILWAY_INDEXER_ENVIRONMENT,
-        PARTICLE_DELEGATION_PLAN_TTL_SECONDS: undefined,
-      }).PARTICLE_DELEGATION_PLAN_TTL_SECONDS,
-    ).toBe(300);
+    expect(parseIndexerEnvironment(RAILWAY_INDEXER_ENVIRONMENT)).not.toHaveProperty(
+      'PARTICLE_RESPONSE_PROFILE_PROVENANCE',
+    );
   });
 
   it('selects the managed signer automatically for production-like payments', () => {
@@ -255,7 +243,7 @@ describe('server environment safety', () => {
     });
   });
 
-  it('requires an exact portable release commit for live mainnet deployments', () => {
+  it('requires an exact Vercel application commit for live Judge evidence', () => {
     const base = {
       APP_ENV: 'demo-mainnet',
       NEXT_PUBLIC_APP_ENV: 'demo-mainnet',
@@ -589,6 +577,7 @@ describe('server environment safety', () => {
       NEXT_PUBLIC_APP_ENV: 'demo-mainnet',
       NEXT_PUBLIC_APP_ORIGIN: 'https://opentab.example',
       APPLICATION_RELEASE_ID: 'b'.repeat(40),
+      PARTICLE_CERTIFICATION_TOKEN: 'particle-certification-token-at-least-32-characters',
       PAYMENTS_ENABLED: 'true',
       MAGIC_SECRET_KEY: 'sk_live_demo_opentab',
       DATABASE_URL: 'postgresql://runtime:secret@db.example/opentab?sslmode=verify-full',
@@ -840,17 +829,28 @@ describe('server environment safety', () => {
     ).toEqual(['https://media.example', 'https://images.example']);
   });
 
-  it('requires exact source-token policy in live Particle mode', () => {
-    const result = ServerEnvironmentSchema.safeParse({
-      APP_ENV: 'local',
-      NEXT_PUBLIC_APP_ENV: 'local',
-      PARTICLE_LIVE_ENABLED: 'true',
-    });
-    expect(result.success).toBe(false);
-    if (result.success) return;
-    expect(result.error.issues.map((issue) => issue.path.join('.'))).toContain(
+  it('does not duplicate central Particle profile or source policy requirements in environment', () => {
+    const env: Record<string, string | undefined> = { ...LIVE_CANARY_ENVIRONMENT };
+    for (const name of [
+      'PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS',
+      'PARTICLE_EIP7702_IMPLEMENTATION_CODE_HASH',
+      'PARTICLE_RESPONSE_PROFILE_ID',
+      'PARTICLE_RESPONSE_PROFILE_PROVENANCE',
+      'PARTICLE_DEPLOYMENTS_FIXTURE_DIGEST',
+      'PARTICLE_AUTH_FIXTURE_DIGEST',
+      'PARTICLE_SUBMISSION_FIXTURE_DIGEST',
+      'PARTICLE_STATUS_FIXTURE_DIGEST',
+      'PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET',
+      'PARTICLE_DELEGATION_PLAN_TTL_SECONDS',
+      'PARTICLE_ALLOWED_SOURCE_CHAIN_IDS',
+      'PARTICLE_ALLOWED_SOURCE_ASSETS',
       'PARTICLE_ALLOWED_SOURCE_TOKENS',
-    );
+      'PARTICLE_SOURCE_CALL_PROFILES_JSON',
+    ]) {
+      delete env[name];
+    }
+
+    expect(() => parseServerEnvironment(env)).not.toThrow();
   });
 
   it('rejects primary and fallback Arbitrum URLs on the same provider host', () => {
@@ -906,18 +906,48 @@ describe('server environment safety', () => {
     ).toBe(true);
   });
 
-  it('rejects live Particle mode without a recorded response profile', () => {
+  it('keeps the Vercel application release ID for live-payment and Judge evidence', () => {
     const result = ServerEnvironmentSchema.safeParse({
-      APP_ENV: 'local',
-      NEXT_PUBLIC_APP_ENV: 'local',
-      PARTICLE_LIVE_ENABLED: 'true',
-      PARTICLE_RESPONSE_PROFILE_PROVENANCE: 'deterministic',
+      ...LIVE_CANARY_ENVIRONMENT,
+      APPLICATION_RELEASE_ID: undefined,
     });
     expect(result.success).toBe(false);
     if (result.success) return;
     const paths = result.error.issues.map((issue) => issue.path.join('.'));
-    expect(paths).toContain('PARTICLE_EIP7702_IMPLEMENTATION_ADDRESS');
-    expect(paths).toContain('PARTICLE_MAGIC_AUTHORIZATION_NONCE_OFFSET');
-    expect(paths).toContain('PARTICLE_RESPONSE_PROFILE_PROVENANCE');
+    expect(paths).toContain('APPLICATION_RELEASE_ID');
+
+    const paymentsOnly = ServerEnvironmentSchema.safeParse({
+      APP_ENV: 'local',
+      NEXT_PUBLIC_APP_ENV: 'local',
+      PAYMENTS_ENABLED: 'true',
+      APPLICATION_RELEASE_ID: undefined,
+    });
+    expect(paymentsOnly.success).toBe(false);
+    if (!paymentsOnly.success) {
+      expect(paymentsOnly.error.issues.map((issue) => issue.path.join('.'))).toContain(
+        'APPLICATION_RELEASE_ID',
+      );
+    }
+  });
+
+  it('requires a strong server-only certification token for prod-like live Particle mode', () => {
+    const base = {
+      ...LIVE_CANARY_ENVIRONMENT,
+      APP_ENV: 'demo-mainnet',
+      NEXT_PUBLIC_APP_ENV: 'demo-mainnet',
+    } as const;
+    const missing = ServerEnvironmentSchema.safeParse(base);
+    expect(missing.success).toBe(false);
+    if (!missing.success) {
+      expect(missing.error.issues.map((issue) => issue.path.join('.'))).toContain(
+        'PARTICLE_CERTIFICATION_TOKEN',
+      );
+    }
+    expect(() =>
+      parseServerEnvironment({
+        ...base,
+        PARTICLE_CERTIFICATION_TOKEN: 'particle-certification-token-at-least-32-characters',
+      }),
+    ).not.toThrow();
   });
 });

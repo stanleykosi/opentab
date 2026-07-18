@@ -55,6 +55,8 @@ export async function assertEvidenceWriterDatabasePrivileges(db: OpenTabDatabase
         ('products'),
         ('signed_order_intents'),
         ('orders'),
+        ('particle_compatibility_profiles'),
+        ('particle_profile_release_bindings'),
         ('payment_attempts'),
         ('provider_operations'),
         ('canonical_logs'),

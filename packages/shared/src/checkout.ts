@@ -115,6 +115,7 @@ export const CheckoutWorkflowStateSchema = z.enum([
 
 export const OperationKindSchema = z.enum([
   'checkout',
+  'merchant_mutation',
   'product_mutation',
   'refund',
   'withdrawal',

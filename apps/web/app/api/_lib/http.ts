@@ -312,7 +312,7 @@ function ratePolicy(
 } {
   const path = new URL(request.url).pathname;
   if (
-    /\/(?:payment-attempts|refunds|withdrawals|splits|split-links|split-payment-attempts|bootstrap-gas|contract-operations)(?:\/|$)/.test(
+    /\/(?:payment-attempts|refunds|withdrawals|splits|split-links|split-payment-attempts|bootstrap-gas|contract-operations|operator)(?:\/|$)/.test(
       path,
     )
   ) {

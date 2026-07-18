@@ -10,8 +10,10 @@ import {
   type EvidenceDigest,
   type EvmAddress,
   EvmAddressSchema,
+  type ParticleCompatibilityProfile,
   type ProviderOperation,
   sameEvmAddress,
+  TransactionHashSchema,
   type UnifiedBalance,
   type ValidatedOperationPlan,
 } from '@opentab/shared';
@@ -22,12 +24,19 @@ import {
   type BrowserSession,
   type CheckoutSnapshotResponse,
   type ContractOperationRecord,
+  type MerchantProductListResponse,
+  type ParticleCertificationStatus,
   type PaymentWorkflowResponse,
   type PublicBrowserConfig,
   type WalletReadinessResponse,
 } from './browser-api-client';
 
 const CONTINUATION_STORAGE_KEY = 'opentab.auth.continuation';
+const RELEASE_CANARY_PRODUCT_SLUG = 'opentab-release-canary';
+const RELEASE_CANARY_PRICE_BASE_UNITS = '100000';
+const RELEASE_CANARY_MAX_PRICE_BASE_UNITS = 100_000n;
+
+type OperatorBootstrapAction = 'create_merchant' | 'create_product' | 'set_product_active';
 
 interface BrowserIntegrationModule {
   createCheckoutOperationTemplate(binding: CheckoutBinding): ValidatedOperationPlan['template'];
@@ -40,7 +49,7 @@ interface BrowserIntegrationModule {
     environment: string;
     allowedRedirectUris: readonly string[];
     rpcNetworks: readonly { chainId: number; rpcUrl: string; default?: boolean }[];
-  }): MagicWalletPort;
+  }): MagicWallet;
   createParticleUniversalAccountAdapter(config: {
     projectId: string;
     projectClientKey: string;
@@ -58,35 +67,78 @@ interface BrowserIntegrationModule {
       readonly asset: 'USDC' | 'USDT' | 'ETH';
       readonly address: EvmAddress;
     }[];
-    sourceCallProfiles: readonly {
-      readonly profileId: string;
+    sourceCallPolicies: readonly {
+      readonly policyId: string;
       readonly chainId: string;
       readonly asset: 'USDC' | 'USDT' | 'ETH';
       readonly tokenAddress: EvmAddress;
-      readonly sourceAmount: string;
-      readonly fixtureDigest: Bytes32;
-      readonly calls: readonly {
-        readonly uaType: string;
-        readonly to: EvmAddress;
-        readonly data: `0x${string}`;
-        readonly valueWei: string;
-      }[];
+      readonly uaType: string;
+      readonly target: EvmAddress;
+      readonly functionSelector: `0x${string}`;
+      readonly nativeValueAllowed: boolean;
+      readonly maxCalls: number;
+      readonly capturedFixtureDigest: Bytes32;
     }[];
     responseProfile: {
       profileId: string;
       provenance: 'recorded_live';
+      certificationStage: 'canary_ready' | 'certified';
       deploymentsFixtureDigest: `0x${string}`;
       authFixtureDigest: `0x${string}`;
-      submissionFixtureDigest: `0x${string}`;
-      statusFixtureDigest: `0x${string}`;
+      submissionFixtureDigest?: `0x${string}`;
+      statusFixtureDigest?: `0x${string}`;
       magicAuthorizationNonceOffset: 0 | 1;
       delegationPlanTtlSeconds: number;
     };
     rpcUrl?: string;
   }): UniversalOperationPort;
+  createParticleOperatorCertificationAdapter(config: {
+    profileId: string;
+    environment: 'demo-mainnet' | 'production';
+    projectId: string;
+    projectClientKey: string;
+    projectAppUuid: string;
+    ownerAddress: EvmAddress;
+    magic: {
+      getOwnerAddress(): Promise<EvmAddress>;
+      getChainId(): Promise<string>;
+      switchToArbitrum(): Promise<void>;
+      probeDelegationAuthorizationNonce(input: {
+        ownerAddress: EvmAddress;
+        implementationAddress: EvmAddress;
+      }): Promise<{
+        chainId: '42161';
+        implementationAddress: EvmAddress;
+        nonce: string;
+      }>;
+    };
+    arbitrumRpcUrl: string;
+    allowedArbitrumRpcOrigins: readonly string[];
+    allowedSourceChainIds: readonly string[];
+    allowedSourceAssets: readonly ('USDC' | 'USDT' | 'ETH')[];
+    slippageBps: number;
+    delegationPlanTtlSeconds: number;
+    particleRpcUrl?: string;
+  }): {
+    captureBootstrap(): Promise<{ profile: ParticleCompatibilityProfile }>;
+    captureCanaryReady(binding: CheckoutBinding): Promise<{
+      profile: ParticleCompatibilityProfile;
+      preparedFixtureDigest: Bytes32;
+    }>;
+  };
 }
 
-type MagicWallet = MagicWalletPort;
+type MagicWallet = MagicWalletPort & {
+  probeDelegationAuthorizationNonce(input: {
+    ownerAddress: EvmAddress;
+    implementationAddress: EvmAddress;
+  }): Promise<{ chainId: '42161'; implementationAddress: EvmAddress; nonce: string }>;
+  submitOperatorBootstrapMutation?(input: {
+    readonly template: BoundOperationTemplate;
+    readonly action: OperatorBootstrapAction;
+    readonly checkoutAddress: EvmAddress;
+  }): Promise<{ readonly transactionHash: string }>;
+};
 type UniversalAccount = UniversalOperationPort;
 
 type IntegrationLoader = () => Promise<BrowserIntegrationModule>;
@@ -182,6 +234,46 @@ function idempotencyKey(scope: string): string {
   return `web.${scope}.${globalThis.crypto.randomUUID()}`;
 }
 
+function certificationIdempotencyKey(
+  profileScopeId: string,
+  scope: string,
+  reference: string,
+): string {
+  const value = `opentab.cert.${profileScopeId}.${scope}.${reference}`;
+  if (value.length > 128 || !/^[A-Za-z0-9._~-]+$/.test(value)) {
+    throw new BrowserApiError({
+      code: 'CONFIGURATION_INVALID',
+      message: 'The Particle certification reference is invalid.',
+      status: 0,
+    });
+  }
+  return value;
+}
+
+function bootstrapAction(operation: ContractOperationRecord): OperatorBootstrapAction {
+  const mutation = operation.binding.mutation;
+  if (typeof mutation !== 'object' || mutation === null || !('action' in mutation)) {
+    throw new BrowserApiError({
+      code: 'OPERATION_PLAN_INVALID',
+      message: 'The canary operation omitted its exact contract action.',
+      status: 0,
+    });
+  }
+  const action = (mutation as Readonly<Record<string, unknown>>).action;
+  if (
+    action !== 'create_merchant' &&
+    action !== 'create_product' &&
+    action !== 'set_product_active'
+  ) {
+    throw new BrowserApiError({
+      code: 'OPERATION_PLAN_INVALID',
+      message: 'The canary operation is not an allowed bootstrap action.',
+      status: 0,
+    });
+  }
+  return action;
+}
+
 export interface BrowserApplicationServiceOptions {
   api?: BrowserApiClient;
   loadIntegrations?: IntegrationLoader;
@@ -213,6 +305,11 @@ export interface PreparedContractOperation {
   readonly operation: ContractOperationRecord;
   readonly plan: ValidatedOperationPlan;
   readonly providerOperationId: string;
+}
+
+export interface CertificationCanaryBootstrapResult {
+  readonly ownerAddress: EvmAddress;
+  readonly product: MerchantProductListResponse['items'][number];
 }
 
 export type ContractOperationSubmissionResult =
@@ -290,6 +387,16 @@ export class BrowserApplicationService {
 
   getPaymentWorkflow(paymentAttemptId: string): Promise<PaymentWorkflowResponse> {
     return this.#api.getPaymentAttempt(paymentAttemptId);
+  }
+
+  async getParticleCertificationStatus() {
+    await this.restoreSession();
+    return this.#api.getParticleCertificationStatus();
+  }
+
+  async listParticleCertificationProducts() {
+    await this.restoreSession();
+    return this.#api.listMerchantProducts();
   }
 
   async getSponsorChallengeConfig(): Promise<{ siteKey?: string }> {
@@ -405,6 +512,581 @@ export class BrowserApplicationService {
     this.#account = undefined;
     this.#preparedPayments.clear();
     this.#checkoutPreparationPromises.clear();
+  }
+
+  async unlockParticleCertification(operatorToken: string): Promise<ParticleCertificationStatus> {
+    await this.restoreSession();
+    return this.#api.unlockParticleCertification(operatorToken);
+  }
+
+  async bootstrapParticleCertificationCanary(input: {
+    readonly operatorToken: string;
+    readonly onProgress?: (message: string) => void;
+  }): Promise<CertificationCanaryBootstrapResult> {
+    const status = await this.unlockParticleCertification(input.operatorToken);
+    const session = await this.restoreSession();
+    const ownerAddress = await this.getWalletOwner();
+    if (!sameEvmAddress(session.user.walletAddress, ownerAddress)) {
+      throw new BrowserApiError({
+        code: 'WALLET_ADDRESS_MISMATCH',
+        message: 'The certification operator session does not match the authenticated Magic EOA.',
+        status: 0,
+      });
+    }
+    input.onProgress?.(`Authenticated Magic EOA ${ownerAddress}. Checking merchant state…`);
+
+    let profile = await this.#api.getMerchantProfile().catch((error: unknown) => {
+      if (error instanceof BrowserApiError && error.status === 404) return undefined;
+      throw error;
+    });
+    if (profile === undefined) {
+      const merchant = await this.#api.createMerchantProfile(
+        {
+          slug: `opentab-canary-${ownerAddress.slice(-8).toLowerCase()}`,
+          displayName: 'OpenTab Release Canary',
+          supportContact: 'OpenTab release operator',
+          payoutAddress: ownerAddress,
+        },
+        certificationIdempotencyKey(
+          status.profileScopeId,
+          'merchant',
+          ownerAddress.slice(-8).toLowerCase(),
+        ),
+      );
+      input.onProgress?.('Approve the one-time merchant registration in Magic…');
+      await this.#submitOperatorBootstrapOperation({
+        status,
+        operation: merchant.operation,
+        expectedAction: 'create_merchant',
+        onProgress: input.onProgress,
+      });
+      profile = await this.#waitForActiveMerchant(input.onProgress);
+    } else if (profile.merchant.status !== 'active') {
+      if (profile.operation === undefined) {
+        throw new BrowserApiError({
+          code: 'OPERATION_PLAN_INVALID',
+          message: 'The pending merchant has no durable activation operation.',
+          status: 0,
+        });
+      }
+      await this.#submitOperatorBootstrapOperation({
+        status,
+        operation: profile.operation,
+        expectedAction: 'create_merchant',
+        onProgress: input.onProgress,
+      });
+      profile = await this.#waitForActiveMerchant(input.onProgress);
+    }
+
+    let products = (await this.#api.listMerchantProducts()).items;
+    let product = products.find((candidate) => candidate.slug === RELEASE_CANARY_PRODUCT_SLUG);
+    if (
+      product !== undefined &&
+      BigInt(product.unitPriceBaseUnits) !== RELEASE_CANARY_MAX_PRICE_BASE_UNITS
+    ) {
+      throw new BrowserApiError({
+        code: 'IDEMPOTENCY_CONFLICT',
+        message: 'The reserved release-canary slug already has a different price.',
+        status: 0,
+      });
+    }
+    if (product === undefined) {
+      const created = await this.#api.createMerchantProduct(
+        {
+          merchantId: profile.merchant.id,
+          slug: RELEASE_CANARY_PRODUCT_SLUG,
+          title: 'OpenTab 10¢ Release Canary',
+          description:
+            'A single tiny live purchase used to certify this Particle configuration before customer payments open.',
+          unitPriceBaseUnits: RELEASE_CANARY_PRICE_BASE_UNITS,
+          maxSupply: '100',
+          maxPerOrder: '1',
+          startsAt: '2025-01-01T00:00:00.000Z',
+          refundWindowSeconds: '0',
+          loyaltyPoints: '1',
+        },
+        certificationIdempotencyKey(status.profileScopeId, 'product', 'create'),
+      );
+      product = created.product;
+      input.onProgress?.('Approve the fixed 0.10 USDC canary product in Magic…');
+      await this.#submitOperatorBootstrapOperation({
+        status,
+        operation: created.operation,
+        expectedAction: 'create_product',
+        onProgress: input.onProgress,
+      });
+      product = await this.#waitForCanaryProduct(product.id, input.onProgress);
+    } else if (product.onchainProductId === undefined) {
+      const detail = await this.#api.getMerchantProduct(product.id);
+      if (detail.operation === undefined) {
+        throw new BrowserApiError({
+          code: 'OPERATION_PLAN_INVALID',
+          message: 'The pending canary product has no durable contract operation.',
+          status: 0,
+        });
+      }
+      await this.#submitOperatorBootstrapOperation({
+        status,
+        operation: detail.operation,
+        expectedAction: 'create_product',
+        onProgress: input.onProgress,
+      });
+      product = await this.#waitForCanaryProduct(product.id, input.onProgress);
+    }
+
+    if (product.status !== 'active') {
+      const activated = await this.#api.changeMerchantProductStatus(
+        product.id,
+        'publish',
+        certificationIdempotencyKey(status.profileScopeId, 'product', 'activate'),
+      );
+      input.onProgress?.('Approve the final canary activation in Magic…');
+      await this.#submitOperatorBootstrapOperation({
+        status,
+        operation: activated.operation,
+        expectedAction: 'set_product_active',
+        onProgress: input.onProgress,
+      });
+      product = await this.#waitForCanaryProduct(product.id, input.onProgress, true);
+    }
+
+    const canaryProductId = product.id;
+    products = (await this.#api.listMerchantProducts()).items;
+    product = products.find((candidate) => candidate.id === canaryProductId);
+    if (
+      product === undefined ||
+      product.status !== 'active' ||
+      product.onchainProductId === undefined ||
+      BigInt(product.unitPriceBaseUnits) > RELEASE_CANARY_MAX_PRICE_BASE_UNITS
+    ) {
+      throw new BrowserApiError({
+        code: 'INDEXER_LAGGING',
+        message:
+          'The canonical active canary product is not visible yet. Resume without resubmitting.',
+        retryable: true,
+        submissionPossible: true,
+        status: 0,
+      });
+    }
+    input.onProgress?.('Tiny onchain canary product is active and ready for certification.');
+    return { ownerAddress, product };
+  }
+
+  async #submitOperatorBootstrapOperation(input: {
+    readonly status: ParticleCertificationStatus;
+    readonly operation: ContractOperationRecord;
+    readonly expectedAction: OperatorBootstrapAction;
+    readonly onProgress: ((message: string) => void) | undefined;
+  }): Promise<ContractOperationRecord> {
+    if (bootstrapAction(input.operation) !== input.expectedAction) {
+      throw new BrowserApiError({
+        code: 'OPERATION_PLAN_INVALID',
+        message: 'The server returned a different bootstrap action than requested.',
+        status: 0,
+      });
+    }
+    const providerOperationId = `magic-direct:${input.operation.id}`;
+    const locked = await this.#submissionLock.run(
+      `opentab.operator-bootstrap.${input.operation.id}`,
+      async () => {
+        let current = await this.#api.getContractOperation(input.operation.id);
+        if (current.status !== 'prepared') return current;
+        if (new Date(current.expiresAt) <= new Date()) {
+          throw new BrowserApiError({
+            code: 'UA_QUOTE_EXPIRED',
+            message: 'This bootstrap approval expired before broadcast. Refresh its server record.',
+            retryable: true,
+            status: 0,
+          });
+        }
+        if (bootstrapAction(current) !== input.expectedAction) {
+          throw new BrowserApiError({
+            code: 'OPERATION_PLAN_INVALID',
+            message: 'The durable bootstrap action changed before submission.',
+            status: 0,
+          });
+        }
+        const session = await this.restoreSession();
+        const owner = await this.getWalletOwner();
+        if (
+          !sameEvmAddress(owner, session.user.walletAddress) ||
+          !sameEvmAddress(owner, current.template.ownerAddress)
+        ) {
+          throw new BrowserApiError({
+            code: 'WALLET_ADDRESS_MISMATCH',
+            message: 'The bootstrap operation does not belong to this Magic EOA.',
+            status: 0,
+          });
+        }
+        const integrations = await this.#integrations();
+        const validate = integrations.validateBrowserContractOperation;
+        if (validate === undefined) {
+          throw new BrowserApiError({
+            code: 'CONFIGURATION_INVALID',
+            message: 'Exact browser operation validation is unavailable.',
+            status: 0,
+          });
+        }
+        const template = validate({
+          kind: current.kind,
+          binding: current.binding,
+          template: current.template,
+        } as BrowserContractOperationValidationInput);
+        if (
+          template.bindingDigest.toLowerCase() !== current.bindingDigest.toLowerCase() ||
+          template.chainId !== '42161' ||
+          template.calls.some(
+            (call) => !sameEvmAddress(call.to, input.status.captureConfig.checkoutAddress),
+          )
+        ) {
+          throw new BrowserApiError({
+            code: 'OPERATION_PLAN_INVALID',
+            message: 'The bootstrap calls did not match the configured checkout contract.',
+            status: 0,
+          });
+        }
+        const wallet = await this.#wallet();
+        await wallet.switchToArbitrum();
+        const submitBootstrapMutation = wallet.submitOperatorBootstrapMutation;
+        if (typeof submitBootstrapMutation !== 'function') {
+          throw new BrowserApiError({
+            code: 'CONFIGURATION_INVALID',
+            message: 'The installed Magic adapter cannot submit constrained operator actions.',
+            status: 0,
+          });
+        }
+        try {
+          current = await this.#api.registerContractOperationSubmission(
+            current.id,
+            { status: 'submission_started', providerOperationId },
+            certificationIdempotencyKey(input.status.profileScopeId, 'start', current.id),
+          );
+        } catch (error) {
+          const recovered = await this.#api.getContractOperation(current.id).catch(() => undefined);
+          if (recovered !== undefined && recovered.status !== 'prepared') return recovered;
+          throw error;
+        }
+        if (current.status !== 'submission_started') return current;
+
+        let transactionHash: string;
+        try {
+          const submitted = await submitBootstrapMutation.call(wallet, {
+            template,
+            action: input.expectedAction,
+            checkoutAddress: input.status.captureConfig.checkoutAddress,
+          });
+          transactionHash = TransactionHashSchema.parse(submitted.transactionHash);
+        } catch {
+          const recovered = await this.#api.getContractOperation(current.id).catch(() => current);
+          if (recovered.status !== 'submission_started') return recovered;
+          throw new BrowserApiError({
+            code: 'PAYMENT_SUBMITTED_UNKNOWN',
+            message:
+              'Magic did not return a verifiable transaction hash. OpenTab will not submit this operation again.',
+            retryable: true,
+            submissionPossible: true,
+            status: 0,
+          });
+        }
+
+        try {
+          return await this.#api.registerContractOperationSubmission(
+            current.id,
+            { status: 'submitted', providerOperationId, transactionHash },
+            certificationIdempotencyKey(input.status.profileScopeId, 'submitted', current.id),
+          );
+        } catch {
+          try {
+            return await this.#api.registerContractOperationSubmission(
+              current.id,
+              { status: 'submitted_unknown', providerOperationId, transactionHash },
+              certificationIdempotencyKey(input.status.profileScopeId, 'unknown', current.id),
+            );
+          } catch {
+            return this.#api.getContractOperation(current.id);
+          }
+        }
+      },
+    );
+    const current = locked.acquired
+      ? locked.value
+      : await this.#api.getContractOperation(input.operation.id);
+    return this.#waitForCanonicalBootstrapOperation(current, input.onProgress);
+  }
+
+  async #waitForCanonicalBootstrapOperation(
+    initial: ContractOperationRecord,
+    onProgress?: (message: string) => void,
+  ): Promise<ContractOperationRecord> {
+    let current = initial;
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      if (current.status === 'confirmed') return current;
+      if (current.status === 'failed' || current.status === 'orphaned') {
+        throw new BrowserApiError({
+          code: 'PAYMENT_FAILED_CONFIRMED',
+          message: 'The canonical Arbitrum bootstrap operation failed.',
+          status: 0,
+        });
+      }
+      if (attempt % 10 === 0) {
+        onProgress?.('Transaction submitted once. Waiting for Railway canonical confirmation…');
+      }
+      await this.#wait(2_000);
+      current = await this.#api.getContractOperation(current.id);
+    }
+    throw new BrowserApiError({
+      code: 'INDEXER_LAGGING',
+      message: 'Railway is still reconciling this operation. Resume later without resubmitting.',
+      retryable: true,
+      submissionPossible: true,
+      status: 0,
+    });
+  }
+
+  async #waitForActiveMerchant(
+    onProgress?: (message: string) => void,
+  ): Promise<Awaited<ReturnType<BrowserApiClient['getMerchantProfile']>>> {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const profile = await this.#api.getMerchantProfile();
+      if (profile.merchant.status === 'active') return profile;
+      if (profile.operation?.status === 'failed' || profile.operation?.status === 'orphaned') {
+        throw new BrowserApiError({
+          code: 'PAYMENT_FAILED_CONFIRMED',
+          message: 'The canonical merchant registration failed.',
+          status: 0,
+        });
+      }
+      if (attempt % 10 === 0) onProgress?.('Waiting for the canonical merchant projection…');
+      await this.#wait(2_000);
+    }
+    throw new BrowserApiError({
+      code: 'INDEXER_LAGGING',
+      message: 'The merchant transaction is confirmed but its projection is still catching up.',
+      retryable: true,
+      submissionPossible: true,
+      status: 0,
+    });
+  }
+
+  async #waitForCanaryProduct(
+    productId: string,
+    onProgress?: (message: string) => void,
+    requireActive = false,
+  ): Promise<MerchantProductListResponse['items'][number]> {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const detail = await this.#api.getMerchantProduct(productId);
+      if (
+        detail.product.onchainProductId !== undefined &&
+        (!requireActive || detail.product.status === 'active')
+      ) {
+        return detail.product;
+      }
+      if (detail.operation?.status === 'failed' || detail.operation?.status === 'orphaned') {
+        throw new BrowserApiError({
+          code: 'PAYMENT_FAILED_CONFIRMED',
+          message: 'The canonical canary product operation failed.',
+          status: 0,
+        });
+      }
+      if (attempt % 10 === 0) onProgress?.('Waiting for the canonical product projection…');
+      await this.#wait(2_000);
+    }
+    throw new BrowserApiError({
+      code: 'INDEXER_LAGGING',
+      message: 'The canary product is still being projected. Resume without resubmitting.',
+      retryable: true,
+      submissionPossible: true,
+      status: 0,
+    });
+  }
+
+  async captureParticleCertificationBootstrap(input: {
+    readonly operatorToken: string;
+    readonly productId: string;
+  }): Promise<ParticleCertificationStatus> {
+    const status = await this.unlockParticleCertification(input.operatorToken);
+    if (status.certification.stage !== 'uncertified') return status;
+    const adapter = await this.#particleCertificationAdapter(status);
+    const capture = await adapter.captureBootstrap();
+    const certified = await this.#api.certifyParticleCompatibility(
+      {
+        operatorToken: input.operatorToken,
+        profile: capture.profile,
+        productId: input.productId,
+      },
+      this.#createIdempotencyKey(`particle-certification.bootstrap.${status.profileScopeId}`),
+    );
+    this.#resetLiveConfiguration();
+    return certified;
+  }
+
+  async captureParticleCertificationCanaryPreview(input: {
+    readonly operatorToken: string;
+    readonly productId: string;
+  }): Promise<{
+    readonly status: ParticleCertificationStatus;
+    readonly checkoutSessionId: string;
+    readonly paymentAttemptId: string;
+    readonly preparedFixtureDigest: string;
+  }> {
+    const status = await this.unlockParticleCertification(input.operatorToken);
+    const certification = status.certification;
+    if (
+      (certification.stage !== 'bootstrap' && certification.stage !== 'canary_ready') ||
+      !certification.subjectMatches
+    ) {
+      throw new BrowserApiError({
+        code: 'UA_CONFIGURATION_INVALID',
+        message: 'Capture bootstrap evidence with this Magic account first.',
+        status: 0,
+      });
+    }
+    const checkout = await this.#api.createCheckoutSession(
+      { productId: input.productId, quantity: '1' },
+      this.#createIdempotencyKey(
+        `particle-certification.checkout.${status.profileScopeId}.${input.productId}`,
+      ),
+    );
+    const { binding } = await this.#api.createPaymentAttempt(
+      checkout.sessionId,
+      this.#createIdempotencyKey(`payment-attempt.${checkout.sessionId}`),
+    );
+    let preparedFixtureDigest = certification.profileDigest;
+    let resultingStatus = status;
+    if (status.certification.stage === 'bootstrap') {
+      const adapter = await this.#particleCertificationAdapter(status);
+      const capture = await adapter.captureCanaryReady(binding);
+      preparedFixtureDigest = capture.preparedFixtureDigest;
+      resultingStatus = await this.#api.certifyParticleCompatibility(
+        {
+          operatorToken: input.operatorToken,
+          profile: capture.profile,
+          productId: input.productId,
+        },
+        this.#createIdempotencyKey(
+          `particle-certification.canary-ready.${status.profileScopeId}`,
+        ),
+      );
+      this.#resetLiveConfiguration();
+    }
+    const recovery = {
+      checkoutSessionId: checkout.sessionId,
+      paymentAttemptId: binding.attemptId,
+      preparedFixtureDigest,
+    };
+    window.sessionStorage.setItem(
+      'opentab.particle-certification.preview',
+      JSON.stringify(recovery),
+    );
+    return {
+      status: resultingStatus,
+      checkoutSessionId: checkout.sessionId,
+      paymentAttemptId: binding.attemptId,
+      preparedFixtureDigest,
+    };
+  }
+
+  async runAndCertifyParticleCanary(input: {
+    readonly operatorToken: string;
+    readonly checkoutSessionId: string;
+    readonly expectedPaymentAttemptId: string;
+    readonly onProgress?: (message: string) => void;
+  }): Promise<ParticleCertificationStatus> {
+    const storedSubmission = this.#particleCanarySubmission(input.expectedPaymentAttemptId);
+    let submissionEvidenceDigest = storedSubmission?.submissionEvidenceDigest;
+    if (submissionEvidenceDigest === undefined) {
+      input.onProgress?.('Preparing the exact profile-bound canary payment…');
+      const prepared = await this.prepareCheckoutPayment(input.checkoutSessionId);
+      if (prepared.binding.attemptId !== input.expectedPaymentAttemptId) {
+        throw new BrowserApiError({
+          code: 'IDEMPOTENCY_CONFLICT',
+          message: 'The canary checkout resolved to another payment attempt.',
+          status: 0,
+        });
+      }
+      input.onProgress?.('Approve the tiny canary once in Magic.');
+      const submitted = await this.submitCheckoutPayment(prepared.binding.attemptId);
+      if (submitted.kind !== 'submitted') {
+        throw new BrowserApiError({
+          code: 'PAYMENT_SUBMITTED_UNKNOWN',
+          message:
+            'The canary may already be moving. This tab will not submit it again; return after reconciliation.',
+          retryable: true,
+          submissionPossible: true,
+          status: 0,
+        });
+      }
+      submissionEvidenceDigest = submitted.operation.evidence.evidenceDigest;
+      window.sessionStorage.setItem(
+        'opentab.particle-certification.canary',
+        JSON.stringify({
+          paymentAttemptId: prepared.binding.attemptId,
+          submissionEvidenceDigest,
+        }),
+      );
+      input.onProgress?.('Submitted. Waiting for Particle and canonical Arbitrum confirmation…');
+    } else {
+      input.onProgress?.(
+        'Recovering the existing canary. No second Particle operation will be submitted…',
+      );
+    }
+    for (let attempt = 0; attempt < 240; attempt += 1) {
+      const observed = await this.pollPaymentAttempt(input.expectedPaymentAttemptId);
+      if (
+        observed.providerOperation?.status === 'succeeded' &&
+        observed.workflow.canonicalOrderPaid !== undefined &&
+        observed.workflow.receipt?.status === 'issued'
+      ) {
+        input.onProgress?.('Canonical OrderPaid event and pass confirmed. Certifying profile…');
+        const status = await this.#api.finalizeParticleCertification(
+          {
+            operatorToken: input.operatorToken,
+            paymentAttemptId: input.expectedPaymentAttemptId,
+            submissionEvidenceDigest,
+            statusEvidenceDigest: observed.providerOperation.evidence.evidenceDigest,
+          },
+          this.#createIdempotencyKey(
+            `particle-certification.finalize.${input.expectedPaymentAttemptId}`,
+          ),
+        );
+        window.sessionStorage.removeItem('opentab.particle-certification.canary');
+        this.#resetLiveConfiguration();
+        return status;
+      }
+      await this.#wait(2_000);
+    }
+    throw new BrowserApiError({
+      code: 'INDEXER_LAGGING',
+      message:
+        'The canary is still reconciling. No duplicate payment was started; resume certification.',
+      retryable: true,
+      submissionPossible: true,
+      status: 0,
+    });
+  }
+
+  #particleCanarySubmission(
+    paymentAttemptId: string,
+  ): { readonly submissionEvidenceDigest: EvidenceDigest } | undefined {
+    try {
+      const raw = window.sessionStorage.getItem('opentab.particle-certification.canary');
+      if (raw === null) return undefined;
+      const parsed = JSON.parse(raw) as {
+        readonly paymentAttemptId?: unknown;
+        readonly submissionEvidenceDigest?: unknown;
+      };
+      if (
+        parsed.paymentAttemptId !== paymentAttemptId ||
+        typeof parsed.submissionEvidenceDigest !== 'string'
+      ) {
+        return undefined;
+      }
+      return {
+        submissionEvidenceDigest: EvidenceDigestSchema.parse(parsed.submissionEvidenceDigest),
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   async bindCheckout(checkoutSessionId: string): Promise<CheckoutSnapshotResponse> {
@@ -737,7 +1419,13 @@ export class BrowserApplicationService {
           });
           const operation = await this.#api.registerContractOperationSubmission(
             operationId,
-            { status: 'submitted', providerOperationId: prepared.providerOperationId },
+            {
+              status: 'submitted',
+              providerOperationId: prepared.providerOperationId,
+              ...(providerOperation.destinationTransactionHash === undefined
+                ? {}
+                : { transactionHash: providerOperation.destinationTransactionHash }),
+            },
             this.#createIdempotencyKey(`contract-operation-submitted.${operationId}`),
           );
           return { kind: 'submitted' as const, operation, providerOperation };
@@ -852,10 +1540,7 @@ export class BrowserApplicationService {
     providerOperation?: ProviderOperation;
   }> {
     const workflow = await this.#api.getPaymentAttempt(paymentAttemptId);
-    if (
-      workflow.canonicalOrderPaid !== undefined ||
-      ['failed_confirmed', 'expired'].includes(workflow.attempt.status)
-    ) {
+    if (['failed_confirmed', 'expired'].includes(workflow.attempt.status)) {
       return { workflow };
     }
     const id = workflow.attempt.providerOperationId;
@@ -1018,35 +1703,80 @@ export class BrowserApplicationService {
       allowedSourceChainIds: config.particle.allowedSourceChainIds,
       allowedSourceAssets: config.particle.allowedSourceAssets,
       allowedSourceTokens: config.particle.allowedSourceTokens,
-      sourceCallProfiles: config.particle.sourceCallProfiles.map((profile) => ({
-        profileId: profile.profileId,
-        chainId: profile.chainId,
-        asset: profile.asset,
-        tokenAddress: EvmAddressSchema.parse(profile.tokenAddress),
-        sourceAmount: profile.sourceAmount,
-        fixtureDigest: asBytes32(profile.fixtureDigest),
-        calls: profile.calls.map((call) => ({
-          uaType: call.uaType,
-          to: EvmAddressSchema.parse(call.to),
-          data: call.data as `0x${string}`,
-          valueWei: call.valueWei,
-        })),
+      sourceCallPolicies: config.particle.sourceCallPolicies.map((policy) => ({
+        ...policy,
+        tokenAddress: EvmAddressSchema.parse(policy.tokenAddress),
+        target: EvmAddressSchema.parse(policy.target),
+        functionSelector: policy.functionSelector as `0x${string}`,
+        capturedFixtureDigest: asBytes32(policy.capturedFixtureDigest),
       })),
       responseProfile: {
         ...config.particle.responseProfile,
+        certificationStage: config.particle.certificationStage,
         deploymentsFixtureDigest: asHexDigest(
           config.particle.responseProfile.deploymentsFixtureDigest,
         ),
         authFixtureDigest: asHexDigest(config.particle.responseProfile.authFixtureDigest),
-        submissionFixtureDigest: asHexDigest(
-          config.particle.responseProfile.submissionFixtureDigest,
-        ),
-        statusFixtureDigest: asHexDigest(config.particle.responseProfile.statusFixtureDigest),
+        ...(config.particle.responseProfile.submissionFixtureDigest === undefined
+          ? {}
+          : {
+              submissionFixtureDigest: asHexDigest(
+                config.particle.responseProfile.submissionFixtureDigest,
+              ),
+            }),
+        ...(config.particle.responseProfile.statusFixtureDigest === undefined
+          ? {}
+          : {
+              statusFixtureDigest: asHexDigest(config.particle.responseProfile.statusFixtureDigest),
+            }),
       },
       ...(config.particle.rpcUrl === undefined ? {} : { rpcUrl: config.particle.rpcUrl }),
     });
     this.#account = { owner, adapter };
     return adapter;
+  }
+
+  async #particleCertificationAdapter(status: ParticleCertificationStatus) {
+    const session = await this.restoreSession();
+    const wallet = await this.#wallet();
+    const owner = await wallet.getOwnerAddress();
+    if (!sameEvmAddress(owner, session.user.walletAddress)) {
+      throw new BrowserApiError({
+        code: 'WALLET_ADDRESS_MISMATCH',
+        message: 'The Magic wallet does not match the authenticated operator session.',
+        status: 0,
+      });
+    }
+    if (typeof wallet.probeDelegationAuthorizationNonce !== 'function') {
+      throw new BrowserApiError({
+        code: 'WALLET_7702_UNSUPPORTED',
+        message: 'The installed Magic adapter cannot run the EIP-7702 compatibility probe.',
+        status: 0,
+      });
+    }
+    const config = status.captureConfig;
+    const integrations = await this.#integrations();
+    return integrations.createParticleOperatorCertificationAdapter({
+      profileId: `project-${status.profileScopeId.slice(0, 20)}`,
+      environment: status.environment,
+      projectId: config.projectId,
+      projectClientKey: config.projectClientKey,
+      projectAppUuid: config.projectAppUuid,
+      ownerAddress: owner,
+      magic: wallet,
+      arbitrumRpcUrl: config.arbitrumRpcUrl,
+      allowedArbitrumRpcOrigins: [new URL(config.arbitrumRpcUrl).origin],
+      allowedSourceChainIds: config.allowedSourceChainIds,
+      allowedSourceAssets: config.allowedSourceAssets,
+      slippageBps: config.maximumSlippageBps,
+      delegationPlanTtlSeconds: config.delegationPlanTtlSeconds,
+      ...(config.particleRpcUrl === undefined ? {} : { particleRpcUrl: config.particleRpcUrl }),
+    });
+  }
+
+  #resetLiveConfiguration(): void {
+    this.#configPromise = undefined;
+    this.#account = undefined;
   }
 
   async #assertSessionOwner(user: CurrentUser): Promise<void> {
@@ -1101,7 +1831,7 @@ export class BrowserApplicationService {
     if (
       ['preview', 'staging', 'demo-mainnet', 'production'].includes(config.environment) &&
       (config.particle.allowedSourceTokens.length === 0 ||
-        config.particle.sourceCallProfiles.length === 0)
+        config.particle.sourceCallPolicies.length === 0)
     ) {
       throw new BrowserApiError({
         code: 'CONFIGURATION_INVALID',

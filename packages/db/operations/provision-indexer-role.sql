@@ -86,7 +86,7 @@ select format('grant usage on schema public to %I', :'indexer_role')
 \gexec
 
 select format(
-  'grant select on table public.bootstrap_grants, public.canonical_logs, public.chain_event_quarantine, public.contract_operations, public.dead_letters, public.indexed_blocks, public.indexer_cursors, public.judge_evidence, public.loyalty_awards, public.loyalty_balances, public.loyalty_programs, public.merchants, public.orders, public.outbox_events, public.payment_attempts, public.products, public.provider_operations, public.receipts, public.refunds, public.reorg_incidents, public.settlement_credits, public.signed_order_intents, public.sponsor_audit_events, public.split_invitations, public.split_participants, public.split_payments, public.splits, public.users, public.withdrawals to %I',
+  'grant select on table public.bootstrap_grants, public.canonical_logs, public.chain_event_quarantine, public.contract_operations, public.dead_letters, public.indexed_blocks, public.indexer_cursors, public.judge_evidence, public.loyalty_awards, public.loyalty_balances, public.loyalty_programs, public.merchants, public.orders, public.outbox_events, public.particle_compatibility_profiles, public.particle_profile_release_bindings, public.payment_attempts, public.products, public.provider_operations, public.receipts, public.refunds, public.reorg_incidents, public.settlement_credits, public.signed_order_intents, public.sponsor_audit_events, public.split_invitations, public.split_participants, public.split_payments, public.splits, public.users, public.withdrawals to %I',
   :'indexer_role'
 )
 \gexec
@@ -111,7 +111,8 @@ with required_read(relation_name) as (
     ('bootstrap_grants'), ('canonical_logs'), ('chain_event_quarantine'),
     ('contract_operations'), ('dead_letters'), ('indexed_blocks'), ('indexer_cursors'),
     ('judge_evidence'), ('loyalty_awards'), ('loyalty_balances'), ('loyalty_programs'),
-    ('merchants'), ('orders'), ('outbox_events'), ('payment_attempts'), ('products'),
+    ('merchants'), ('orders'), ('outbox_events'), ('particle_compatibility_profiles'),
+    ('particle_profile_release_bindings'), ('payment_attempts'), ('products'),
     ('provider_operations'), ('receipts'), ('refunds'), ('reorg_incidents'),
     ('settlement_credits'), ('signed_order_intents'), ('sponsor_audit_events'),
     ('split_invitations'), ('split_participants'), ('split_payments'), ('splits'),
@@ -218,6 +219,11 @@ select
         or pg_catalog.has_table_privilege(role.oid, relation.oid, 'TRIGGER')
         or pg_catalog.has_any_column_privilege(role.oid, relation.oid, 'REFERENCES')
       )
+  )
+  and not pg_catalog.has_function_privilege(
+    role.oid,
+    'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+    'EXECUTE'
   ) as grants_valid
 from pg_catalog.pg_roles role
 inner join pg_catalog.pg_database database on database.datname = current_database()

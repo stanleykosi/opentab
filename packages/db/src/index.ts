@@ -8,6 +8,7 @@ export * from './indexer-privileges.js';
 export * from './indexer-store.js';
 export * from './judge-evidence.js';
 export * from './live-acceptance-evidence.js';
+export * from './particle-compatibility-profile.js';
 export * from './projectors.js';
 export * from './reconciliation-store.js';
 export * from './redis.js';

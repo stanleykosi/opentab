@@ -371,8 +371,15 @@ export function createMerchantProductOperationTemplate(
       });
       break;
   }
+  const kind =
+    mutation.action === 'create_merchant' ||
+    mutation.action === 'update_merchant_payout' ||
+    mutation.action === 'update_merchant_metadata' ||
+    mutation.action === 'set_merchant_active'
+      ? 'merchant_mutation'
+      : 'product_mutation';
   return operationTemplate({
-    kind: 'product_mutation',
+    kind,
     ownerAddress: binding.ownerAddress,
     calls: [{ to: binding.checkoutAddress, data, valueWei: ZERO_VALUE_WEI }],
     expiresAt: binding.expiresAt,

@@ -143,9 +143,7 @@ export class IndexerScanner {
       now: this.#now(),
     });
     if (!acquired) {
-      throw new AppError('INDEXER_LAGGING', 'Another indexer worker owns the stream lease.', {
-        retryable: true,
-      });
+      return { kind: 'lease_standby', nextBlock: initialCursor.nextBlock };
     }
 
     try {

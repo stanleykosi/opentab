@@ -8,6 +8,7 @@ export * from './config.js';
 export * from './decoder.js';
 export * from './failover.js';
 export * from './health.js';
+export * from './particle-profile.js';
 export * from './reconciler.js';
 export * from './reconciliation-runtime.js';
 export * from './runner.js';
@@ -34,7 +35,7 @@ async function main(): Promise<void> {
   process.once('SIGTERM', stopForSigterm);
   try {
     const dependencies = config.enabled
-      ? (await import('./composition.js')).createProductionIndexerDependencies(process.env)
+      ? await (await import('./composition.js')).createProductionIndexerDependencies(process.env)
       : undefined;
     const runtime = await startIndexerRuntime({
       env: process.env,

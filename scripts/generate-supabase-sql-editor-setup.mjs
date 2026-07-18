@@ -8,6 +8,10 @@ const migrationsDirectory = path.join(repositoryRoot, 'packages/db/migrations');
 const journalPath = path.join(migrationsDirectory, 'meta/_journal.json');
 const outputPath = path.join(repositoryRoot, 'SUPABASE_SQL_EDITOR_SETUP.sql');
 const rlsRepairOutputPath = path.join(repositoryRoot, 'SUPABASE_SQL_EDITOR_RLS_REPAIR.sql');
+const particleCertificationOutputPath = path.join(
+  repositoryRoot,
+  'SUPABASE_SQL_EDITOR_PARTICLE_CERTIFICATION.sql',
+);
 
 const runtimeProtectedTables = [
   'chain_transactions',
@@ -16,6 +20,8 @@ const runtimeProtectedTables = [
   'canonical_logs',
   'reorg_incidents',
   'receipts',
+  'particle_compatibility_profiles',
+  'particle_profile_release_bindings',
 ];
 
 const indexerReadTables = [
@@ -33,6 +39,8 @@ const indexerReadTables = [
   'merchants',
   'orders',
   'outbox_events',
+  'particle_compatibility_profiles',
+  'particle_profile_release_bindings',
   'payment_attempts',
   'products',
   'provider_operations',
@@ -104,6 +112,8 @@ const evidenceReadTables = [
   'delegation_records',
   'bootstrap_grants',
   'live_acceptance_evidence',
+  'particle_compatibility_profiles',
+  'particle_profile_release_bindings',
 ];
 
 function quoteIdentifier(identifier) {
@@ -438,6 +448,9 @@ REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE public.audit_logs 
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
   ON TABLE public.live_acceptance_evidence FROM opentab_runtime;
 
+GRANT EXECUTE ON FUNCTION public.certify_particle_compatibility_profile(jsonb, jsonb)
+  TO opentab_runtime;
+
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
   ON TABLE ${tableList(runtimeProtectedTables)} FROM opentab_runtime;
 
@@ -478,7 +491,8 @@ DECLARE
   allowed_special text[] := ARRAY[
     'orders', 'judge_evidence', 'audit_logs', 'live_acceptance_evidence',
     'chain_transactions', 'indexed_blocks', 'indexer_cursors', 'canonical_logs',
-    'reorg_incidents', 'receipts'
+    'reorg_incidents', 'receipts', 'particle_compatibility_profiles',
+    'particle_profile_release_bindings'
   ]::text[];
 BEGIN
   FOREACH target_role IN ARRAY ARRAY['opentab_runtime', 'opentab_indexer', 'opentab_evidence_writer']::text[]
@@ -571,6 +585,11 @@ BEGIN
   IF invalid
     OR pg_catalog.has_table_privilege('opentab_runtime', 'public.live_acceptance_evidence', 'INSERT')
     OR pg_catalog.has_table_privilege('opentab_runtime', 'public.live_acceptance_evidence', 'UPDATE')
+    OR NOT pg_catalog.has_function_privilege(
+      'opentab_runtime',
+      'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+      'EXECUTE'
+    )
   THEN
     RAISE EXCEPTION 'OpenTab runtime canonical/evidence boundary is invalid.';
   END IF;
@@ -599,6 +618,11 @@ BEGIN
     OR pg_catalog.has_table_privilege('opentab_indexer', 'public.judge_evidence', 'UPDATE')
     OR NOT pg_catalog.has_column_privilege('opentab_indexer', 'public.judge_evidence', 'published', 'UPDATE')
     OR pg_catalog.has_column_privilege('opentab_indexer', 'public.judge_evidence', 'public_proof', 'UPDATE')
+    OR pg_catalog.has_function_privilege(
+      'opentab_indexer',
+      'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+      'EXECUTE'
+    )
   THEN
     RAISE EXCEPTION 'OpenTab indexer exact allowlist is invalid.';
   END IF;
@@ -618,7 +642,11 @@ BEGIN
       OR pg_catalog.has_table_privilege('opentab_evidence_writer', relation.oid, 'TRIGGER')
     )
   ) INTO invalid;
-  IF invalid THEN
+  IF invalid OR pg_catalog.has_function_privilege(
+    'opentab_evidence_writer',
+    'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+    'EXECUTE'
+  ) THEN
     RAISE EXCEPTION 'OpenTab evidence-writer exact allowlist is invalid.';
   END IF;
 
@@ -789,30 +817,205 @@ WHERE namespace.nspname = 'public'
 `;
 }
 
+function renderParticleCertificationIncremental(migrations) {
+  const migration = migrations.at(-1);
+  if (migration?.filename !== '0011_particle-compatibility-profiles.sql') {
+    throw new Error('Particle certification incremental must track migration 0011.');
+  }
+  return `-- OpenTab — incremental Particle compatibility certification storage
+-- GENERATED FILE. Source: ${migration.filename} + least-privilege Supabase policy.
+-- Regenerate with: pnpm db:supabase:sql
+--
+-- Run this entire file once in the existing dedicated OpenTab Supabase project.
+-- It does not rotate service-role passwords or enable payments.
+
+BEGIN;
+SET LOCAL lock_timeout = '10s';
+SET LOCAL statement_timeout = '10min';
+SET LOCAL search_path = public, pg_catalog;
+SELECT pg_advisory_xact_lock(714480106095748);
+
+DO $opentab_particle_certification_preflight$
+BEGIN
+  IF to_regclass('public.users') IS NULL
+    OR to_regclass('public.live_acceptance_evidence') IS NULL
+    OR to_regclass('drizzle.__drizzle_migrations') IS NULL
+  THEN
+    RAISE EXCEPTION 'OpenTab base schema is missing; use the fresh-project setup instead.';
+  END IF;
+  IF to_regclass('public.particle_compatibility_profiles') IS NOT NULL
+    OR to_regclass('public.particle_profile_release_bindings') IS NOT NULL
+  THEN
+    RAISE EXCEPTION 'Particle certification storage already exists; do not reapply this file.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'opentab_runtime')
+    OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'opentab_indexer')
+    OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'opentab_evidence_writer')
+  THEN
+    RAISE EXCEPTION 'OpenTab service roles are missing; do not apply a partial certification migration.';
+  END IF;
+END
+$opentab_particle_certification_preflight$;
+
+-- ---------------------------------------------------------------------------
+-- ${migration.filename}
+-- SHA-256: ${migration.hash}
+-- ---------------------------------------------------------------------------
+${migration.sql.trimEnd()}
+
+INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+SELECT ${sqlString(migration.hash)}, ${migration.createdAt}
+WHERE NOT EXISTS (
+  SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = ${sqlString(migration.hash)}
+);
+
+-- Clear any inherited/legacy column ACL before applying the exact boundary.
+DO $opentab_particle_certification_column_acls$
+DECLARE
+  target_role text;
+  relation record;
+  denied_privilege text;
+BEGIN
+  FOREACH target_role IN ARRAY ARRAY[
+    'opentab_runtime', 'opentab_indexer', 'opentab_evidence_writer', 'anon', 'authenticated'
+  ]::text[]
+  LOOP
+    FOR relation IN
+      SELECT class.relname,
+        string_agg(format('%I', attribute.attname), ', ' ORDER BY attribute.attnum) AS columns
+      FROM pg_catalog.pg_class class
+      INNER JOIN pg_catalog.pg_namespace namespace ON namespace.oid = class.relnamespace
+      INNER JOIN pg_catalog.pg_attribute attribute ON attribute.attrelid = class.oid
+      WHERE namespace.nspname = 'public'
+        AND class.relname IN (
+          'particle_compatibility_profiles', 'particle_profile_release_bindings'
+        )
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+      GROUP BY class.relname
+    LOOP
+      FOREACH denied_privilege IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']::text[]
+      LOOP
+        EXECUTE format(
+          'REVOKE %s (%s) ON TABLE public.%I FROM %I',
+          denied_privilege,
+          relation.columns,
+          relation.relname,
+          target_role
+        );
+      END LOOP;
+    END LOOP;
+  END LOOP;
+END
+$opentab_particle_certification_column_acls$;
+
+REVOKE ALL PRIVILEGES
+  ON TABLE public.particle_compatibility_profiles, public.particle_profile_release_bindings
+  FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON TABLE public.particle_compatibility_profiles, public.particle_profile_release_bindings
+  FROM opentab_runtime, opentab_indexer, opentab_evidence_writer;
+GRANT SELECT
+  ON TABLE public.particle_compatibility_profiles, public.particle_profile_release_bindings
+  TO opentab_runtime, opentab_indexer, opentab_evidence_writer;
+REVOKE ALL ON FUNCTION public.certify_particle_compatibility_profile(jsonb, jsonb)
+  FROM PUBLIC, opentab_indexer, opentab_evidence_writer, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.certify_particle_compatibility_profile(jsonb, jsonb)
+  TO opentab_runtime;
+
+ALTER TABLE public.particle_compatibility_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.particle_profile_release_bindings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS opentab_backend_roles ON public.particle_compatibility_profiles;
+CREATE POLICY opentab_backend_roles ON public.particle_compatibility_profiles
+  AS PERMISSIVE FOR ALL
+  TO opentab_runtime, opentab_indexer, opentab_evidence_writer
+  USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS opentab_backend_roles ON public.particle_profile_release_bindings;
+CREATE POLICY opentab_backend_roles ON public.particle_profile_release_bindings
+  AS PERMISSIVE FOR ALL
+  TO opentab_runtime, opentab_indexer, opentab_evidence_writer
+  USING (true) WITH CHECK (true);
+
+DO $opentab_validate_particle_certification$
+DECLARE
+  relation_name text;
+BEGIN
+  FOREACH relation_name IN ARRAY ARRAY[
+    'particle_compatibility_profiles', 'particle_profile_release_bindings'
+  ]::text[]
+  LOOP
+    IF NOT pg_catalog.has_table_privilege('opentab_runtime', 'public.' || relation_name, 'SELECT')
+      OR NOT pg_catalog.has_table_privilege('opentab_indexer', 'public.' || relation_name, 'SELECT')
+      OR NOT pg_catalog.has_table_privilege('opentab_evidence_writer', 'public.' || relation_name, 'SELECT')
+      OR pg_catalog.has_table_privilege('opentab_runtime', 'public.' || relation_name, 'INSERT')
+      OR pg_catalog.has_table_privilege('opentab_runtime', 'public.' || relation_name, 'UPDATE')
+      OR pg_catalog.has_table_privilege('opentab_runtime', 'public.' || relation_name, 'DELETE')
+      OR pg_catalog.has_table_privilege('opentab_indexer', 'public.' || relation_name, 'INSERT')
+      OR pg_catalog.has_table_privilege('opentab_evidence_writer', 'public.' || relation_name, 'INSERT')
+      OR pg_catalog.has_table_privilege('anon', 'public.' || relation_name, 'SELECT')
+      OR pg_catalog.has_table_privilege('authenticated', 'public.' || relation_name, 'SELECT')
+    THEN
+      RAISE EXCEPTION 'Particle certification table % has an invalid privilege boundary.', relation_name;
+    END IF;
+  END LOOP;
+  IF NOT pg_catalog.has_function_privilege(
+    'opentab_runtime',
+    'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'opentab_indexer',
+    'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'opentab_evidence_writer',
+    'public.certify_particle_compatibility_profile(jsonb,jsonb)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'Particle certification function privilege boundary is invalid.';
+  END IF;
+END
+$opentab_validate_particle_certification$;
+
+COMMIT;
+
+SELECT
+  'particle-certification-storage-ready' AS status,
+  ${sqlString(migration.hash)} AS migration_hash;
+`;
+}
+
 const migrations = await loadMigrations();
 const rendered = renderSetup(migrations);
 const renderedRlsRepair = renderRlsRepair();
+const renderedParticleCertification = renderParticleCertificationIncremental(migrations);
 const checkOnly = process.argv.includes('--check');
 
 if (checkOnly) {
   let current;
   let currentRlsRepair;
+  let currentParticleCertification;
   try {
     current = await readFile(outputPath, 'utf8');
     currentRlsRepair = await readFile(rlsRepairOutputPath, 'utf8');
+    currentParticleCertification = await readFile(particleCertificationOutputPath, 'utf8');
   } catch {
     throw new Error('A generated Supabase SQL Editor file is missing. Run pnpm db:supabase:sql.');
   }
-  if (current !== rendered || currentRlsRepair !== renderedRlsRepair) {
+  if (
+    current !== rendered ||
+    currentRlsRepair !== renderedRlsRepair ||
+    currentParticleCertification !== renderedParticleCertification
+  ) {
     throw new Error('A Supabase SQL Editor file is stale. Run pnpm db:supabase:sql.');
   }
   console.log(
-    `Supabase SQL Editor setup and RLS repair are current (${migrations.length} migrations).`,
+    `Supabase SQL Editor setup, RLS repair, and Particle incremental are current (${migrations.length} migrations).`,
   );
 } else {
   await writeFile(outputPath, rendered, 'utf8');
   await writeFile(rlsRepairOutputPath, renderedRlsRepair, 'utf8');
+  await writeFile(particleCertificationOutputPath, renderedParticleCertification, 'utf8');
   console.log(
-    `Generated ${path.relative(repositoryRoot, outputPath)} and ${path.relative(repositoryRoot, rlsRepairOutputPath)} from ${migrations.length} migrations.`,
+    `Generated ${path.relative(repositoryRoot, outputPath)}, ${path.relative(repositoryRoot, rlsRepairOutputPath)}, and ${path.relative(repositoryRoot, particleCertificationOutputPath)} from ${migrations.length} migrations.`,
   );
 }

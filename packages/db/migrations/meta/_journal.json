@@ -78,6 +78,13 @@
       "when": 1784142000000,
       "tag": "0010_deployment-bound-evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784373600000,
+      "tag": "0011_particle-compatibility-profiles",
+      "breakpoints": true
     }
   ]
 }

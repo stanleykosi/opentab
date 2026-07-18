@@ -12,6 +12,26 @@ import type {
 } from '@opentab/application';
 import { AppError } from '@opentab/shared';
 
+export interface ParticleCertificationService {
+  getStatus(input: {
+    readonly actor: import('@opentab/shared').CurrentUser;
+    readonly operatorToken?: string;
+  }): Promise<object>;
+  certify(input: {
+    readonly actor: import('@opentab/shared').CurrentUser;
+    readonly operatorToken: string;
+    readonly profile: unknown;
+    readonly productId: string;
+  }): Promise<object>;
+  finalize(input: {
+    readonly actor: import('@opentab/shared').CurrentUser;
+    readonly operatorToken: string;
+    readonly paymentAttemptId: string;
+    readonly submissionEvidenceDigest: string;
+    readonly statusEvidenceDigest: string;
+  }): Promise<object>;
+}
+
 export interface BackendApiRegistry {
   readonly sessions: CsrfSessionServicePort;
   readonly authContinuations: AuthContinuationServicePort;
@@ -33,6 +53,14 @@ export interface BackendApiRegistry {
   readonly sessionCookieSecure: boolean;
   readonly digestSecret: (domain: string, value: string) => string;
   readonly networkSubject: (request: Request) => string;
+  /** Present only for live project-scoped Particle operator certification. */
+  readonly particleCertification?: ParticleCertificationService;
+  /**
+   * Re-reads the immutable project profile before a request captures this
+   * registry. This lets independently warm Vercel instances observe a newly
+   * certified stage without a redeploy or process-local cache assumption.
+   */
+  readonly refreshRuntime?: () => Promise<void>;
 }
 
 const commandMethods: readonly (keyof BackendApiCommandPort)[] = [
@@ -120,10 +148,7 @@ function assertMethods(object: object, methods: readonly PropertyKey[], label: s
   }
 }
 
-export function installBackendApiRegistry(input: BackendApiRegistry): void {
-  if (registry !== undefined) {
-    throw new AppError('CONFIGURATION_INVALID', 'The backend API registry is already installed.');
-  }
+function validateBackendApiRegistry(input: BackendApiRegistry): BackendApiRegistry {
   const origin = new URL(input.allowedOrigin);
   const localHttp =
     origin.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
@@ -151,13 +176,35 @@ export function installBackendApiRegistry(input: BackendApiRegistry): void {
   if (typeof input.digestSecret !== 'function' || typeof input.networkSubject !== 'function') {
     throw new AppError('CONFIGURATION_INVALID', 'Backend API digest services are not configured.');
   }
+  if (input.refreshRuntime !== undefined && typeof input.refreshRuntime !== 'function') {
+    throw new AppError('CONFIGURATION_INVALID', 'Backend runtime refresh is invalid.');
+  }
   const expectedContinuationCookie = input.sessionCookieSecure
     ? '__Host-opentab_auth_state'
     : 'opentab_auth_state';
   if (input.authContinuationCookieName !== expectedContinuationCookie) {
     throw new AppError('CONFIGURATION_INVALID', 'The auth continuation cookie mode is invalid.');
   }
-  registry = Object.freeze(input);
+  return Object.freeze(input);
+}
+
+export function installBackendApiRegistry(input: BackendApiRegistry): void {
+  if (registry !== undefined) {
+    throw new AppError('CONFIGURATION_INVALID', 'The backend API registry is already installed.');
+  }
+  registry = validateBackendApiRegistry(input);
+}
+
+/**
+ * Atomically swaps a fully composed registry after an immutable certification
+ * stage is committed. Existing requests retain their captured registry while
+ * new requests immediately observe the new project-scoped profile.
+ */
+export function replaceBackendApiRegistry(input: BackendApiRegistry): BackendApiRegistry {
+  const replacement = validateBackendApiRegistry(input);
+  const previous = registry;
+  registry = replacement;
+  return previous ?? replacement;
 }
 
 export function getBackendApiRegistry(): BackendApiRegistry {
@@ -172,7 +219,10 @@ export function isBackendApiRegistryInstalled(): boolean {
 }
 
 export async function ensureBackendApiRegistry(): Promise<void> {
-  if (registry !== undefined) return;
+  if (registry !== undefined) {
+    await registry.refreshRuntime?.();
+    return;
+  }
   initialization ??= import('./composition.js')
     .then(({ installComposedBackendApiRegistry }) => installComposedBackendApiRegistry())
     .catch((error: unknown) => {
@@ -180,6 +230,7 @@ export async function ensureBackendApiRegistry(): Promise<void> {
       throw error;
     });
   await initialization;
+  await getBackendApiRegistry().refreshRuntime?.();
 }
 
 export function resetBackendApiRegistryForTests(): void {

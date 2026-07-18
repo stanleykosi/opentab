@@ -238,8 +238,10 @@ export interface ParticleRecordedResponseProfile {
   readonly provenance: 'deterministic' | 'recorded_live';
   readonly deploymentsFixtureDigest: `0x${string}`;
   readonly authFixtureDigest: `0x${string}`;
-  readonly submissionFixtureDigest: `0x${string}`;
-  readonly statusFixtureDigest: `0x${string}`;
+  /** Added only after a submitted canary has been observed. */
+  readonly submissionFixtureDigest?: `0x${string}`;
+  /** Added only after the same canary has a normalized status response. */
+  readonly statusFixtureDigest?: `0x${string}`;
   /** Explicitly fixed from a sanitized live Magic/Particle capture. */
   readonly magicAuthorizationNonceOffset: 0 | 1;
   readonly delegationPlanTtlSeconds: number;
@@ -273,6 +275,25 @@ export interface ParticleSourceCallProfile {
   }[];
 }
 
+/**
+ * A reusable, release-certified source-call boundary. Unlike the legacy exact
+ * fixture it deliberately excludes a user's amount and full calldata. The
+ * live adapter still binds the selected token, chain, call target, selector,
+ * native-value policy, call count, and the exact Arbitrum destination calls.
+ */
+export interface ParticleSourceCallPolicy {
+  readonly policyId: string;
+  readonly chainId: string;
+  readonly asset: 'USDC' | 'USDT' | 'ETH';
+  readonly tokenAddress: EvmAddress;
+  readonly uaType: string;
+  readonly target: EvmAddress;
+  readonly functionSelector: `0x${string}`;
+  readonly nativeValueAllowed: boolean;
+  readonly maxCalls: number;
+  readonly capturedFixtureDigest: Bytes32;
+}
+
 export interface ParticleAdapterConfig {
   readonly projectId: string;
   readonly projectClientKey: string;
@@ -287,7 +308,9 @@ export interface ParticleAdapterConfig {
   readonly allowedSourceAssets: readonly ('USDC' | 'USDT' | 'ETH')[];
   /** Exact source-token contracts. Required for every production-like route. */
   readonly allowedSourceTokens?: readonly ParticleSourceTokenPolicy[];
-  /** Exact source-call alternatives captured from reviewed, sanitized fixtures. */
+  /** Release-certified semantic source-call policies. */
+  readonly sourceCallPolicies?: readonly ParticleSourceCallPolicy[];
+  /** @deprecated Deterministic/local compatibility only. */
   readonly sourceCallProfiles?: readonly ParticleSourceCallProfile[];
   readonly responseProfile: ParticleRecordedResponseProfile;
   readonly rpcUrl?: string;
@@ -310,13 +333,27 @@ function ensureLiveProfile(config: ParticleAdapterConfig): void {
       'Live Particle mode requires sanitized response-profile evidence.',
     );
   }
-  for (const digest of [
+  const stagedDigests = [
     config.responseProfile.deploymentsFixtureDigest,
     config.responseProfile.authFixtureDigest,
-    config.responseProfile.submissionFixtureDigest,
-    config.responseProfile.statusFixtureDigest,
     config.expectedImplementationCodeHash,
-  ]) {
+  ];
+  if (
+    (config.responseProfile.submissionFixtureDigest === undefined) !==
+    (config.responseProfile.statusFixtureDigest === undefined)
+  ) {
+    throw new AppError(
+      'UA_CONFIGURATION_INVALID',
+      'Particle submission and status evidence must advance together.',
+    );
+  }
+  if (config.responseProfile.submissionFixtureDigest !== undefined) {
+    stagedDigests.push(
+      config.responseProfile.submissionFixtureDigest,
+      config.responseProfile.statusFixtureDigest as `0x${string}`,
+    );
+  }
+  for (const digest of stagedDigests) {
     EvidenceDigestSchema.parse(digest);
   }
   if (
@@ -453,14 +490,48 @@ function validateParticleAdapterPolicy(config: ParticleAdapterConfig): void {
       }
     }
   }
+  const sourcePolicyIds = new Set<string>();
+  const sourcePolicyDigests = new Set<string>();
+  for (const policy of config.sourceCallPolicies ?? []) {
+    const chainId = ChainIdSchema.parse(policy.chainId);
+    const tokenAddress = EvmAddressSchema.parse(policy.tokenAddress);
+    EvmAddressSchema.parse(policy.target);
+    EvidenceDigestSchema.parse(policy.capturedFixtureDigest);
+    if (
+      chainId === ARBITRUM_ONE_CHAIN_ID ||
+      !normalizedChainIds.has(chainId) ||
+      !/^[a-z0-9][a-z0-9._-]{0,127}$/i.test(policy.policyId) ||
+      sourcePolicyIds.has(policy.policyId) ||
+      sourcePolicyDigests.has(policy.capturedFixtureDigest.toLowerCase()) ||
+      !/^[A-Za-z0-9._:-]{1,80}$/.test(policy.uaType) ||
+      !/^0x[0-9a-fA-F]{8}$/.test(policy.functionSelector) ||
+      !Number.isInteger(policy.maxCalls) ||
+      policy.maxCalls < 1 ||
+      policy.maxCalls > 16 ||
+      !config.allowedSourceAssets.includes(policy.asset) ||
+      !config.allowedSourceTokens?.some(
+        (token) =>
+          token.chainId === chainId &&
+          token.asset === policy.asset &&
+          sameEvmAddress(token.address, tokenAddress),
+      )
+    ) {
+      throw new AppError(
+        'UA_CONFIGURATION_INVALID',
+        'Particle source-call policy is invalid or exceeds its token allowlist.',
+      );
+    }
+    sourcePolicyIds.add(policy.policyId);
+    sourcePolicyDigests.add(policy.capturedFixtureDigest.toLowerCase());
+  }
   if (
     productionLike &&
     config.allowedSourceChainIds.some((chainId) => chainId !== ARBITRUM_ONE_CHAIN_ID) &&
-    (config.sourceCallProfiles?.length ?? 0) === 0
+    (config.sourceCallPolicies?.length ?? 0) === 0
   ) {
     throw new AppError(
       'UA_CONFIGURATION_INVALID',
-      'Live cross-chain Particle calls require a reviewed source-call profile.',
+      'Live cross-chain Particle calls require a certified source-call policy.',
     );
   }
 }
@@ -650,6 +721,95 @@ function assertReviewedSourceCalls(
       'UA_PROVIDER_SCHEMA_INVALID',
       'Particle source assets are not bound one-to-one to reviewed source calls.',
     );
+  }
+}
+
+function providerAsset(
+  entry: z.infer<typeof ParticleTokenAmountSchema>,
+): 'USDC' | 'USDT' | 'ETH' | undefined {
+  switch (entry.token.type) {
+    case 'usdc':
+      return 'USDC';
+    case 'usdt':
+      return 'USDT';
+    case 'eth':
+      return 'ETH';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Validates a prepared route against the immutable semantic policy captured
+ * during operator certification. Dynamic amount bytes never become policy;
+ * the exact destination amount remains bound by the server-signed order and
+ * every source debit is independently bound to an allowlisted token.
+ */
+function assertCertifiedSourceCalls(
+  prepared: z.infer<typeof PreparedTransactionSchema>,
+  sourceValues: readonly z.infer<typeof ParticleTokenAmountSchema>[],
+  policies: readonly ParticleSourceCallPolicy[],
+): void {
+  const sourceOps = prepared.userOps.filter((entry) => entry.chainId !== ARBITRUM_CHAIN_NUMBER);
+  const nonArbitrumSources = sourceValues.filter(
+    (entry) => entry.token.chainId !== ARBITRUM_CHAIN_NUMBER,
+  );
+  const sourceByChain = new Map<number, z.infer<typeof ParticleTokenAmountSchema>>();
+  for (const source of nonArbitrumSources) {
+    if (sourceByChain.has(source.token.chainId)) {
+      throw new AppError(
+        'UA_PROVIDER_SCHEMA_INVALID',
+        'Particle selected an ambiguous set of source tokens for one chain.',
+      );
+    }
+    sourceByChain.set(source.token.chainId, source);
+  }
+  if (sourceOps.length !== sourceByChain.size) {
+    throw new AppError(
+      'UA_PROVIDER_SCHEMA_INVALID',
+      'Particle source operations do not match the selected source chains.',
+    );
+  }
+  for (const userOp of sourceOps) {
+    const source = sourceByChain.get(userOp.chainId);
+    const sourceAddress =
+      source === undefined ? undefined : EvmAddressSchema.safeParse(source.token.address);
+    const asset = source === undefined ? undefined : providerAsset(source);
+    if (source === undefined || !sourceAddress?.success || asset === undefined) {
+      throw new AppError(
+        'UA_PROVIDER_SCHEMA_INVALID',
+        'Particle added a source operation without one approved source token.',
+      );
+    }
+    const matchCounts = new Map<string, number>();
+    for (const call of userOp.txs) {
+      const selector = call.data.slice(0, 10).toLowerCase();
+      const matches = policies.filter(
+        (policy) =>
+          Number(policy.chainId) === userOp.chainId &&
+          policy.asset === asset &&
+          sameEvmAddress(policy.tokenAddress, sourceAddress.data) &&
+          policy.uaType === call.uaType &&
+          sameEvmAddress(policy.target, call.to) &&
+          policy.functionSelector.toLowerCase() === selector &&
+          (policy.nativeValueAllowed || BigInt(call.value ?? '0x0') === 0n),
+      );
+      const match = matches[0];
+      if (matches.length !== 1 || match === undefined) {
+        throw new AppError(
+          'UA_PROVIDER_SCHEMA_INVALID',
+          'Particle source call is outside the certified release policy.',
+        );
+      }
+      const count = (matchCounts.get(match.policyId) ?? 0) + 1;
+      if (count > match.maxCalls) {
+        throw new AppError(
+          'UA_PROVIDER_SCHEMA_INVALID',
+          'Particle exceeded the certified source-call count.',
+        );
+      }
+      matchCounts.set(match.policyId, count);
+    }
   }
 }
 
@@ -1023,7 +1183,13 @@ export class ParticleUniversalAccountAdapter implements UniversalOperationPort {
     if (sourceValues.length === 0) {
       throw new AppError('UA_PROVIDER_SCHEMA_INVALID', 'Particle omitted source assets.');
     }
-    assertReviewedSourceCalls(raw, sourceValues, this.config.sourceCallProfiles ?? []);
+    if ((this.config.sourceCallPolicies?.length ?? 0) > 0) {
+      assertCertifiedSourceCalls(raw, sourceValues, this.config.sourceCallPolicies ?? []);
+    } else {
+      // Retained only for deterministic fixtures while deployments migrate to
+      // immutable semantic certification profiles.
+      assertReviewedSourceCalls(raw, sourceValues, this.config.sourceCallProfiles ?? []);
+    }
     const sources = sourceValues.map((entry) => {
       const chainId = ChainIdSchema.parse(entry.token.chainId.toString());
       const providerType = entry.token.type;

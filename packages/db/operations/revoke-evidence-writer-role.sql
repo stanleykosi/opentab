@@ -33,6 +33,11 @@ group by relation.relname, denied_privilege.name
 \gexec
 select format('revoke all privileges on all sequences in schema public from %I', :'evidence_writer_role')
 \gexec
+select format(
+  'revoke execute on function public.certify_particle_compatibility_profile(jsonb, jsonb) from %I',
+  :'evidence_writer_role'
+)
+\gexec
 select format('revoke usage, create on schema public from %I', :'evidence_writer_role')
 \gexec
 select format(

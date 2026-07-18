@@ -1,5 +1,12 @@
 import { createServer, type Server } from 'node:http';
-import type { IndexerScanResult } from './types.js';
+import type { IndexerActiveScanResult } from './types.js';
+
+export interface IndexerParticleProfileReadiness {
+  readonly profileScopeId: string;
+  readonly profileId: string;
+  readonly profileDigest: string;
+  readonly stage: 'bootstrap' | 'canary_ready' | 'certified';
+}
 
 export interface IndexerHealthSnapshot {
   readonly live: true;
@@ -9,7 +16,8 @@ export interface IndexerHealthSnapshot {
   readonly lastErrorAt?: string;
   readonly lagBlocks: string;
   readonly consecutiveFailures: number;
-  readonly reason?: 'starting' | 'draining' | 'stale' | 'lagging' | 'failing';
+  readonly particleProfile?: IndexerParticleProfileReadiness;
+  readonly reason?: 'starting' | 'standby' | 'draining' | 'stale' | 'lagging' | 'failing';
 }
 
 export class IndexerHealthTracker {
@@ -17,6 +25,7 @@ export class IndexerHealthTracker {
   #lastErrorAt: Date | undefined;
   #lagBlocks = 0n;
   #consecutiveFailures = 0;
+  #standby = false;
   #draining = false;
 
   constructor(
@@ -24,19 +33,27 @@ export class IndexerHealthTracker {
       maxReadyLagBlocks: bigint;
       staleAfterMs: number;
       maxConsecutiveFailures: number;
+      particleProfile?: IndexerParticleProfileReadiness;
       now?: () => Date;
     },
   ) {}
 
-  recordSuccess(result: IndexerScanResult): void {
+  recordSuccess(result: IndexerActiveScanResult): void {
     this.#lastSuccessAt = this.options.now?.() ?? new Date();
     this.#lagBlocks = result.lagBlocks;
+    this.#consecutiveFailures = 0;
+    this.#standby = false;
+  }
+
+  recordStandby(): void {
+    this.#standby = true;
     this.#consecutiveFailures = 0;
   }
 
   recordFailure(): void {
     this.#lastErrorAt = this.options.now?.() ?? new Date();
     this.#consecutiveFailures += 1;
+    this.#standby = false;
   }
 
   setDraining(): void {
@@ -47,6 +64,7 @@ export class IndexerHealthTracker {
     const now = this.options.now?.() ?? new Date();
     let reason: IndexerHealthSnapshot['reason'];
     if (this.#draining) reason = 'draining';
+    else if (this.#standby) reason = 'standby';
     else if (this.#lastSuccessAt === undefined) reason = 'starting';
     else if (now.getTime() - this.#lastSuccessAt.getTime() > this.options.staleAfterMs)
       reason = 'stale';
@@ -62,6 +80,9 @@ export class IndexerHealthTracker {
       ...(this.#lastErrorAt === undefined ? {} : { lastErrorAt: this.#lastErrorAt.toISOString() }),
       lagBlocks: this.#lagBlocks.toString(),
       consecutiveFailures: this.#consecutiveFailures,
+      ...(this.options.particleProfile === undefined
+        ? {}
+        : { particleProfile: this.options.particleProfile }),
       ...(reason === undefined ? {} : { reason }),
     };
   }

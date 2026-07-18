@@ -195,12 +195,17 @@ export const ContractOperationSubmissionBodySchema = z.discriminatedUnion('statu
     })
     .strict(),
   z
-    .object({ status: z.literal('submitted'), providerOperationId: ProviderOperationIdSchema })
+    .object({
+      status: z.literal('submitted'),
+      providerOperationId: ProviderOperationIdSchema,
+      transactionHash: TransactionHashSchema.optional(),
+    })
     .strict(),
   z
     .object({
       status: z.literal('submitted_unknown'),
       providerOperationId: ProviderOperationIdSchema,
+      transactionHash: TransactionHashSchema.optional(),
     })
     .strict(),
 ]);
@@ -255,9 +260,7 @@ export const PublicBrowserConfigSchema = z
     magic: z
       .object({ publishableKey: z.string().min(8).max(256), rpcUrl: z.string().url().max(2_048) })
       .strict(),
-    challenge: z
-      .object({ turnstileSiteKey: z.string().min(1).max(256).optional() })
-      .strict(),
+    challenge: z.object({ turnstileSiteKey: z.string().min(1).max(256).optional() }).strict(),
     particle: z.discriminatedUnion('enabled', [
       z.object({ enabled: z.literal(false) }).strict(),
       z
@@ -266,6 +269,8 @@ export const PublicBrowserConfigSchema = z
           projectId: z.string().min(1).max(256),
           projectClientKey: z.string().min(1).max(512),
           projectAppUuid: z.string().min(1).max(256),
+          certificationStage: z.enum(['canary_ready', 'certified']),
+          profileDigest: PublicDigestSchema,
           expectedImplementationAddress: EvmAddressSchema,
           expectedImplementationCodeHash: PublicDigestSchema,
           slippageBps: z.number().int().min(0).max(500),
@@ -289,32 +294,20 @@ export const PublicBrowserConfigSchema = z
                 .strict(),
             )
             .max(32),
-          sourceCallProfiles: z
+          sourceCallPolicies: z
             .array(
               z
                 .object({
-                  profileId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+                  policyId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
                   chainId: z.string().regex(/^[1-9][0-9]{0,77}$/),
                   asset: z.enum(['USDC', 'USDT', 'ETH']),
                   tokenAddress: EvmAddressSchema,
-                  sourceAmount: z
-                    .string()
-                    .regex(/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/)
-                    .max(100),
-                  fixtureDigest: PublicDigestSchema,
-                  calls: z
-                    .array(
-                      z
-                        .object({
-                          uaType: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
-                          to: EvmAddressSchema,
-                          data: z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/),
-                          valueWei: BaseUnitAmountSchema,
-                        })
-                        .strict(),
-                    )
-                    .min(1)
-                    .max(16),
+                  uaType: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
+                  target: EvmAddressSchema,
+                  functionSelector: z.string().regex(/^0x[0-9a-fA-F]{8}$/),
+                  nativeValueAllowed: z.boolean(),
+                  maxCalls: z.number().int().min(1).max(16),
+                  capturedFixtureDigest: PublicDigestSchema,
                 })
                 .strict(),
             )
@@ -326,8 +319,8 @@ export const PublicBrowserConfigSchema = z
               provenance: z.enum(['deterministic', 'recorded_live']),
               deploymentsFixtureDigest: PublicDigestSchema,
               authFixtureDigest: PublicDigestSchema,
-              submissionFixtureDigest: PublicDigestSchema,
-              statusFixtureDigest: PublicDigestSchema,
+              submissionFixtureDigest: PublicDigestSchema.optional(),
+              statusFixtureDigest: PublicDigestSchema.optional(),
               magicAuthorizationNonceOffset: z.union([z.literal(0), z.literal(1)]),
               delegationPlanTtlSeconds: z.number().int().min(30).max(600),
             })

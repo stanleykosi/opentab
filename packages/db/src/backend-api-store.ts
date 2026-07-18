@@ -768,13 +768,24 @@ export class PostgresBackendApiStore {
     });
   }
 
-  async registerContractOperationSubmission(input: {
-    actor: CurrentUser;
-    operationId: string;
-    status: 'submission_started' | 'submitted' | 'submitted_unknown';
-    providerOperationId: string;
-  }): Promise<ContractOperationRecord> {
+  async registerContractOperationSubmission(
+    input: {
+      actor: CurrentUser;
+      operationId: string;
+      providerOperationId: string;
+    } & (
+      | { status: 'submission_started' }
+      | {
+          status: 'submitted' | 'submitted_unknown';
+          transactionHash?: string;
+        }
+    ),
+  ): Promise<ContractOperationRecord> {
     const providerOperationId = ProviderOperationIdSchema.parse(input.providerOperationId);
+    const transactionHash =
+      input.status === 'submission_started' || input.transactionHash === undefined
+        ? undefined
+        : TransactionHashSchema.parse(input.transactionHash);
     return this.uow.transaction(async () => {
       const [current] = await this.uow
         .current()
@@ -797,10 +808,27 @@ export class PostgresBackendApiStore {
       ) {
         throw new AppError('IDEMPOTENCY_CONFLICT', 'The provider operation ID cannot change.');
       }
-      if (current.status === input.status && current.providerOperationId === providerOperationId) {
+      if (
+        transactionHash !== undefined &&
+        current.transactionHash !== null &&
+        current.transactionHash.toLowerCase() !== transactionHash.toLowerCase()
+      ) {
+        throw new AppError('IDEMPOTENCY_CONFLICT', 'The transaction hash cannot change.');
+      }
+      if (
+        current.status === input.status &&
+        current.providerOperationId === providerOperationId &&
+        (transactionHash === undefined || current.transactionHash !== null)
+      ) {
         return this.contractOperationRecord(current);
       }
+      const enrichesCurrentStatus =
+        current.status === input.status &&
+        current.providerOperationId === providerOperationId &&
+        current.transactionHash === null &&
+        transactionHash !== undefined;
       const allowed =
+        enrichesCurrentStatus ||
         (input.status === 'submission_started' && current.status === 'prepared') ||
         (input.status === 'submitted_unknown' && current.status === 'submission_started') ||
         (input.status === 'submitted' &&
@@ -821,8 +849,11 @@ export class PostgresBackendApiStore {
         .set({
           status: input.status,
           providerOperationId,
+          ...(transactionHash === undefined ? {} : { transactionHash }),
           ...(current.submissionStartedAt === null ? { submissionStartedAt: now } : {}),
-          ...(input.status === 'submitted' ? { submittedAt: now } : {}),
+          ...(input.status === 'submitted' && current.submittedAt === null
+            ? { submittedAt: now }
+            : {}),
           version: sql`${contractOperations.version} + 1`,
           updatedAt: now,
         })
@@ -1058,7 +1089,7 @@ export class PostgresBackendApiStore {
     membership(input.actor, product.merchantId, ['owner', 'admin', 'operator']);
     const allowed =
       input.status === 'publishing'
-        ? ['draft', 'paused', 'scheduled']
+        ? ['draft', 'publishing', 'paused', 'scheduled']
         : input.status === 'paused'
           ? ['publishing', 'scheduled', 'active']
           : ['draft', 'paused', 'ended', 'sold_out'];
