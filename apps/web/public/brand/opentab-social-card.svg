@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">OpenTab social card</title>
+  <desc id="description">OpenTab walletless checkout for real-world commerce.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#3167F1"/>
+      <stop offset="1" stop-color="#163DB8"/>
+    </linearGradient>
+    <pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse">
+      <path d="M54 0H0V54" fill="none" stroke="#2457ED" stroke-opacity=".055"/>
+    </pattern>
+    <filter id="shadow" width="150%" height="170%" x="-25%" y="-35%">
+      <feDropShadow dx="0" dy="16" flood-color="#0E2C80" flood-opacity=".2" stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="#F7F8FC"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <g transform="translate(54 39) scale(1.9)">
+    <path d="M18.4 9.04A8.5 8.5 0 1 0 18.4 22.96" fill="none" stroke="#2457ED" stroke-linecap="round" stroke-width="4"/>
+    <rect width="9" height="4" x="17.5" y="14" fill="#32B990" rx="2"/>
+  </g>
+  <text x="126" y="86" fill="#11182B" font-family="Avenir Next, Arial, Helvetica, sans-serif" font-size="36" font-weight="800" letter-spacing="-1.8">OpenTab</text>
+
+  <text x="56" y="178" fill="#2457ED" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="2.2">WALLETLESS CHECKOUT FOR REAL-WORLD COMMERCE</text>
+  <text x="56" y="259" fill="#11182B" font-family="Avenir Next, Arial, Helvetica, sans-serif" font-size="64" font-weight="800" letter-spacing="-4.2">Sell anywhere.</text>
+  <text x="56" y="323" fill="#11182B" font-family="Avenir Next, Arial, Helvetica, sans-serif" font-size="64" font-weight="800" letter-spacing="-4.2">Settle with certainty.</text>
+  <text x="56" y="392" fill="#5E6679" font-family="Arial, Helvetica, sans-serif" font-size="21">One link or QR. Supported balances.</text>
+  <text x="56" y="422" fill="#5E6679" font-family="Arial, Helvetica, sans-serif" font-size="21">Canonical confirmation before an order is paid.</text>
+
+  <g transform="translate(56 488)">
+    <rect width="560" height="54" fill="#fff" stroke="#DFE4F0" rx="27"/>
+    <circle cx="28" cy="27" r="6" fill="#32B990"/>
+    <text x="48" y="34" fill="#11182B" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Google or email sign-in</text>
+    <circle cx="252" cy="27" r="3" fill="#C3CAD9"/>
+    <text x="270" y="34" fill="#11182B" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Exact review</text>
+    <circle cx="390" cy="27" r="3" fill="#C3CAD9"/>
+    <text x="408" y="34" fill="#11182B" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">One approval</text>
+  </g>
+
+  <rect width="410" height="534" x="735" y="48" fill="url(#panel)" rx="42"/>
+  <g opacity=".14">
+    <path d="M789 48V582M843 48V582M897 48V582M951 48V582M1005 48V582M1059 48V582M1113 48V582M735 102H1145M735 156H1145M735 210H1145M735 264H1145M735 318H1145M735 372H1145M735 426H1145M735 480H1145M735 534H1145" stroke="#fff"/>
+  </g>
+  <g transform="translate(790 95) scale(8.4)" opacity=".98">
+    <path d="M18.4 9.04A8.5 8.5 0 1 0 18.4 22.96" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="4"/>
+    <rect width="9" height="4" x="17.5" y="14" fill="#9CF1DB" rx="2"/>
+  </g>
+  <g filter="url(#shadow)">
+    <rect width="304" height="132" x="788" y="393" fill="#fff" rx="22"/>
+    <circle cx="826" cy="431" r="17" fill="#E9EFFF"/>
+    <path d="m818 431 6 6 11-13" fill="none" stroke="#2457ED" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
+    <text x="858" y="429" fill="#5E6679" font-family="Arial, Helvetica, sans-serif" font-size="14">Order confirmed</text>
+    <text x="858" y="459" fill="#11182B" font-family="Avenir Next, Arial, Helvetica, sans-serif" font-size="28" font-weight="800">$18.00 settled</text>
+    <text x="858" y="487" fill="#5E6679" font-family="Arial, Helvetica, sans-serif" font-size="13">Canonical on Arbitrum</text>
+  </g>
+</svg>

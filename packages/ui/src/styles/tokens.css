@@ -1,19 +1,24 @@
 :root {
   color-scheme: light;
-  --ot-ticket-stock: #f2f6f2;
+  --ot-brand: #2457ed;
+  --ot-brand-hover: #1947ce;
+  --ot-brand-soft: #e9efff;
+  --ot-brand-mint: #9cf1db;
+  --ot-brand-mint-strong: #32b990;
+  --ot-ticket-stock: #f7f8fc;
   --ot-gallery-paper: #ffffff;
-  --ot-ledger-ink: #14231e;
-  --ot-ledger-muted: #52635d;
-  --ot-settlement: #087451;
-  --ot-settlement-hover: #075f44;
-  --ot-focus: #155eef;
+  --ot-ledger-ink: #11182b;
+  --ot-ledger-muted: #5e6679;
+  --ot-settlement: #147a5b;
+  --ot-settlement-hover: #0d6349;
+  --ot-focus: #2457ed;
   --ot-coral: #a83c35;
   --ot-amber: #9a5b08;
-  --ot-sky: #245aa8;
-  --ot-border: #ccd7d1;
-  --ot-border-strong: #9fb1a9;
-  --ot-shadow: 0 20px 60px rgb(20 35 30 / 9%);
-  --ot-shadow-small: 0 8px 24px rgb(20 35 30 / 8%);
+  --ot-sky: #2457ed;
+  --ot-border: #dfe4f0;
+  --ot-border-strong: #b9c2d5;
+  --ot-shadow: 0 20px 60px rgb(17 24 43 / 9%);
+  --ot-shadow-small: 0 8px 24px rgb(17 24 43 / 8%);
   --ot-radius-sm: 0.75rem;
   --ot-radius: 1.1rem;
   --ot-radius-lg: 1.5rem;
@@ -28,8 +33,8 @@
   --text-inverse: #ffffff;
   --border: var(--ot-border);
   --focus: var(--ot-focus);
-  --accent: var(--ot-settlement);
-  --accent-hover: var(--ot-settlement-hover);
+  --accent: var(--ot-brand);
+  --accent-hover: var(--ot-brand-hover);
   --accent-contrast: #ffffff;
   --success: var(--ot-settlement);
   --warning: var(--ot-amber);
@@ -86,7 +91,7 @@
   color: var(--text);
 }
 .ot-button--quiet:hover:not(:disabled) {
-  background: rgb(20 35 30 / 6%);
+  background: rgb(17 24 43 / 6%);
 }
 .ot-button--danger {
   background: var(--danger);

@@ -33,7 +33,7 @@ async function expectPortablePage(page: Page) {
 test('public landing and product entry remain portable', async ({ page }) => {
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: 'A checkout that meets your balance where it is.' }),
+    page.getByRole('heading', { name: 'Sell anywhere. Settle with certainty.' }),
   ).toBeVisible();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();

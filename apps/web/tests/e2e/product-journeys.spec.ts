@@ -43,7 +43,7 @@ test('landing and product entry are responsive, keyboard reachable, and accessib
 }, testInfo) => {
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: 'A checkout that meets your balance where it is.' }),
+    page.getByRole('heading', { name: 'Sell anywhere. Settle with certainty.' }),
   ).toBeVisible();
   await expect(page.getByText('Deterministic demo', { exact: true })).toBeVisible();
 
