@@ -9,6 +9,7 @@ import {
   type CheckoutBinding,
   type CurrentUser,
   type EvidenceDigest,
+  EvidenceDigestSchema,
   type EvmAddress,
   EvmAddressSchema,
   type ParticleCompatibilityProfile,
@@ -957,7 +958,7 @@ export class BrowserApplicationService {
     if (status.certification.stage === 'bootstrap') {
       const adapter = await this.#particleCertificationAdapter(status);
       const capture = await adapter.captureCanaryReady(binding);
-      preparedFixtureDigest = Bytes32Schema.parse(capture.preparedFixtureDigest);
+      preparedFixtureDigest = EvidenceDigestSchema.parse(capture.preparedFixtureDigest);
       resultingStatus = await this.#api.certifyParticleCompatibility(
         {
           operatorToken: input.operatorToken,
