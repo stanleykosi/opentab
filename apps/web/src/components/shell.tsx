@@ -28,9 +28,11 @@ export function DemoBanner({ features }: { features: FrontendFeatureState }) {
 
 export function SiteHeader({
   features,
+  marketing = false,
   quiet = false,
 }: {
   features: FrontendFeatureState;
+  marketing?: boolean;
   quiet?: boolean;
 }) {
   return (
@@ -39,11 +41,23 @@ export function SiteHeader({
       <header className={quiet ? 'site-header site-header--quiet' : 'site-header'}>
         <BrandMark />
         <nav aria-label="Main navigation" className="site-header__nav">
-          <a href="/status">Status</a>
+          {marketing ? (
+            <span className="site-header__sections">
+              <a href="#features">Features</a>
+              <a href="#how-it-works">How it works</a>
+              <a href="#trust">Trust</a>
+            </span>
+          ) : (
+            <a href="/status">Status</a>
+          )}
           <a href="/account">My passes</a>
           {features.mode === 'live' ? <SessionControl /> : null}
-          <LinkButton href="/merchant" size="compact" variant="secondary">
-            For merchants
+          <LinkButton
+            href={marketing ? '/merchant/onboarding' : '/merchant'}
+            size="compact"
+            variant={marketing ? 'primary' : 'secondary'}
+          >
+            {marketing ? 'Start selling' : 'For merchants'}
           </LinkButton>
         </nav>
       </header>
