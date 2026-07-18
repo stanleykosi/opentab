@@ -118,7 +118,9 @@ export function ParticleCertificationConsole({
         body="Use the Magic account that will run OpenTab’s single Particle canary. This is not repeated for customers."
         deterministic={false}
         onAuthenticated={() => void loadAuthenticatedState()}
-        onEmailSignIn={(email) => service.signInWithEmail(email, '/operator/particle')}
+        onEmailSignIn={async (email) => {
+          await service.signInWithEmail(email, '/operator/particle');
+        }}
         onGoogleSignIn={() => service.beginGoogleSignIn('/operator/particle')}
         title="Authenticate the certification operator"
       />
