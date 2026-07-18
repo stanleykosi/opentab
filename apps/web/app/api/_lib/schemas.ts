@@ -1,3 +1,4 @@
+import type { ContractOperationSubmissionBody } from '@opentab/application';
 import {
   BaseUnitAmountSchema,
   EvidenceDigestSchema,
@@ -187,28 +188,37 @@ export const FinancialSubmissionBodySchema = z.discriminatedUnion('status', [
     .strict(),
   z.object({ status: z.literal('submitted_unknown') }).strict(),
 ]);
-export const ContractOperationSubmissionBodySchema = z.discriminatedUnion('status', [
-  z
-    .object({
-      status: z.literal('submission_started'),
-      providerOperationId: ProviderOperationIdSchema,
-    })
-    .strict(),
-  z
-    .object({
-      status: z.literal('submitted'),
-      providerOperationId: ProviderOperationIdSchema,
-      transactionHash: TransactionHashSchema.optional(),
-    })
-    .strict(),
-  z
-    .object({
-      status: z.literal('submitted_unknown'),
-      providerOperationId: ProviderOperationIdSchema,
-      transactionHash: TransactionHashSchema.optional(),
-    })
-    .strict(),
-]);
+export const ContractOperationSubmissionBodySchema = z
+  .discriminatedUnion('status', [
+    z
+      .object({
+        status: z.literal('submission_started'),
+        providerOperationId: ProviderOperationIdSchema,
+      })
+      .strict(),
+    z
+      .object({
+        status: z.literal('submitted'),
+        providerOperationId: ProviderOperationIdSchema,
+        transactionHash: TransactionHashSchema.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        status: z.literal('submitted_unknown'),
+        providerOperationId: ProviderOperationIdSchema,
+        transactionHash: TransactionHashSchema.optional(),
+      })
+      .strict(),
+  ])
+  .transform((body): ContractOperationSubmissionBody => {
+    if (body.status === 'submission_started') return body;
+    return {
+      status: body.status,
+      providerOperationId: body.providerOperationId,
+      ...(body.transactionHash === undefined ? {} : { transactionHash: body.transactionHash }),
+    };
+  });
 export const JudgeEvidencePublishBodySchema = z
   .object({
     protected: z.boolean(),
