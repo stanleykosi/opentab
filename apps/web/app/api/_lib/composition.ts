@@ -467,10 +467,13 @@ function operationsFactory(
             })),
           }),
       responseProfile: {
-        ...particle.responseProfile,
+        profileId: particle.responseProfile.profileId,
+        provenance: particle.responseProfile.provenance,
         deploymentsFixtureDigest: particle.responseProfile
           .deploymentsFixtureDigest as `0x${string}`,
         authFixtureDigest: particle.responseProfile.authFixtureDigest as `0x${string}`,
+        magicAuthorizationNonceOffset: particle.responseProfile.magicAuthorizationNonceOffset,
+        delegationPlanTtlSeconds: particle.responseProfile.delegationPlanTtlSeconds,
         ...(particle.responseProfile.submissionFixtureDigest === undefined
           ? {}
           : {
