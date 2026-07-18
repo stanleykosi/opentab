@@ -124,7 +124,7 @@ interface BrowserIntegrationModule {
     captureBootstrap(): Promise<{ profile: ParticleCompatibilityProfile }>;
     captureCanaryReady(binding: CheckoutBinding): Promise<{
       profile: ParticleCompatibilityProfile;
-      preparedFixtureDigest: Bytes32;
+      preparedFixtureDigest: `0x${string}`;
     }>;
   };
 }
@@ -957,7 +957,7 @@ export class BrowserApplicationService {
     if (status.certification.stage === 'bootstrap') {
       const adapter = await this.#particleCertificationAdapter(status);
       const capture = await adapter.captureCanaryReady(binding);
-      preparedFixtureDigest = capture.preparedFixtureDigest;
+      preparedFixtureDigest = Bytes32Schema.parse(capture.preparedFixtureDigest);
       resultingStatus = await this.#api.certifyParticleCompatibility(
         {
           operatorToken: input.operatorToken,
