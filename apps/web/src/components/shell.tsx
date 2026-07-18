@@ -3,14 +3,28 @@ import type { ReactNode } from 'react';
 import type { FrontendFeatureState } from '../client/view-models';
 import { SessionControl } from './session-control';
 
-export function BrandMark({ compact = false }: { compact?: boolean }) {
+export function BrandSymbol() {
   return (
-    <a aria-label="OpenTab home" className="brand" href="/">
-      <span aria-hidden="true" className="brand__mark">
-        <i />
-        <i />
-        <i />
-      </span>
+    <span aria-hidden="true" className="brand__mark">
+      <svg focusable="false" viewBox="0 0 32 32">
+        <title>OpenTab symbol</title>
+        <path d="M18.4 9.04A8.5 8.5 0 1 0 18.4 22.96" />
+        <rect className="brand__tab" height="4" rx="2" width="9" x="17.5" y="14" />
+      </svg>
+    </span>
+  );
+}
+
+export function BrandMark({
+  className,
+  compact = false,
+}: {
+  className?: string | undefined;
+  compact?: boolean;
+}) {
+  return (
+    <a aria-label="OpenTab home" className={className ? `brand ${className}` : 'brand'} href="/">
+      <BrandSymbol />
       {compact ? null : <span>OpenTab</span>}
     </a>
   );

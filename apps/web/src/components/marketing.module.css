@@ -29,14 +29,7 @@
 }
 
 .page :global(.brand__mark) {
-  background: var(--marketing-blue);
-  border-radius: 0.55rem;
-  box-shadow: 0 8px 22px rgb(36 87 237 / 20%);
-  transform: none;
-}
-
-.page :global(.brand__mark i:nth-child(2)) {
-  background: #9cf1db;
+  color: var(--marketing-blue);
 }
 
 .page :global(.site-header__nav) {
@@ -1199,6 +1192,7 @@
 }
 
 .footerBrand {
+  color: var(--marketing-ink);
   font: 850 1.25rem / 1 var(--ot-font-display);
   text-decoration: none;
 }

@@ -19,10 +19,10 @@ body {
 body::before {
   background: linear-gradient(
     90deg,
-    rgb(8 116 81 / 8%),
+    rgb(36 87 237 / 7%),
     transparent 28%,
     transparent 72%,
-    rgb(21 94 239 / 5%)
+    rgb(50 185 144 / 5%)
   );
   content: "";
   inset: 0;
@@ -79,7 +79,7 @@ p {
   outline: none;
 }
 ::selection {
-  background: #c3e8d8;
+  background: var(--ot-brand-soft);
   color: var(--text);
 }
 .sr-only,
@@ -250,25 +250,26 @@ p {
   text-decoration: none;
 }
 .brand__mark {
-  align-items: center;
-  background: var(--surface-inverse);
   block-size: 2rem;
-  border-radius: 0.55rem;
-  display: flex;
-  gap: 2px;
+  color: var(--ot-brand);
+  display: inline-block;
+  flex: 0 0 auto;
   inline-size: 2rem;
-  justify-content: center;
-  transform: rotate(-3deg);
 }
-.brand__mark i {
-  background: #fff;
-  block-size: 0.85rem;
-  border-radius: 1px;
-  inline-size: 3px;
+.brand__mark svg {
+  block-size: 100%;
+  display: block;
+  inline-size: 100%;
+  overflow: visible;
 }
-.brand__mark i:nth-child(2) {
-  background: #58bd97;
-  block-size: 1.2rem;
+.brand__mark path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+.brand__tab {
+  fill: var(--ot-brand-mint-strong);
 }
 .site-header__nav {
   align-items: center;
@@ -892,6 +893,12 @@ p {
 .merchant-rail .brand {
   margin-block-end: 3rem;
 }
+.merchant-rail .brand__mark {
+  color: #fff;
+}
+.merchant-rail .brand__tab {
+  fill: var(--ot-brand-mint);
+}
 .merchant-rail nav {
   display: grid;
   gap: 0.25rem;
@@ -1426,11 +1433,20 @@ p {
   block-size: 100dvh;
 }
 .brand--judge {
-  align-items: flex-start;
+  align-items: center;
+  gap: 0.7rem;
+}
+.brand--judge .brand__mark {
+  color: #fff;
+}
+.brand--judge .brand__tab {
+  fill: var(--ot-brand-mint);
+}
+.brand--judge__copy {
   display: grid;
   gap: 0.1rem;
 }
-.brand--judge small {
+.brand--judge__copy small {
   color: #a8bbb3;
   font-family: var(--ot-font-mono);
   font-size: 0.65rem;

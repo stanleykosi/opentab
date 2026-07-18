@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 96" role="img" aria-labelledby="title">
+  <title id="title">OpenTab monochrome logo</title>
+  <g transform="translate(6 12) scale(2.25)">
+    <path d="M18.4 9.04A8.5 8.5 0 1 0 18.4 22.96" fill="none" stroke="#11182B" stroke-linecap="round" stroke-width="4"/>
+    <rect width="9" height="4" x="17.5" y="14" fill="#11182B" rx="2"/>
+  </g>
+  <text x="94" y="67" fill="#11182B" font-family="Avenir Next, Arial, Helvetica, sans-serif" font-size="58" font-weight="800" letter-spacing="-3.2">OpenTab</text>
+</svg>

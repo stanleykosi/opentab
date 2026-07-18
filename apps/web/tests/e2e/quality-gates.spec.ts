@@ -35,6 +35,68 @@ async function expectNoPageOverflow(page: Page) {
   ).toBeLessThanOrEqual(dimensions.viewportWidth + 1);
 }
 
+test('landing publishes the complete brand metadata and install manifest', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute(
+    'href',
+    /\/favicon\.svg(?:\?.*)?$/,
+  );
+  await expect(
+    page.locator('link[rel="apple-touch-icon"][sizes="180x180"][type="image/png"]'),
+  ).toHaveAttribute('href', /\/apple-touch-icon\.png(?:\?.*)?$/);
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+    'href',
+    /\/manifest\.webmanifest(?:\?.*)?$/,
+  );
+
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+    'content',
+    /\/brand\/opentab-social-card\.png(?:\?.*)?$/,
+  );
+  await expect(page.locator('meta[property="og:image:width"]')).toHaveAttribute('content', '1200');
+  await expect(page.locator('meta[property="og:image:height"]')).toHaveAttribute('content', '630');
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+    'content',
+    'summary_large_image',
+  );
+  await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute(
+    'content',
+    /\/brand\/opentab-social-card\.png(?:\?.*)?$/,
+  );
+
+  const manifestResponse = await page.request.get('/manifest.webmanifest');
+  expect(manifestResponse.ok()).toBe(true);
+  const manifest = (await manifestResponse.json()) as {
+    theme_color?: string;
+    icons?: Array<{ src?: string; sizes?: string; type?: string; purpose?: string }>;
+  };
+
+  expect(manifest.theme_color?.toLowerCase()).toBe('#2457ed');
+  expect(manifest.icons).toEqual(
+    expect.arrayContaining([
+      {
+        src: '/icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/maskable-icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+    ]),
+  );
+});
+
 test('secondary customer and merchant routes remain accessible', async ({ page }) => {
   const routes = [
     '/status',

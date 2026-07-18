@@ -16,7 +16,7 @@ import {
 import Image from 'next/image';
 import type { FrontendFeatureState } from '../client/view-models';
 import styles from './marketing.module.css';
-import { SiteHeader } from './shell';
+import { BrandMark, SiteHeader } from './shell';
 
 const technology = [
   { mark: 'M', name: 'Magic', detail: 'Familiar sign-in' },
@@ -535,9 +535,7 @@ export function MarketingHome({ features }: { features: FrontendFeatureState }) 
       <footer className={styles.footer}>
         <div className={styles.footerTop}>
           <div>
-            <a className={styles.footerBrand} href="/">
-              OpenTab
-            </a>
+            <BrandMark className={styles.footerBrand} />
             <p>Walletless checkout for events, creators, cafés, and pop-ups.</p>
           </div>
           <nav aria-label="Product">

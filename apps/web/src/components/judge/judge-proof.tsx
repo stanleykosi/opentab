@@ -7,6 +7,7 @@ import {
   ProgressTimeline,
 } from '@opentab/ui';
 import type { JudgeClaimEvidence, JudgeProofView } from '../../client/view-models';
+import { BrandSymbol } from '../shell';
 
 function provenance(proof: JudgeProofView) {
   switch (proof.provenance) {
@@ -152,8 +153,11 @@ export function JudgeProof({ proof }: { proof: JudgeProofView }) {
     <div className="judge-layout">
       <aside className="judge-nav">
         <a className="brand brand--judge" href="/">
-          <span>OpenTab</span>
-          <small>Judge Mode</small>
+          <BrandSymbol />
+          <span className="brand--judge__copy">
+            <span>OpenTab</span>
+            <small>Judge Mode</small>
+          </span>
         </a>
         <nav aria-label="Evidence sections">
           <a href="#account">Account continuity</a>
