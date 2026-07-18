@@ -36,7 +36,12 @@ export class IndexerRunner {
         await this.options.afterScan?.();
         this.health.recordSuccess(result);
         failures = 0;
-        await waitFor(this.options.pollIntervalMs, signal);
+        // Historical catch-up is already bounded by the scanner's RPC range.
+        // Run those ranges back-to-back; poll only once the confirmed head is
+        // reached so a fresh deployment does not wait between backlog chunks.
+        if (result.lagBlocks === 0n) {
+          await waitFor(this.options.pollIntervalMs, signal);
+        }
       } catch (error) {
         this.health.recordFailure();
         wasStandby = false;

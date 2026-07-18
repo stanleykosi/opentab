@@ -5,6 +5,7 @@ import {
   type BoundOperationTemplate,
   type Bytes32,
   Bytes32Schema,
+  type ChainId,
   type CheckoutBinding,
   type CurrentUser,
   type EvidenceDigest,
@@ -107,7 +108,7 @@ interface BrowserIntegrationModule {
         ownerAddress: EvmAddress;
         implementationAddress: EvmAddress;
       }): Promise<{
-        chainId: '42161';
+        chainId: ChainId;
         implementationAddress: EvmAddress;
         nonce: string;
       }>;
@@ -132,7 +133,7 @@ type MagicWallet = MagicWalletPort & {
   probeDelegationAuthorizationNonce(input: {
     ownerAddress: EvmAddress;
     implementationAddress: EvmAddress;
-  }): Promise<{ chainId: '42161'; implementationAddress: EvmAddress; nonce: string }>;
+  }): Promise<{ chainId: ChainId; implementationAddress: EvmAddress; nonce: string }>;
   submitOperatorBootstrapMutation?(input: {
     readonly template: BoundOperationTemplate;
     readonly action: OperatorBootstrapAction;
@@ -963,9 +964,7 @@ export class BrowserApplicationService {
           profile: capture.profile,
           productId: input.productId,
         },
-        this.#createIdempotencyKey(
-          `particle-certification.canary-ready.${status.profileScopeId}`,
-        ),
+        this.#createIdempotencyKey(`particle-certification.canary-ready.${status.profileScopeId}`),
       );
       this.#resetLiveConfiguration();
     }

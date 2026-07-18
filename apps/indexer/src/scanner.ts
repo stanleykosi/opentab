@@ -201,7 +201,7 @@ export class IndexerScanner {
     const requestedEnd = cursor.nextBlock + BigInt(this.options.maxBlockRange) - 1n;
     const toBlock = requestedEnd > safeHead ? safeHead : requestedEnd;
     const rawLogs = await this.#getLogsAdaptive(cursor.nextBlock, toBlock);
-    const blocks = await this.#loadBlocks(cursor.nextBlock, toBlock, cursor);
+    const blocks = await this.#loadProofBlocks(cursor.nextBlock, toBlock, cursor, rawLogs);
     const blocksByNumber = new Map(blocks.map((block) => [block.number, block]));
     const observedAt = this.#now();
     const logs: IndexedLog[] = rawLogs
@@ -338,26 +338,35 @@ export class IndexerScanner {
     return true;
   }
 
-  async #loadBlocks(
+  async #loadProofBlocks(
     fromBlock: bigint,
     toBlock: bigint,
     cursor: IndexerCursor,
+    rawLogs: readonly RawContractLog[],
   ): Promise<readonly IndexedBlock[]> {
-    const blocks: IndexedBlock[] = [];
-    let previousHash = cursor.lastProcessedBlockHash;
-    for (
-      let chunkStart = fromBlock;
-      chunkStart <= toBlock;
-      chunkStart += BigInt(BLOCK_HEADER_CONCURRENCY)
-    ) {
-      const chunkEnd =
-        chunkStart + BigInt(BLOCK_HEADER_CONCURRENCY - 1) > toBlock
-          ? toBlock
-          : chunkStart + BigInt(BLOCK_HEADER_CONCURRENCY - 1);
-      const requested: bigint[] = [];
-      for (let blockNumber = chunkStart; blockNumber <= chunkEnd; blockNumber += 1n) {
-        requested.push(blockNumber);
+    // Empty blocks have no OpenTab state to project. Persist the exact reorg
+    // floor, range start, range tip, and every log-bearing block. The dynamic
+    // floor guarantees a stored common ancestor for every supported shallow
+    // reorg without requesting every empty Arbitrum block during catch-up.
+    const reorgWindow = BigInt(this.options.reorgWindowBlocks);
+    const reorgFloor = toBlock > reorgWindow ? toBlock - reorgWindow : 0n;
+    const retainedFloor =
+      reorgFloor > this.options.startBlock ? reorgFloor : this.options.startBlock;
+    const requestedNumbers = new Set<bigint>([retainedFloor, fromBlock, toBlock]);
+    for (const raw of rawLogs) {
+      const blockNumber = parseBlock(raw.blockNumber);
+      if (blockNumber >= fromBlock && blockNumber <= toBlock) {
+        requestedNumbers.add(blockNumber);
       }
+    }
+    const blockNumbers = [...requestedNumbers].sort((left, right) =>
+      left < right ? -1 : left > right ? 1 : 0,
+    );
+    const blocks: IndexedBlock[] = [];
+    let previousLoadedNumber: bigint | undefined;
+    let previousLoadedHash: `0x${string}` | undefined;
+    for (let offset = 0; offset < blockNumbers.length; offset += BLOCK_HEADER_CONCURRENCY) {
+      const requested = blockNumbers.slice(offset, offset + BLOCK_HEADER_CONCURRENCY);
       const headers = await Promise.all(
         requested.map(async (blockNumber) => ({
           blockNumber,
@@ -369,8 +378,14 @@ export class IndexerScanner {
           throw new AppError('RPC_INCONSISTENT', 'RPC returned the wrong block header.');
         }
         if (
-          previousHash !== undefined &&
-          block.parentHash.toLowerCase() !== previousHash.toLowerCase()
+          (blockNumber === fromBlock &&
+            cursor.lastProcessedBlock === fromBlock - 1n &&
+            cursor.lastProcessedBlockHash !== undefined &&
+            block.parentHash.toLowerCase() !== cursor.lastProcessedBlockHash.toLowerCase()) ||
+          (previousLoadedNumber !== undefined &&
+            previousLoadedHash !== undefined &&
+            blockNumber === previousLoadedNumber + 1n &&
+            block.parentHash.toLowerCase() !== previousLoadedHash.toLowerCase())
         ) {
           throw new AppError('RPC_INCONSISTENT', 'RPC block headers are not continuous.', {
             retryable: true,
@@ -382,7 +397,8 @@ export class IndexerScanner {
           parentHash: block.parentHash,
           observedAt: this.#now(),
         });
-        previousHash = block.hash;
+        previousLoadedNumber = blockNumber;
+        previousLoadedHash = block.hash;
       }
     }
     return blocks;

@@ -208,13 +208,15 @@ function options(overrides: Partial<IndexerScannerOptions> = {}): IndexerScanner
 }
 
 describe('IndexerScanner deterministic range processing', () => {
-  it('loads bounded block-header batches concurrently and validates them in order', async () => {
+  it('loads sparse canonical checkpoints concurrently instead of every empty block', async () => {
     const source = new MemorySource();
     source.latest = 12;
     let active = 0;
     let maximumActive = 0;
+    const requestedBlocks: string[] = [];
     const originalGetBlock = source.getBlock.bind(source);
     source.getBlock = async (blockNumber: string) => {
+      requestedBlocks.push(blockNumber);
       active += 1;
       maximumActive = Math.max(maximumActive, active);
       await new Promise((resolve) => setTimeout(resolve, 1));
@@ -230,7 +232,42 @@ describe('IndexerScanner deterministic range processing', () => {
       new IndexerScanner(source, store, decoder, options({ maxBlockRange: 12 })).scanOnce(),
     ).resolves.toMatchObject({ kind: 'processed', processedBlocks: 12 });
     expect(maximumActive).toBeGreaterThan(1);
+    expect(requestedBlocks).toEqual(['1', '8', '12']);
     expect(store.cursor.nextBlock).toBe(13n);
+  });
+
+  it('always loads and verifies the canonical header for every returned log', async () => {
+    const source = new MemorySource();
+    source.latest = 12;
+    source.logs = [rawLog(7, 0)];
+    const requestedBlocks: string[] = [];
+    const originalGetBlock = source.getBlock.bind(source);
+    source.getBlock = async (blockNumber: string) => {
+      requestedBlocks.push(blockNumber);
+      return originalGetBlock(blockNumber);
+    };
+    const store = new MemoryStore();
+
+    await new IndexerScanner(source, store, decoder, options({ maxBlockRange: 12 })).scanOnce();
+
+    expect(requestedBlocks).toEqual(['1', '7', '8', '12']);
+    expect(store.commits[0]?.logs).toHaveLength(1);
+  });
+
+  it('retains an exact reorg-floor checkpoint after a sparse bootstrap', async () => {
+    const source = new MemorySource();
+    source.latest = 12;
+    const store = new MemoryStore();
+    const scanner = new IndexerScanner(source, store, decoder, options({ maxBlockRange: 12 }));
+    await scanner.scanOnce();
+    source.blocks.set(11, { ...block(11, 1), parentHash: hash(10) });
+    source.blocks.set(12, block(12, 1));
+
+    const result = await scanner.scanOnce();
+
+    expect(result.kind).toBe('reorg_rewound');
+    expect(store.rewinds[0]?.commonAncestorBlock).toBe(8n);
+    expect(store.cursor.nextBlock).toBe(9n);
   });
 
   it('sorts out-of-order logs and keeps duplicate delivery idempotent at the store identity', async () => {
@@ -317,7 +354,7 @@ describe('IndexerScanner deterministic range processing', () => {
 
     expect(store.commits.map((item) => item.blocks.map((entry) => entry.number))).toEqual([
       [1n, 2n],
-      [3n, 4n],
+      [1n, 3n, 4n],
     ]);
     expect(store.cursor.nextBlock).toBe(5n);
   });

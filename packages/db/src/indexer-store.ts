@@ -251,6 +251,25 @@ export class PostgresIndexerStore {
     if (input.blocks.length === 0 || input.nextBlock <= input.cursor.nextBlock) {
       throw new Error('Indexer range commit must advance at least one block');
     }
+    const last = input.blocks[input.blocks.length - 1];
+    if (last === undefined || last.number !== input.nextBlock - 1n) {
+      throw new AppError('RPC_INCONSISTENT', 'The indexer range is missing its canonical tip.');
+    }
+    const suppliedBlocks = new Map<bigint, `0x${string}`>();
+    let previousBlockNumber: bigint | undefined;
+    for (const block of input.blocks) {
+      if (previousBlockNumber !== undefined && block.number <= previousBlockNumber) {
+        throw new AppError('RPC_INCONSISTENT', 'Indexer proof blocks are not strictly ordered.');
+      }
+      suppliedBlocks.set(block.number, block.hash);
+      previousBlockNumber = block.number;
+    }
+    for (const log of input.logs) {
+      const suppliedHash = suppliedBlocks.get(BigInt(log.raw.blockNumber));
+      if (suppliedHash?.toLowerCase() !== log.raw.blockHash.toLowerCase()) {
+        throw new AppError('RPC_INCONSISTENT', 'An indexed log is missing its canonical block.');
+      }
+    }
     await this.uow.transaction(async () => {
       const [lockedCursor] = await this.uow
         .current()
@@ -396,8 +415,6 @@ export class PostgresIndexerStore {
         }
       }
 
-      const last = input.blocks[input.blocks.length - 1];
-      if (last === undefined) throw new Error('Indexer commit lost the final block');
       const [advanced] = await this.uow
         .current()
         .update(indexerCursors)

@@ -17,7 +17,7 @@ const healthPort = z
   .pipe(z.number().int().min(0).max(65_535));
 
 const IndexerProcessEnvironmentSchema = z.object({
-  INDEXER_MAX_BLOCK_RANGE: integer(1, 10_000, 1_000),
+  INDEXER_MAX_BLOCK_RANGE: integer(1, 10_000, 10_000),
   INDEXER_LEASE_TTL_MS: integer(1_000, 300_000, 30_000),
   INDEXER_POLL_INTERVAL_MS: integer(100, 300_000, 5_000),
   INDEXER_RETRY_BASE_MS: integer(100, 60_000, 1_000),
