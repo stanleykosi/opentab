@@ -463,7 +463,7 @@ function operationsFactory(
             allowedSourceTokens: particle.allowedSourceTokens.map((token) => ({
               chainId: token.chainId,
               asset: token.asset,
-              address: token.address,
+              address: EvmAddressSchema.parse(token.address),
             })),
           }),
       responseProfile: {
