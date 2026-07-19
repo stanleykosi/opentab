@@ -37,7 +37,7 @@ if value then redis.call('del', KEYS[1]) end
 return value
 `;
 
-function safeReturnPath(value: string): string {
+export function normalizeAuthReturnPath(value: string): string {
   if (value.length < 1 || value.length > 512 || !value.startsWith('/') || value.startsWith('//')) {
     throw new AppError('VALIDATION_FAILED', 'The return path is invalid.');
   }
@@ -49,6 +49,7 @@ function safeReturnPath(value: string): string {
   }
   const allowed =
     parsed.pathname === '/' ||
+    parsed.pathname === '/operator/particle' ||
     /^\/split\/[A-Za-z0-9_-]{16,256}$/.test(parsed.pathname) ||
     ['/m/', '/c/', '/checkout/', '/receipt/'].some((prefix) =>
       parsed.pathname.startsWith(prefix),
@@ -220,7 +221,7 @@ export class RedisAuthContinuationService implements AuthContinuationServicePort
   }
 
   async issue(input: { returnPath: string }) {
-    const returnPath = safeReturnPath(input.returnPath);
+    const returnPath = normalizeAuthReturnPath(input.returnPath);
     const continuationId = randomSecret(32);
     const verifierToken = randomSecret(32);
     const verifierHash = hashOpaqueSecret({
@@ -265,13 +266,13 @@ export class RedisAuthContinuationService implements AuthContinuationServicePort
     try {
       const value = JSON.parse(raw) as Readonly<Record<string, unknown>>;
       if (
-        typeof value['returnPath'] !== 'string' ||
-        typeof value['expiresAt'] !== 'string' ||
-        new Date(value['expiresAt']).getTime() <= this.#now().getTime()
+        typeof value.returnPath !== 'string' ||
+        typeof value.expiresAt !== 'string' ||
+        new Date(value.expiresAt).getTime() <= this.#now().getTime()
       ) {
         throw new Error('expired continuation');
       }
-      return { returnPath: safeReturnPath(value['returnPath']) };
+      return { returnPath: normalizeAuthReturnPath(value.returnPath) };
     } catch (error) {
       throw new AppError('AUTH_STATE_MISMATCH', 'The login continuation is invalid or expired.', {
         cause: error,
