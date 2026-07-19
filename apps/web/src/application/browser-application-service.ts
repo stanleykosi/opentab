@@ -786,6 +786,15 @@ export class BrowserApplicationService {
         }
         const wallet = await this.#wallet();
         await wallet.switchToArbitrum();
+        const nativeBalanceWei = await wallet.getNativeBalanceWei();
+        if (BigInt(nativeBalanceWei) === 0n) {
+          throw new BrowserApiError({
+            code: 'WALLET_TYPE4_SUBMISSION_FAILED',
+            message: `Send Arbitrum ETH to ${template.ownerAddress} for the one-time account setup, then resume activation. No transaction was submitted.`,
+            retryable: true,
+            status: 0,
+          });
+        }
         const submitBootstrapMutation = wallet.submitOperatorBootstrapMutation;
         if (typeof submitBootstrapMutation !== 'function') {
           throw new BrowserApiError({

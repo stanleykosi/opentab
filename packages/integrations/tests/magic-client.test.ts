@@ -58,6 +58,7 @@ function createFake() {
       if (typeof message !== 'string') throw new Error('personal_sign message missing');
       return wallet.signMessage(getBytes(message));
     }
+    if (input.method === 'eth_getBalance') return '0x38d7ea4c68000';
     if (input.method === 'eth_estimateGas') return '0x0186a0';
     if (input.method === 'eth_sendTransaction') return transactionHash;
     throw new Error(`Unexpected RPC method: ${input.method}`);
@@ -314,6 +315,8 @@ describe('Magic browser wallet adapter', () => {
     fake.controls.setChain('0xa4b1');
     const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
     const template = operatorBootstrapTemplate();
+
+    await expect(adapter.getNativeBalanceWei()).resolves.toBe('1000000000000000');
 
     await expect(
       adapter.submitOperatorBootstrapMutation({

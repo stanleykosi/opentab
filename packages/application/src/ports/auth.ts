@@ -38,6 +38,8 @@ export interface MagicWalletPort {
   /** Requests a short-lived proof for an already authenticated Magic user. */
   getFreshIdentityProof?(): Promise<{ didToken: string }>;
   getOwnerAddress(): Promise<EvmAddress>;
+  /** Returns the authenticated EOA's native Arbitrum balance in wei. */
+  getNativeBalanceWei(): Promise<string>;
   getChainId(): Promise<string>;
   switchToArbitrum(): Promise<void>;
   authorizeDelegation(plan: VerifiedDelegationPlan): Promise<{ authorization: unknown }>;

@@ -411,6 +411,23 @@ export class MagicBrowserWalletAdapter implements MagicWalletPort {
     }
   }
 
+  async getNativeBalanceWei(): Promise<string> {
+    try {
+      const ownerAddress = await this.getOwnerAddress();
+      const magic = await this.loader(this.config);
+      const balanceHex = ChainIdHexSchema.parse(
+        await magic.rpcProvider.request({
+          method: 'eth_getBalance',
+          params: [ownerAddress, 'latest'],
+        }),
+      );
+      return BigInt(balanceHex).toString();
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw mapMagicError(error, 'RPC_UNAVAILABLE');
+    }
+  }
+
   async getChainId(): Promise<string> {
     try {
       const magic = await this.loader(this.config);

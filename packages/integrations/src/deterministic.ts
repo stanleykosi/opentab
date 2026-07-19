@@ -164,6 +164,10 @@ export class DeterministicMagicWallet implements MagicWalletPort {
     return this.ownerAddress;
   }
 
+  async getNativeBalanceWei(): Promise<string> {
+    return '1000000000000000000';
+  }
+
   async getChainId(): Promise<string> {
     return this.#chainId;
   }

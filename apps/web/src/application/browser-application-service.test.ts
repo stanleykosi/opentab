@@ -142,6 +142,7 @@ function magicWallet(overrides: Partial<TestMagicWallet> = {}): TestMagicWallet 
       authMethod: 'email_otp' as const,
     })),
     getOwnerAddress: vi.fn(async () => owner),
+    getNativeBalanceWei: vi.fn(async () => '1000000000000000'),
     getChainId: vi.fn(async () => '42161'),
     switchToArbitrum: vi.fn(async () => undefined),
     probeDelegationAuthorizationNonce: vi.fn(async (input) => ({
@@ -1081,5 +1082,6 @@ describe('browser application service boundaries', () => {
       'server:set_product_active:submitted',
     ]);
     expect(submitOperatorBootstrapMutation).toHaveBeenCalledTimes(3);
+    expect(wallet.getNativeBalanceWei).toHaveBeenCalledTimes(3);
   });
 });
