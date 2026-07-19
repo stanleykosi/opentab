@@ -390,12 +390,20 @@ export async function getContractOperation(
   return handleQuery({
     request,
     auth: 'required',
-    execute: async ({ registry, actor }) =>
-      registry.resourceQueries.getContractOperation(
+    execute: async ({ registry, actor }) => {
+      const operation = await registry.resourceQueries.getContractOperation(
         await routeParam(route, 'operationId', OpaqueReferenceSchema),
         required(actor, 'Actor'),
-      ),
+      );
+      return contractOperationEnvelope(operation);
+    },
   });
+}
+
+export function contractOperationEnvelope<T extends object>(
+  operation: T | undefined,
+): { operation: T } | undefined {
+  return operation === undefined ? undefined : { operation };
 }
 
 export async function materializeJudgeEvidence(

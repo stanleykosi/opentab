@@ -572,12 +572,34 @@ export class BrowserApplicationService {
       });
       profile = await this.#waitForActiveMerchant(input.onProgress);
     } else if (profile.merchant.status !== 'active') {
-      if (profile.operation === undefined) {
-        throw new BrowserApiError({
-          code: 'OPERATION_PLAN_INVALID',
-          message: 'The pending merchant has no durable activation operation.',
-          status: 0,
-        });
+      const operationNeedsRefresh =
+        profile.operation === undefined ||
+        profile.operation.status === 'failed' ||
+        profile.operation.status === 'orphaned' ||
+        (profile.operation.status === 'prepared' &&
+          new Date(profile.operation.expiresAt).getTime() <= Date.now());
+      if (operationNeedsRefresh) {
+        input.onProgress?.('Refreshing the expired merchant activation approval…');
+        const refreshed = await this.#api.createMerchantProfile(
+          {
+            slug: profile.merchant.slug,
+            displayName: profile.merchant.displayName,
+            ...(profile.merchant.supportContact === undefined
+              ? {}
+              : { supportContact: profile.merchant.supportContact }),
+            payoutAddress: profile.merchant.payoutAddress,
+          },
+          certificationIdempotencyKey(
+            status.profileScopeId,
+            'merchant-refresh',
+            profile.operation?.id ?? profile.merchant.id,
+          ),
+        );
+        profile = {
+          merchant: refreshed.merchant,
+          operation: refreshed.operation,
+          requestId: refreshed.requestId,
+        };
       }
       await this.#submitOperatorBootstrapOperation({
         status,

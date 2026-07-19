@@ -45,6 +45,7 @@ import {
   DelegationStatusSchema,
   EvidenceDigestSchema,
   EvmAddressSchema,
+  MerchantSchema,
   PaymentAttemptIdSchema,
   type SplitReimbursementIntent,
   SplitReimbursementIntentSchema,
@@ -383,41 +384,65 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
 
   async createMerchant(input: Parameters<BackendApiCommandPort['createMerchant']>[0]) {
     const body = MerchantBodySchema.parse(input.body);
-    const merchant = await this.dependencies.createMerchant.execute({
-      actorUserId: input.actor.id,
-      slug: body.slug,
-      displayName: body.displayName,
-      payoutAddress: body.payoutAddress,
-      ...(body.supportContact === undefined ? {} : { supportContact: body.supportContact }),
-      idempotencyKeyHash: input.idempotencyKeyHash,
-      requestHash: input.requestHash,
+    return this.#idempotent(input, `merchant:profile:create:${input.actor.id}`, async () => {
+      const existingProfile = await this.dependencies.backend.getMerchantProfile(input.actor);
+      const merchant =
+        existingProfile === undefined
+          ? await this.dependencies.createMerchant.execute({
+              actorUserId: input.actor.id,
+              slug: body.slug,
+              displayName: body.displayName,
+              payoutAddress: body.payoutAddress,
+              ...(body.supportContact === undefined ? {} : { supportContact: body.supportContact }),
+              idempotencyKeyHash: input.idempotencyKeyHash,
+              requestHash: input.requestHash,
+            })
+          : MerchantSchema.parse(existingProfile.merchant);
+      if (
+        existingProfile !== undefined &&
+        (merchant.slug !== body.slug ||
+          merchant.displayName !== body.displayName ||
+          (merchant.supportContact ?? '') !== (body.supportContact ?? '') ||
+          !sameEvmAddress(merchant.payoutAddress, body.payoutAddress))
+      ) {
+        throw new AppError(
+          'IDEMPOTENCY_CONFLICT',
+          'The existing merchant profile does not match this activation request.',
+        );
+      }
+      if (existingProfile !== undefined && !['draft', 'pending'].includes(merchant.status)) {
+        throw new AppError(
+          'IDEMPOTENCY_CONFLICT',
+          'The existing merchant no longer requires a registration operation.',
+        );
+      }
+      const binding = MerchantProductOperationBindingSchema.parse({
+        ownerAddress: input.actor.walletAddress,
+        chainId: ARBITRUM_ONE_CHAIN_ID,
+        checkoutAddress: this.dependencies.checkoutAddress,
+        expiresAt: this.#operationExpiry(),
+        mutation: {
+          action: 'create_merchant' as const,
+          payoutAddress: merchant.payoutAddress,
+          metadataHash: canonicalMetadataDigest({
+            schema: 'opentab-merchant-profile-v1',
+            slug: merchant.slug,
+            displayName: merchant.displayName,
+            supportContact: merchant.supportContact ?? '',
+          }),
+        },
+      });
+      const operation = await this.dependencies.backend.prepareContractOperation({
+        actor: input.actor,
+        requestId: input.requestId,
+        kind: 'merchant_mutation',
+        aggregateType: 'merchant',
+        aggregateId: merchant.id,
+        binding,
+        template: createMerchantProductOperationTemplate(binding),
+      });
+      return { merchant, operation };
     });
-    const binding = MerchantProductOperationBindingSchema.parse({
-      ownerAddress: input.actor.walletAddress,
-      chainId: ARBITRUM_ONE_CHAIN_ID,
-      checkoutAddress: this.dependencies.checkoutAddress,
-      expiresAt: this.#operationExpiry(),
-      mutation: {
-        action: 'create_merchant' as const,
-        payoutAddress: merchant.payoutAddress,
-        metadataHash: canonicalMetadataDigest({
-          schema: 'opentab-merchant-profile-v1',
-          slug: merchant.slug,
-          displayName: merchant.displayName,
-          supportContact: merchant.supportContact ?? '',
-        }),
-      },
-    });
-    const operation = await this.dependencies.backend.prepareContractOperation({
-      actor: input.actor,
-      requestId: input.requestId,
-      kind: 'merchant_mutation',
-      aggregateType: 'merchant',
-      aggregateId: merchant.id,
-      binding,
-      template: createMerchantProductOperationTemplate(binding),
-    });
-    return { merchant, operation };
   }
 
   updateMerchantProfile(input: Parameters<BackendApiCommandPort['updateMerchantProfile']>[0]) {

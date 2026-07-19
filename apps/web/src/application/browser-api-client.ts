@@ -1470,6 +1470,7 @@ export class BrowserApiClient {
     }
 
     const payload: unknown = await response.json().catch(() => undefined);
+    const responseRequestId = response.headers.get('x-request-id') ?? undefined;
     if (!response.ok) {
       const parsedError = ApiErrorEnvelopeSchema.safeParse(payload);
       if (parsedError.success) {
@@ -1489,6 +1490,7 @@ export class BrowserApiClient {
       throw new BrowserApiError({
         code: 'RESPONSE_INVALID',
         message: 'OpenTab received an unexpected secure-server response and stopped safely.',
+        ...(responseRequestId === undefined ? {} : { requestId: responseRequestId }),
         status: response.status,
       });
     }
@@ -1497,6 +1499,7 @@ export class BrowserApiClient {
       throw new BrowserApiError({
         code: 'RESPONSE_INVALID',
         message: 'OpenTab received an unexpected secure-server response and stopped safely.',
+        ...(responseRequestId === undefined ? {} : { requestId: responseRequestId }),
         status: response.status,
       });
     }

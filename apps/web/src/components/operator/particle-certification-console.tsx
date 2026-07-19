@@ -6,6 +6,7 @@ import type {
   MerchantProductListResponse,
   ParticleCertificationStatus,
 } from '../../application/browser-api-client';
+import { BrowserApiError } from '../../application/browser-api-client';
 import {
   type BrowserApplicationService,
   getBrowserApplicationService,
@@ -44,6 +45,9 @@ function readCanaryReference(): CanaryReference | undefined {
 }
 
 function safeMessage(error: unknown): string {
+  if (error instanceof BrowserApiError && error.requestId !== undefined) {
+    return `${error.message} Reference: ${error.requestId}`;
+  }
   return error instanceof Error
     ? error.message
     : 'Activation stopped safely before another provider action was started.';
@@ -325,7 +329,7 @@ export function ParticleCertificationConsole({
                       setProgress('Creating the project activation item…');
                       const result = await service.bootstrapParticleCertificationCanary({
                         operatorToken,
-                        onProgress: () => setProgress('Creating the project activation item…'),
+                        onProgress: (message) => setProgress(message),
                       });
                       setWalletAddress(result.ownerAddress);
                       setProducts([result.product]);
