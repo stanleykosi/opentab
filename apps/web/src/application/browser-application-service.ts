@@ -601,9 +601,17 @@ export class BrowserApplicationService {
           requestId: refreshed.requestId,
         };
       }
+      const merchantOperation = profile.operation;
+      if (merchantOperation === undefined) {
+        throw new BrowserApiError({
+          code: 'OPERATION_PLAN_INVALID',
+          message: 'The pending merchant has no durable activation operation.',
+          status: 0,
+        });
+      }
       await this.#submitOperatorBootstrapOperation({
         status,
-        operation: profile.operation,
+        operation: merchantOperation,
         expectedAction: 'create_merchant',
         onProgress: input.onProgress,
       });
