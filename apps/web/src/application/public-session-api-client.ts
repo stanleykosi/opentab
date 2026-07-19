@@ -268,7 +268,9 @@ export class PublicSessionApiClient {
   #csrfToken: string | undefined;
 
   constructor(options: { fetcher?: typeof fetch } = {}) {
-    this.#fetcher = options.fetcher ?? fetch;
+    // Window.fetch is receiver-sensitive in Chromium. Preserve the runtime
+    // receiver when the native transport is stored on this client instance.
+    this.#fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
   }
 
   getPublicConfig(): Promise<PublicBrowserConfig> {

@@ -49,7 +49,7 @@ describe('ReceiptPageView', () => {
   });
 
   it('shares only non-sensitive pass text and never the authenticated receipt URL', async () => {
-    const writeText = vi.fn(async () => undefined);
+    const writeText = vi.fn<(text: string) => Promise<void>>(async () => undefined);
     const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     const shareDescriptor = Object.getOwnPropertyDescriptor(navigator, 'share');
     Object.defineProperty(navigator, 'clipboard', {

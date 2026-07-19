@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { recordedPublicJudgeProof } from '../components/judge/public-judge-proof.test-fixture';
 import { BrowserApiClient } from './browser-api-client';
 
@@ -18,6 +18,26 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe('browser API client session handling', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('binds the native browser fetch receiver before restoring a session', async () => {
+    const guardedFetch = vi.fn<typeof fetch>(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError('Illegal invocation');
+      return Promise.resolve(
+        json({
+          user,
+          csrfToken: 'c'.repeat(32),
+          expiresAt: '2026-07-14T02:00:00.000Z',
+          requestId: 'req_bound_fetch_test',
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', guardedFetch);
+
+    await expect(new BrowserApiClient().restoreSession()).resolves.toMatchObject({ user });
+    expect(guardedFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('rotates a session without requiring a stale CSRF value', async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       json({

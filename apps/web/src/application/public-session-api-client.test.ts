@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DefaultPublicSessionApplicationService,
   PublicSessionApiClient,
@@ -20,6 +20,26 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe('lightweight public/session API boundary', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('binds the native browser fetch receiver before restoring a session', async () => {
+    const guardedFetch = vi.fn<typeof fetch>(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError('Illegal invocation');
+      return Promise.resolve(
+        json({
+          user,
+          csrfToken: 'c'.repeat(32),
+          expiresAt: '2026-07-16T02:00:00.000Z',
+          requestId: 'req_public_bound_fetch_test',
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', guardedFetch);
+
+    await expect(new PublicSessionApiClient().restoreSession()).resolves.toMatchObject({ user });
+    expect(guardedFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps provider code deferred while preserving session CSRF and logout ordering', async () => {
     const csrfToken = 'c'.repeat(32);
     const fetcher = vi

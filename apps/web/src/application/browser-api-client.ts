@@ -842,7 +842,10 @@ export class BrowserApiClient {
   #csrfToken: string | undefined;
 
   constructor(options: BrowserApiClientOptions = {}) {
-    this.#fetcher = options.fetcher ?? fetch;
+    // Calling an unbound Window.fetch through a class field changes its receiver
+    // to the client instance. Chromium rejects that before issuing a request
+    // with "Illegal invocation", so bind only the native runtime transport.
+    this.#fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
   }
 
   async getPublicConfig(): Promise<PublicBrowserConfig> {
