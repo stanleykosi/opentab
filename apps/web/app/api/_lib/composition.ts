@@ -698,6 +698,71 @@ async function splitSigner(
  * Only schema field names are exposed. Zod issue messages and input values stay
  * attached as the non-serialized cause for trusted runtime diagnostics.
  */
+const recoverableFeatureConfigurationFields = new Set([
+  'ARBITRUM_FALLBACK_RPC_URL',
+  'ARBITRUM_RPC_URL',
+  'AWS_KMS_REGION',
+  'BOOTSTRAP_SPONSOR_ENABLED',
+  'DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED',
+  'JUDGE_MODE_ENABLED',
+  'JUDGE_SHARE_TOKEN_SECRET',
+  'LIVE_ACCEPTANCE_ATTESTATION_SECRET',
+  'NEXT_PUBLIC_ARBITRUM_CHAIN_ID',
+  'NEXT_PUBLIC_CHECKOUT_ADDRESS',
+  'NEXT_PUBLIC_PASS_ADDRESS',
+  'NEXT_PUBLIC_SPLIT_ADDRESS',
+  'NEXT_PUBLIC_USDC_ADDRESS',
+  'PARTICLE_LIVE_ENABLED',
+  'PAYMENTS_ENABLED',
+  'PLATFORM_FEE_BPS',
+  'REFUNDS_ENABLED',
+  'SPLITS_ENABLED',
+  'VERCEL_AWS_ROLE_ARN',
+  'WITHDRAWALS_ENABLED',
+]);
+
+const recoverableFeatureConfigurationPrefixes = [
+  'NEXT_PUBLIC_PARTICLE_',
+  'ORDER_SIGNER_',
+  'PARTICLE_',
+  'SPONSOR_',
+  'SPLIT_',
+] as const;
+
+function environmentIssueFields(error: ZodError): readonly string[] {
+  return [
+    ...new Set(
+      error.issues
+        .map((issue) => issue.path[0])
+        .filter(
+          (field): field is string | number =>
+            typeof field === 'string' || typeof field === 'number',
+        )
+        .map(String),
+    ),
+  ]
+    .sort()
+    .slice(0, 12);
+}
+
+function isRecoverableFeatureConfigurationField(field: string): boolean {
+  return (
+    recoverableFeatureConfigurationFields.has(field) ||
+    recoverableFeatureConfigurationPrefixes.some((prefix) => field.startsWith(prefix))
+  );
+}
+
+function invalidEnvironmentError(error: ZodError): AppError {
+  const fields = environmentIssueFields(error);
+  return new AppError(
+    'CONFIGURATION_INVALID',
+    fields.length === 0
+      ? 'The server environment is invalid.'
+      : `The server environment is invalid: ${fields.join(', ')}.`,
+    { cause: error },
+  );
+}
+
 export function parseApiServerEnvironment(
   env: Record<string, string | undefined>,
 ): ServerEnvironment {
@@ -707,26 +772,35 @@ export function parseApiServerEnvironment(
     if (!(error instanceof ZodError)) {
       throw error;
     }
-    const fields = [
-      ...new Set(
-        error.issues
-          .map((issue) => issue.path[0])
-          .filter(
-            (field): field is string | number =>
-              typeof field === 'string' || typeof field === 'number',
-          )
-          .map(String),
-      ),
-    ]
-      .sort()
-      .slice(0, 12);
-    throw new AppError(
-      'CONFIGURATION_INVALID',
-      fields.length === 0
-        ? 'The server environment is invalid.'
-        : `The server environment is invalid: ${fields.join(', ')}.`,
-      { cause: error },
-    );
+    const fields = environmentIssueFields(error);
+    if (
+      fields.length > 0 &&
+      fields.every((field) => isRecoverableFeatureConfigurationField(field))
+    ) {
+      const coreOnlyEnvironment: Record<string, string | undefined> = {
+        ...env,
+        BOOTSTRAP_SPONSOR_ENABLED: 'false',
+        DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED: 'false',
+        JUDGE_MODE_ENABLED: 'false',
+        ORDER_SIGNER_MODE: 'disabled',
+        PARTICLE_CERTIFICATION_TOKEN: undefined,
+        PARTICLE_LIVE_ENABLED: 'false',
+        PAYMENTS_ENABLED: 'false',
+        REFUNDS_ENABLED: 'false',
+        SPLITS_ENABLED: 'false',
+        SPLIT_SIGNER_MODE: 'disabled',
+        SPONSOR_SIGNER_MODE: 'disabled',
+        WITHDRAWALS_ENABLED: 'false',
+      };
+      for (const field of fields) coreOnlyEnvironment[field] = undefined;
+      try {
+        return parseServerEnvironment(coreOnlyEnvironment);
+      } catch (recoveryError) {
+        if (recoveryError instanceof ZodError) throw invalidEnvironmentError(recoveryError);
+        throw recoveryError;
+      }
+    }
+    throw invalidEnvironmentError(error);
   }
 }
 
@@ -944,7 +1018,7 @@ export async function createBackendApiRegistry(
           compatibility?.profile.delegateAddress ?? config.NEXT_PUBLIC_CHECKOUT_ADDRESS,
         )
       : unavailableArbitrumChain());
-  const platformFeeBps = (config.PLATFORM_FEE_BPS ?? 0).toString();
+  const platformFeeBps = config.PLATFORM_FEE_BPS.toString();
   if (compatibility !== undefined) {
     if (chain.getCodeHash === undefined) {
       throw new AppError(
@@ -964,10 +1038,7 @@ export async function createBackendApiRegistry(
     }
   }
   if (config.PAYMENTS_ENABLED && (deterministic || compatibility !== undefined)) {
-    await assertPlatformFeeParity(
-      chain,
-      requireRuntimeValue(config.PLATFORM_FEE_BPS, 'PLATFORM_FEE_BPS'),
-    );
+    await assertPlatformFeeParity(chain, config.PLATFORM_FEE_BPS);
   }
   const clock = { now: () => new Date() };
   const paymentPolicy =

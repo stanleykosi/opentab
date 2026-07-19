@@ -100,8 +100,9 @@ Contract-only checks are available through `pnpm contracts:build`,
 
 ## Deployment topology
 
-- Vercel runs `apps/web` and its API routes on the pinned Node 25.0.0 profile
-  with pnpm 9.15.1 and the frozen monorepo lockfile.
+- Vercel runs `apps/web` and its API routes on Vercel's supported Node 24.x
+  runtime with pnpm 9.15.1 and the frozen monorepo lockfile. Local tooling and
+  Railway remain pinned to Node 25.0.0.
 - Railway runs the indexer image on exact Node 25.0.0 and pnpm 9.15.1.
 - Supabase provides dedicated PostgreSQL. Vercel uses its transaction pooler;
   the indexer and controlled jobs use direct/session connections with separate
@@ -157,6 +158,13 @@ Chain `42161`, native USDC, checkout/pass/split addresses, PublicNode fallback,
 and block `484866936` are source defaults documented in
 [`42161.public.env`](packages/contracts/deployments/42161.public.env); they are
 not additional mandatory Railway variables.
+
+The deployed checkout's platform fee is `0` basis points. That reviewed value
+is pinned in source and independently checked against the contract before a
+payment can be prepared, so `PLATFORM_FEE_BPS` should not be duplicated in the
+Vercel or Railway dashboard. A malformed optional payment setting pauses only
+money-moving features; it does not take account, merchant, receipt, or sign-in
+APIs offline.
 
 `INDEXER_ENABLED`, writes, reconciliation, chain `42161`, native USDC,
 checkout/pass/split addresses, PublicNode fallback, and block `484866936` are

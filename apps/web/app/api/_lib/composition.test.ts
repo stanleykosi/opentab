@@ -31,16 +31,49 @@ describe('backend production boundary helpers', () => {
       parseApiServerEnvironment({
         APP_ENV: 'local',
         NEXT_PUBLIC_APP_ENV: 'local',
-        PARTICLE_CERTIFICATION_TOKEN: secretValue,
+        OPENTAB_SECRET_ROOT: secretValue,
       });
     } catch (error) {
       observed = error;
     }
     expect(observed).toMatchObject({
       code: 'CONFIGURATION_INVALID',
-      message: expect.stringContaining('PARTICLE_CERTIFICATION_TOKEN'),
+      message: expect.stringContaining('OPENTAB_SECRET_ROOT'),
     });
     expect((observed as Error).message).not.toContain(secretValue);
+  });
+
+  it('keeps core APIs online while malformed payment configuration fails closed', () => {
+    const config = parseApiServerEnvironment({
+      APP_ENV: 'local',
+      NEXT_PUBLIC_APP_ENV: 'local',
+      NEXT_PUBLIC_APP_ORIGIN: 'http://localhost:3000',
+      PROVIDER_MODE: 'live',
+      APPLICATION_RELEASE_ID: releaseA,
+      PAYMENTS_ENABLED: 'true',
+      PARTICLE_LIVE_ENABLED: 'true',
+      NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY: 'pk_live_opentab',
+      MAGIC_SECRET_KEY: 'sk_live_opentab',
+      NEXT_PUBLIC_PARTICLE_PROJECT_ID: 'particle-project',
+      NEXT_PUBLIC_PARTICLE_CLIENT_KEY: 'particle-client-key',
+      NEXT_PUBLIC_PARTICLE_APP_UUID: 'particle-app',
+      ARBITRUM_RPC_URL: 'https://arb1.arbitrum.io/rpc',
+      DATABASE_URL: 'postgresql://runtime:secret@localhost:5432/opentab',
+      REDIS_URL: 'redis://default:secret@localhost:6379',
+      OPENTAB_SECRET_ROOT: 'root-secret-material-that-is-at-least-32-bytes',
+      PLATFORM_FEE_BPS: 'not-an-integer',
+      ORDER_SIGNER_MODE: 'private-key',
+      ORDER_SIGNER_PRIVATE_KEY: `0x${'11'.repeat(32)}`,
+      ORDER_SIGNER_ADDRESS: '0x1111111111111111111111111111111111111111',
+    });
+
+    expect(config).toMatchObject({
+      PAYMENTS_ENABLED: false,
+      PARTICLE_LIVE_ENABLED: false,
+      MERCHANT_MUTATIONS_ENABLED: true,
+      PLATFORM_FEE_BPS: 0,
+      ORDER_SIGNER_MODE: 'disabled',
+    });
   });
 
   it('resolves a portable release ID on non-Vercel hosts', () => {

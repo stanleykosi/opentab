@@ -273,7 +273,7 @@ export function createDeterministicBackendParts(
       }),
     chain: new DeterministicArbitrumReadAdapter(
       implementationCodeHash,
-      (config.PLATFORM_FEE_BPS ?? 0).toString(),
+      config.PLATFORM_FEE_BPS.toString(),
       LOCAL_OWNER,
       implementationAddress,
     ),

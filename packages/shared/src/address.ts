@@ -27,6 +27,7 @@ export const ARBITRUM_ONE_OPENTAB_SPLIT = EvmAddressSchema.parse(
   '0x7EF7efa8a53530dEa3F077691422AAbEB183049c',
 );
 export const ARBITRUM_ONE_OPENTAB_DEPLOYMENT_BLOCK = 484_866_936n;
+export const ARBITRUM_ONE_OPENTAB_PLATFORM_FEE_BPS = 0 as const;
 
 export type EvmAddress = z.infer<typeof EvmAddressSchema>;
 export type EvmAddressLower = z.infer<typeof EvmAddressLowerSchema>;

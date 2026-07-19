@@ -3,6 +3,7 @@ import {
   ARBITRUM_ONE_OPENTAB_CHECKOUT,
   ARBITRUM_ONE_OPENTAB_DEPLOYMENT_BLOCK,
   ARBITRUM_ONE_OPENTAB_PASS,
+  ARBITRUM_ONE_OPENTAB_PLATFORM_FEE_BPS,
   ARBITRUM_ONE_OPENTAB_SPLIT,
   ARBITRUM_ONE_USDC,
   Bytes32Schema,
@@ -73,9 +74,9 @@ const optionalParticleNonceOffset = z.preprocess(
     .transform((value): 0 | 1 => (value === '0' ? 0 : 1))
     .optional(),
 );
-const optionalPlatformFeeBps = z.preprocess(
+const platformFeeBpsWithDefault = z.preprocess(
   (value) => (value === '' || value === undefined ? undefined : value),
-  z.coerce.number().int().min(0).max(500).optional(),
+  z.coerce.number().int().min(0).max(500).default(ARBITRUM_ONE_OPENTAB_PLATFORM_FEE_BPS),
 );
 const particleSourceChains = z
   .string()
@@ -442,7 +443,7 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
   SESSION_MAX_AGE_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
   CHECKOUT_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
   PAYMENT_INTENT_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
-  PLATFORM_FEE_BPS: optionalPlatformFeeBps,
+  PLATFORM_FEE_BPS: platformFeeBpsWithDefault,
   PARTICLE_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(500).default(100),
   PARTICLE_MAX_FEE_USD_MICROS: unsignedBigIntWithDefault(5_000_000n),
   PARTICLE_ALLOWED_SOURCE_CHAIN_IDS: z.preprocess(
@@ -713,13 +714,6 @@ export const ServerEnvironmentSchema = PublicEnvironmentSchema.extend({
       'PRIVACY_SUBJECT_HASH_SECRET',
     ] as const) {
       requireSecuritySecret(name, 'Payment security material is required');
-    }
-    if (config.PLATFORM_FEE_BPS === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['PLATFORM_FEE_BPS'],
-        message: 'PLATFORM_FEE_BPS must be explicitly configured when payments are enabled',
-      });
     }
     if (config.PROVIDER_MODE !== 'live') {
       context.addIssue({
@@ -1380,4 +1374,4 @@ export function parseIndexerEnvironment(
   return IndexerEnvironmentSchema.parse(normalizePlatformEnvironment(input, 'indexer'));
 }
 
-export const OPEN_TAB_CONFIG_SCHEMA_VERSION = 12 as const;
+export const OPEN_TAB_CONFIG_SCHEMA_VERSION = 13 as const;

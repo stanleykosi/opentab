@@ -623,10 +623,18 @@ describe('server environment safety', () => {
     });
     expect(result.success).toBe(false);
     if (result.success) return;
-    expect(result.error.issues.map((issue) => issue.path.join('.'))).toContain('PLATFORM_FEE_BPS');
+    expect(result.error.issues.map((issue) => issue.path.join('.'))).not.toContain(
+      'PLATFORM_FEE_BPS',
+    );
   });
 
-  it('accepts only an exact integer platform fee within the contract cap', () => {
+  it('defaults to the reviewed Arbitrum fee and accepts only an exact integer within the cap', () => {
+    expect(
+      parseServerEnvironment({
+        APP_ENV: 'local',
+        NEXT_PUBLIC_APP_ENV: 'local',
+      }).PLATFORM_FEE_BPS,
+    ).toBe(0);
     expect(
       parseServerEnvironment({
         APP_ENV: 'local',
