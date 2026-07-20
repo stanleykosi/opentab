@@ -173,6 +173,66 @@ interface BootstrapCapture {
   readonly delegateAddress: EvmAddress;
 }
 
+type BootstrapProviderMethod =
+  | 'universal_getUniversalAccount'
+  | 'universal_getPrimaryAssets'
+  | 'universal_getEIP7702Deployments'
+  | 'universal_createEIP7702DelegationAuth';
+
+function particleBootstrapProviderError(method: BootstrapProviderMethod, error: unknown): AppError {
+  if (error instanceof AppError) return error;
+  if (error instanceof z.ZodError) {
+    const issue = error.issues[0];
+    const issuePath = issue?.path.map(String).join('.') || 'root';
+    return new AppError(
+      'UA_PROVIDER_SCHEMA_INVALID',
+      `Particle returned an unsupported response for ${method} at ${issuePath}. No transaction was submitted.`,
+      {
+        retryable: false,
+        safeDetails: {
+          vendor: 'particle',
+          providerMethod: method,
+          schemaIssueCode: issue?.code ?? 'unknown',
+          schemaIssuePath: issuePath,
+        },
+        cause: error,
+      },
+    );
+  }
+  const mapped = mapParticleError(error, 'UA_PROVIDER_SCHEMA_INVALID');
+  const vendorCode = mapped.safeDetails?.vendorCode;
+  const diagnostic = mapped.safeDetails?.causeDigest?.slice(2, 14);
+  const message =
+    vendorCode === '40102'
+      ? `Particle rejected the configured project credentials during ${method}. Copy the Project ID, Client Key, and App ID from the same Particle web application, set its domain to opentab-opal.vercel.app, then redeploy Vercel. No transaction was submitted.`
+      : vendorCode === 'ERR_NETWORK'
+        ? `The browser could not reach Particle during ${method}. Confirm the Particle web-app domain is opentab-opal.vercel.app and disable any blocker for universal-rpc-proxy.particle.network, then retry. No transaction was submitted.`
+        : vendorCode === 'ECONNABORTED' || vendorCode === 'ETIMEDOUT'
+          ? `Particle timed out during ${method}. Retry once; if it repeats, report this method and code to Particle support. No transaction was submitted.`
+          : `Particle could not complete ${method}${vendorCode === undefined ? '' : ` (code ${vendorCode})`}${diagnostic === undefined ? '' : `, diagnostic ${diagnostic}`}. No transaction was submitted.`;
+  return new AppError(mapped.code, message, {
+    retryable: mapped.retryable,
+    submissionPossible: false,
+    ...(mapped.safeDetails === undefined
+      ? { safeDetails: { providerMethod: method } }
+      : { safeDetails: { ...mapped.safeDetails, providerMethod: method } }),
+    cause: error,
+  });
+}
+
+async function captureBootstrapProviderResponse<T>(
+  method: BootstrapProviderMethod,
+  read: () => Promise<unknown>,
+  schema: { parse(value: unknown): T },
+): Promise<{ readonly raw: unknown; readonly value: T }> {
+  try {
+    const raw = await read();
+    return { raw, value: schema.parse(raw) };
+  } catch (error) {
+    throw particleBootstrapProviderError(method, error);
+  }
+}
+
 function assertConfigured(config: ParticleOperatorCertificationConfig): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{2,108}$/.test(config.profileId)) {
     throw new AppError(
@@ -480,16 +540,35 @@ export class ParticleOperatorCertificationAdapter {
       throw new AppError('WALLET_CHAIN_SWITCH_FAILED', 'Magic did not enter Arbitrum One.');
     }
     try {
-      const [accountRaw, balanceRaw, deploymentsRaw, authRaw] = await Promise.all([
-        this.dependencies.sdk.getSmartAccountOptions(),
-        this.dependencies.sdk.getPrimaryAssets(),
-        this.dependencies.sdk.getEIP7702Deployments(),
-        this.dependencies.sdk.getEIP7702Auth([ARBITRUM_CHAIN_NUMBER]),
+      const [accountCapture, balanceCapture, deploymentsCapture, authCapture] = await Promise.all([
+        captureBootstrapProviderResponse(
+          'universal_getUniversalAccount',
+          () => this.dependencies.sdk.getSmartAccountOptions(),
+          SmartAccountSchema,
+        ),
+        captureBootstrapProviderResponse(
+          'universal_getPrimaryAssets',
+          () => this.dependencies.sdk.getPrimaryAssets(),
+          PrimaryAssetsCaptureSchema,
+        ),
+        captureBootstrapProviderResponse(
+          'universal_getEIP7702Deployments',
+          () => this.dependencies.sdk.getEIP7702Deployments(),
+          z.array(DeploymentSchema).min(1),
+        ),
+        captureBootstrapProviderResponse(
+          'universal_createEIP7702DelegationAuth',
+          () => this.dependencies.sdk.getEIP7702Auth([ARBITRUM_CHAIN_NUMBER]),
+          z.array(AuthSchema).length(1),
+        ),
       ]);
-      const account = SmartAccountSchema.parse(accountRaw);
-      PrimaryAssetsCaptureSchema.parse(balanceRaw);
-      const deployments = z.array(DeploymentSchema).min(1).parse(deploymentsRaw);
-      const [auth] = z.array(AuthSchema).length(1).parse(authRaw);
+      const accountRaw = accountCapture.raw;
+      const account = accountCapture.value;
+      const balanceRaw = balanceCapture.raw;
+      const deploymentsRaw = deploymentsCapture.raw;
+      const deployments = deploymentsCapture.value;
+      const authRaw = authCapture.raw;
+      const [auth] = authCapture.value;
       if (
         auth === undefined ||
         (auth.chainId !== undefined && auth.chainId !== ARBITRUM_CHAIN_NUMBER) ||

@@ -206,4 +206,41 @@ describe('Particle operator compatibility certification', () => {
     expect(serialized).not.toContain('0.42');
     expect(sdk.createUniversalTransaction).toHaveBeenCalledOnce();
   });
+
+  it('identifies rejected Particle project credentials without exposing provider payloads', async () => {
+    const { adapter, sdk } = fixture();
+    sdk.getPrimaryAssets.mockRejectedValueOnce(
+      Object.assign(new Error('Authentication failed'), { code: 40102 }),
+    );
+
+    await expect(adapter.captureBootstrap()).rejects.toMatchObject({
+      code: 'UA_PROVIDER_SCHEMA_INVALID',
+      message: expect.stringContaining('rejected the configured project credentials'),
+      submissionPossible: false,
+      safeDetails: expect.objectContaining({
+        vendor: 'particle',
+        vendorCode: '40102',
+        providerMethod: 'universal_getPrimaryAssets',
+      }),
+    });
+  });
+
+  it('identifies the exact Particle method when a live response shape drifts', async () => {
+    const { adapter, sdk } = fixture();
+    sdk.getEIP7702Deployments.mockResolvedValueOnce([
+      { chainId: 42161, delegated: false, address: delegate },
+    ] as unknown as Awaited<ReturnType<typeof sdk.getEIP7702Deployments>>);
+
+    await expect(adapter.captureBootstrap()).rejects.toMatchObject({
+      code: 'UA_PROVIDER_SCHEMA_INVALID',
+      message: expect.stringContaining('universal_getEIP7702Deployments at 0.isDelegated'),
+      retryable: false,
+      submissionPossible: false,
+      safeDetails: expect.objectContaining({
+        vendor: 'particle',
+        providerMethod: 'universal_getEIP7702Deployments',
+        schemaIssuePath: '0.isDelegated',
+      }),
+    });
+  });
 });
