@@ -40,10 +40,29 @@ describe('lightweight public/session API boundary', () => {
     expect(guardedFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps provider code deferred while preserving session CSRF and logout ordering', async () => {
+  it('checks the current session without rotating its credentials', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      json({ user, requestId: 'req_public_current_session' }),
+    );
+    const client = new PublicSessionApiClient({ fetcher });
+
+    await expect(client.getCurrentSession()).resolves.toMatchObject({ user });
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/v1/auth/me',
+      expect.objectContaining({ method: 'GET', credentials: 'same-origin', cache: 'no-store' }),
+    );
+  });
+
+  it('gets fresh CSRF only after sign-out intent and revokes before provider logout', async () => {
     const csrfToken = 'c'.repeat(32);
     const fetcher = vi
       .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        json({
+          user,
+          requestId: 'req_public_session_check',
+        }),
+      )
       .mockResolvedValueOnce(
         json({
           user,
@@ -61,12 +80,16 @@ describe('lightweight public/session API boundary', () => {
       loadProviderSession,
     });
 
-    await service.restoreSession();
+    await service.getCurrentSession();
     expect(loadProviderSession).not.toHaveBeenCalled();
     expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).has('X-CSRF-Token')).toBe(false);
+    expect(fetcher.mock.calls[0]?.[0]).toBe('/api/v1/auth/me');
 
     await service.logout();
-    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('X-CSRF-Token')).toBe(csrfToken);
+    expect(fetcher.mock.calls[1]?.[0]).toBe('/api/v1/auth/session/refresh');
+    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).has('X-CSRF-Token')).toBe(false);
+    expect(fetcher.mock.calls[2]?.[0]).toBe('/api/v1/auth/session');
+    expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get('X-CSRF-Token')).toBe(csrfToken);
     expect(loadProviderSession).toHaveBeenCalledTimes(1);
     expect(logoutProviderSession).toHaveBeenCalledTimes(1);
     expect(client.getCsrfTokenForTests()).toBeUndefined();

@@ -2,7 +2,6 @@ import {
   BoundOperationTemplateSchema,
   CheckoutBindingSchema,
   CheckoutSessionIdSchema,
-  CurrentUserSchema,
   DelegationStatusSchema,
   EvidenceDigestSchema,
   EvmAddressSchema,
@@ -29,6 +28,8 @@ import { z } from 'zod';
 import {
   BrowserApiError,
   type BrowserSession,
+  type CurrentBrowserSession,
+  CurrentBrowserSessionSchema,
   type PublicBrowserConfig,
   PublicBrowserConfigSchema,
   type PublicProductRecord,
@@ -39,6 +40,7 @@ import {
 export {
   BrowserApiError,
   type BrowserSession,
+  type CurrentBrowserSession,
   type PublicBrowserConfig,
   PublicBrowserConfigSchema,
   type PublicProductRecord,
@@ -162,10 +164,6 @@ const AuthContinuationSchema = z
     expiresAt: DateTimeSchema,
     requestId: RequestIdSchema,
   })
-  .strict();
-
-const CurrentSessionSchema = z
-  .object({ user: CurrentUserSchema, requestId: RequestIdSchema })
   .strict();
 
 const JudgeProofResponseSchema = z
@@ -1419,8 +1417,8 @@ export class BrowserApiClient {
     return session;
   }
 
-  async getCurrentSession() {
-    return this.#request('/api/v1/auth/me', CurrentSessionSchema);
+  async getCurrentSession(): Promise<CurrentBrowserSession> {
+    return this.#request('/api/v1/auth/me', CurrentBrowserSessionSchema);
   }
 
   async logoutSession(): Promise<void> {

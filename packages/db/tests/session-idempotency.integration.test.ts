@@ -13,7 +13,7 @@ import {
   SessionIdSchema,
   type VerifiedMagicIdentity,
 } from '@opentab/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDatabase, type DatabaseHandle } from '../src/client.js';
@@ -439,6 +439,30 @@ describe.skipIf(databaseUrl === undefined)(
       expect(terminalExecutions).toBe(1);
     });
 
+    it('preserves the original database error after idempotency failure bookkeeping', async () => {
+      const scope = `database-failure:${randomUUID()}`;
+      idempotencyScopes.add(scope);
+      const repository = new PostgresIdempotencyRepository(uow);
+      const execution = repository.execute({
+        scope,
+        keyHash: '2'.repeat(64),
+        requestHash: '3'.repeat(64),
+        expiresAt: new Date(Date.now() + 60_000),
+        operation: async () => {
+          await uow.current().execute(sql`select 1 / 0`);
+          return { unreachable: true };
+        },
+      });
+
+      await expect(execution).rejects.toMatchObject({ cause: { code: '22012' } });
+      const [failure] = await uow
+        .current()
+        .select({ status: idempotencyRecords.status })
+        .from(idempotencyRecords)
+        .where(eq(idempotencyRecords.scope, scope));
+      expect(failure).toEqual({ status: 'failed_terminal' });
+    });
+
     it('allows exactly one compare-and-swap transition at the submission boundary', async () => {
       const now = new Date('2026-07-14T05:00:00.000Z');
       const service = sessionService({ now: () => now });
@@ -505,6 +529,21 @@ describe.skipIf(databaseUrl === undefined)(
           bindingDigest: digest(),
           boundAt: now,
         });
+      const workflow = new PostgresWorkflowStore(uow);
+      const reboundDigest = EvidenceDigestSchema.parse(digest());
+      await expect(
+        workflow.bindCheckoutSession({
+          id: checkoutId,
+          userId: created.user.id,
+          receiptRecipient: created.user.walletAddress,
+          bindingDigest: reboundDigest,
+          now,
+        }),
+      ).resolves.toMatchObject({
+        id: checkoutId,
+        bindingDigest: reboundDigest,
+        status: 'bound',
+      });
       await uow
         .current()
         .insert(orders)
@@ -540,7 +579,6 @@ describe.skipIf(databaseUrl === undefined)(
 
       const intruder = await service.create(identity(now));
       userIds.add(intruder.user.id);
-      const workflow = new PostgresWorkflowStore(uow);
       await expect(workflow.findAuthoritativeProduct(productId)).resolves.toMatchObject({
         active: true,
         merchantOnchainId,

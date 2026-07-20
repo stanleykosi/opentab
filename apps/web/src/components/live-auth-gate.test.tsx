@@ -31,7 +31,7 @@ function authRequired() {
 
 function service(overrides: Partial<LiveAuthGateService> = {}): LiveAuthGateService {
   return {
-    restoreSession: vi.fn().mockResolvedValue(session()),
+    getCurrentSession: vi.fn().mockResolvedValue(session()),
     beginGoogleSignIn: vi.fn().mockResolvedValue(undefined),
     signInWithEmail: vi.fn().mockResolvedValue(session()),
     ...overrides,
@@ -49,11 +49,11 @@ describe('LiveAuthGate', () => {
 
     expect(screen.getByLabelText('Checking secure sign-in')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Your private content' })).toBeVisible();
-    expect(auth.restoreSession).toHaveBeenCalledOnce();
+    expect(auth.getCurrentSession).toHaveBeenCalledOnce();
   });
 
   it('offers Google sign-in with a safe current-route continuation', async () => {
-    const auth = service({ restoreSession: vi.fn().mockRejectedValue(authRequired()) });
+    const auth = service({ getCurrentSession: vi.fn().mockRejectedValue(authRequired()) });
     window.history.replaceState({}, '', '/merchant/products?status=active');
     render(
       <LiveAuthGate service={auth}>
@@ -68,11 +68,11 @@ describe('LiveAuthGate', () => {
   });
 
   it('exchanges email sign-in and resumes the protected route', async () => {
-    const restoreSession = vi
-      .fn<LiveAuthGateService['restoreSession']>()
+    const getCurrentSession = vi
+      .fn<LiveAuthGateService['getCurrentSession']>()
       .mockRejectedValueOnce(authRequired())
       .mockResolvedValueOnce(session());
-    const auth = service({ restoreSession });
+    const auth = service({ getCurrentSession });
     render(
       <LiveAuthGate returnPath="/account/orders" service={auth}>
         <h1>Your orders</h1>
@@ -87,7 +87,7 @@ describe('LiveAuthGate', () => {
 
     expect(await screen.findByRole('heading', { name: 'Your orders' })).toBeVisible();
     expect(auth.signInWithEmail).toHaveBeenCalledWith('buyer@example.com', '/account/orders');
-    expect(restoreSession).toHaveBeenCalledTimes(2);
+    expect(getCurrentSession).toHaveBeenCalledTimes(2);
   });
 
   it('directs an authenticated non-merchant to onboarding', async () => {
@@ -111,7 +111,7 @@ describe('LiveAuthGate', () => {
     render(
       <LiveAuthGate
         requireMerchant
-        service={service({ restoreSession: vi.fn().mockResolvedValue(session(true)) })}
+        service={service({ getCurrentSession: vi.fn().mockResolvedValue(session(true)) })}
       >
         <h1>Merchant dashboard</h1>
       </LiveAuthGate>,

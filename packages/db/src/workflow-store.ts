@@ -31,7 +31,7 @@ import {
   type WithdrawalId,
   WithdrawalIdSchema,
 } from '@opentab/shared';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { DrizzleMerchantRepository, DrizzleProductRepository } from './repositories.js';
 import {
   checkoutSessions,
@@ -237,8 +237,11 @@ export class PostgresWorkflowStore
         and(
           eq(checkoutSessions.id, input.id),
           inArray(checkoutSessions.status, ['active', 'bound']),
-          sql`${checkoutSessions.expiresAt} > ${input.now}`,
-          sql`(${checkoutSessions.userId} is null or ${checkoutSessions.userId} = ${input.userId})`,
+          // Use the column-aware predicates here. Interpolating a Date into an
+          // untyped sql fragment bypasses Drizzle's timestamp encoder and makes
+          // postgres.js receive a raw Date as a string parameter.
+          gt(checkoutSessions.expiresAt, input.now),
+          or(isNull(checkoutSessions.userId), eq(checkoutSessions.userId, input.userId)),
         ),
       )
       .returning();
@@ -288,29 +291,56 @@ export class PostgresWorkflowStore
           refundableUntil: input.refundableUntil,
           createdAt: input.now,
         });
+      // The runtime role intentionally has INSERT only on pre-canonical order
+      // columns. Drizzle's generic insert enumerates every schema column and
+      // emits DEFAULT for omitted canonical proof fields; PostgreSQL still
+      // checks INSERT privilege for those enumerated fields. Keep this exact
+      // column list aligned with the runtime-role grant instead.
+      await this.uow.current().execute(sql`
+        insert into ${orders} (
+          "id",
+          "checkout_session_id",
+          "order_key",
+          "user_id",
+          "merchant_id",
+          "product_id",
+          "payer",
+          "recipient",
+          "token_address",
+          "quantity",
+          "amount_base_units",
+          "status",
+          "chain_id",
+          "intent_digest",
+          "refundable_until",
+          "created_at",
+          "updated_at"
+        ) values (
+          ${input.orderId},
+          ${input.session.id},
+          ${input.session.orderKey},
+          ${input.user.id},
+          ${input.merchantId},
+          ${input.session.productId},
+          ${input.user.walletAddress},
+          ${input.session.receiptRecipient ?? input.user.walletAddress},
+          ${input.tokenAddress},
+          ${input.session.quantity},
+          ${input.session.amountBaseUnits},
+          ${'created'},
+          ${binding.chainId},
+          ${input.intentDigest},
+          ${input.refundableUntil.toISOString()}::timestamptz,
+          ${input.now.toISOString()}::timestamptz,
+          ${input.now.toISOString()}::timestamptz
+        )
+      `);
       const [createdOrder] = await this.uow
         .current()
-        .insert(orders)
-        .values({
-          id: input.orderId,
-          checkoutSessionId: input.session.id,
-          orderKey: input.session.orderKey,
-          userId: input.user.id,
-          merchantId: input.merchantId,
-          productId: input.session.productId,
-          payer: input.user.walletAddress,
-          recipient: input.session.receiptRecipient ?? input.user.walletAddress,
-          tokenAddress: input.tokenAddress,
-          quantity: input.session.quantity,
-          amountBaseUnits: input.session.amountBaseUnits,
-          status: 'created',
-          chainId: binding.chainId,
-          intentDigest: input.intentDigest,
-          refundableUntil: input.refundableUntil,
-          createdAt: input.now,
-          updatedAt: input.now,
-        })
-        .returning();
+        .select()
+        .from(orders)
+        .where(eq(orders.id, input.orderId))
+        .limit(1);
       const [createdAttempt] = await this.uow
         .current()
         .insert(paymentAttempts)

@@ -3,7 +3,7 @@
 import { Button, LinkButton } from '@opentab/ui';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BrowserApiError, type BrowserSession } from '../application/browser-api-client';
+import { BrowserApiError, type CurrentBrowserSession } from '../application/browser-api-client';
 import {
   type BrowserApplicationService,
   getBrowserApplicationService,
@@ -13,13 +13,13 @@ import { ErrorState, PageSkeleton } from './states';
 
 export type LiveAuthGateService = Pick<
   BrowserApplicationService,
-  'beginGoogleSignIn' | 'restoreSession' | 'signInWithEmail'
+  'beginGoogleSignIn' | 'getCurrentSession' | 'signInWithEmail'
 >;
 
 type GateState =
   | { status: 'loading' }
   | { status: 'anonymous' }
-  | { status: 'ready'; session: BrowserSession }
+  | { status: 'ready'; session: CurrentBrowserSession }
   | { status: 'error'; message: string; reference?: string };
 
 function safeReturnPath(value: string): string {
@@ -63,7 +63,7 @@ export function LiveAuthGate({
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      setState({ status: 'ready', session: await service.restoreSession() });
+      setState({ status: 'ready', session: await service.getCurrentSession() });
     } catch (error) {
       if (error instanceof BrowserApiError && error.code === 'AUTH_REQUIRED') {
         setState({ status: 'anonymous' });

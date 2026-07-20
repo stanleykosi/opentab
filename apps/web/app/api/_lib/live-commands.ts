@@ -45,6 +45,7 @@ import {
   DelegationStatusSchema,
   EvidenceDigestSchema,
   EvmAddressSchema,
+  isAppError,
   MerchantSchema,
   PaymentAttemptIdSchema,
   type SplitReimbursementIntent,
@@ -766,13 +767,22 @@ export class LiveBackendApiCommands implements BackendApiCommandPort {
   }
 
   async createPaymentAttempt(input: Parameters<BackendApiCommandPort['createPaymentAttempt']>[0]) {
-    const binding = await this.dependencies.createPaymentAttempt.execute({
-      checkoutSessionId: input.checkoutSessionId,
-      user: input.actor,
-      idempotencyKeyHash: input.idempotencyKeyHash,
-      requestHash: input.requestHash,
-    });
-    return { binding };
+    try {
+      const binding = await this.dependencies.createPaymentAttempt.execute({
+        checkoutSessionId: input.checkoutSessionId,
+        user: input.actor,
+        idempotencyKeyHash: input.idempotencyKeyHash,
+        requestHash: input.requestHash,
+      });
+      return { binding };
+    } catch (error) {
+      if (isAppError(error)) throw error;
+      throw new AppError(
+        'INTERNAL_ERROR',
+        'OpenTab could not persist the server-approved payment attempt.',
+        { cause: error },
+      );
+    }
   }
 
   async recordPreparedPayment(

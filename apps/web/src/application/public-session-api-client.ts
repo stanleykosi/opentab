@@ -203,6 +203,10 @@ export const BrowserSessionSchema = z
   })
   .strict();
 
+export const CurrentBrowserSessionSchema = z
+  .object({ user: CurrentUserSchema, requestId: RequestIdSchema })
+  .strict();
+
 export const PublicProductRecordSchema = z
   .object({
     merchant: MerchantSchema,
@@ -219,6 +223,7 @@ const LogoutResultSchema = z
 
 export type PublicBrowserConfig = z.infer<typeof PublicBrowserConfigSchema>;
 export type BrowserSession = z.infer<typeof BrowserSessionSchema>;
+export type CurrentBrowserSession = z.infer<typeof CurrentBrowserSessionSchema>;
 export type PublicProductRecord = z.infer<typeof PublicProductRecordSchema>;
 
 export class BrowserApiError extends Error {
@@ -293,7 +298,12 @@ export class PublicSessionApiClient {
     return session;
   }
 
+  getCurrentSession(): Promise<CurrentBrowserSession> {
+    return this.#request('/api/v1/auth/me', CurrentBrowserSessionSchema);
+  }
+
   async logoutSession(): Promise<void> {
+    if (this.#csrfToken === undefined) await this.restoreSession();
     await this.#request('/api/v1/auth/session', LogoutResultSchema, {
       method: 'DELETE',
       body: {},
@@ -377,6 +387,7 @@ export class PublicSessionApiClient {
 
 export interface PublicSessionApplicationService {
   restoreSession(): Promise<BrowserSession>;
+  getCurrentSession(): Promise<CurrentBrowserSession>;
   logout(): Promise<void>;
   getPublicProduct(merchantSlug: string, productSlug: string): Promise<PublicProductRecord>;
   getPublicMediaOrigins(): Promise<readonly string[]>;
@@ -409,6 +420,10 @@ export class DefaultPublicSessionApplicationService implements PublicSessionAppl
 
   restoreSession(): Promise<BrowserSession> {
     return this.#api.restoreSession();
+  }
+
+  getCurrentSession(): Promise<CurrentBrowserSession> {
+    return this.#api.getCurrentSession();
   }
 
   async logout(): Promise<void> {

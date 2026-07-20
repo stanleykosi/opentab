@@ -419,6 +419,11 @@ export class BrowserApplicationService {
     return this.#api.restoreSession();
   }
 
+  /** Read-only session check. This does not rotate the session cookie or CSRF token. */
+  getCurrentSession() {
+    return this.#api.getCurrentSession();
+  }
+
   getPublicProduct(merchantSlug: string, productSlug: string) {
     return this.#api.getPublicProduct(merchantSlug, productSlug);
   }

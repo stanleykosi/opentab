@@ -17,7 +17,7 @@ import {
   TransactionHashSchema,
   UnsignedIntegerStringSchema,
 } from '@opentab/shared';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import {
   hashOpaqueSecret,
   hashSplitInvitationCapability,
@@ -506,7 +506,7 @@ export class PostgresBackendApiStore {
     requestId: string;
   }): Promise<ContractOperationRecord> {
     const template = BoundOperationTemplateSchema.parse(input.template);
-    const bindingSigner = EvmAddressSchema.safeParse(input.binding['signerAddress']);
+    const bindingSigner = EvmAddressSchema.safeParse(input.binding.signerAddress);
     if (
       template.kind !== 'split_revocation' ||
       !sameEvmAddress(template.ownerAddress, input.signerAddress) ||
@@ -1174,7 +1174,7 @@ export class PostgresBackendApiStore {
         and(
           eq(checkoutLinks.capabilityHash, capabilityHash(this.capabilityPepper, reference)),
           isNull(checkoutLinks.revokedAt),
-          sql`(${checkoutLinks.expiresAt} is null or ${checkoutLinks.expiresAt} > ${this.now()})`,
+          or(isNull(checkoutLinks.expiresAt), gt(checkoutLinks.expiresAt, this.now())),
         ),
       )
       .limit(1);

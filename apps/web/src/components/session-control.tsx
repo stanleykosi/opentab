@@ -7,7 +7,7 @@ import {
   type PublicSessionApplicationService,
 } from '../application/public-session-api-client';
 
-type SessionService = Pick<PublicSessionApplicationService, 'logout' | 'restoreSession'>;
+type SessionService = Pick<PublicSessionApplicationService, 'getCurrentSession' | 'logout'>;
 
 export function SessionControl({
   service = getPublicSessionApplicationService(),
@@ -22,7 +22,7 @@ export function SessionControl({
   useEffect(() => {
     let active = true;
     void service
-      .restoreSession()
+      .getCurrentSession()
       .then(() => {
         if (active) setState('signed_in');
       })

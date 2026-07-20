@@ -431,6 +431,26 @@ describe('browser application service boundaries', () => {
     );
   });
 
+  it('checks the current server session without rotating credentials or loading wallet code', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      json({ user, requestId: 'req_current_session_test' }),
+    );
+    const loader = vi.fn();
+    const service = new BrowserApplicationService({
+      api: new BrowserApiClient({ fetcher }),
+      loadIntegrations: loader,
+      continuationStore: continuationStore(),
+      origin: () => 'https://opentab.example',
+    });
+
+    await expect(service.getCurrentSession()).resolves.toMatchObject({ user });
+    expect(loader).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/v1/auth/me',
+      expect.objectContaining({ method: 'GET', credentials: 'same-origin', cache: 'no-store' }),
+    );
+  });
+
   it('loads Magic only after explicit Google intent and keeps only the continuation ID', async () => {
     const fetcher = vi
       .fn<typeof fetch>()

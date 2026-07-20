@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionControl } from './session-control';
 
 describe('live session control', () => {
-  it('restores the secure session and logs out only after explicit user intent', async () => {
-    const restoreSession = vi.fn(async () => ({ user: { id: 'user' } }));
+  it('checks the secure session without rotating it and logs out only after user intent', async () => {
+    const getCurrentSession = vi.fn(async () => ({ user: { id: 'user' } }));
     let finishLogout: (() => void) | undefined;
     const logout = vi.fn(
       () =>
@@ -13,10 +13,10 @@ describe('live session control', () => {
         }),
     );
 
-    render(<SessionControl service={{ restoreSession, logout } as never} />);
+    render(<SessionControl service={{ getCurrentSession, logout } as never} />);
 
     const button = await screen.findByRole('button', { name: 'Sign out' });
-    expect(restoreSession).toHaveBeenCalledTimes(1);
+    expect(getCurrentSession).toHaveBeenCalledTimes(1);
     expect(logout).not.toHaveBeenCalled();
     fireEvent.click(button);
     expect(screen.getByRole('button', { name: 'Signing out…' })).toBeDisabled();
