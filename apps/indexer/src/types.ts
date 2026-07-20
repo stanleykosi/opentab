@@ -1,5 +1,5 @@
 import type { ArbitrumReadPort, RawContractLog } from '@opentab/application';
-import type { CanonicalEventProof, ChainId } from '@opentab/shared';
+import type { CanonicalEventProof, ChainId, EvmAddress, TransactionHash } from '@opentab/shared';
 
 export interface IndexedBlock {
   readonly number: bigint;
@@ -51,8 +51,8 @@ export interface QuarantinedLogReference {
   readonly canonicalLogId: string;
   readonly chainId: ChainId;
   readonly stream: string;
-  readonly contractAddress: `0x${string}`;
-  readonly transactionHash: `0x${string}`;
+  readonly contractAddress: EvmAddress;
+  readonly transactionHash: TransactionHash;
   readonly blockNumber: bigint;
   readonly blockHash: `0x${string}`;
   readonly logIndex: number;

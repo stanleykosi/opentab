@@ -1,5 +1,13 @@
 import type { RawContractLog } from '@opentab/application';
-import { AppError, type ChainId, ChainIdSchema } from '@opentab/shared';
+import {
+  AppError,
+  type ChainId,
+  ChainIdSchema,
+  type EvmAddress,
+  EvmAddressSchema,
+  type TransactionHash,
+  TransactionHashSchema,
+} from '@opentab/shared';
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import {
   expectedFinalizationCredits,
@@ -1527,8 +1535,8 @@ export class PostgresIndexerStore {
       canonicalLogId: string;
       chainId: ChainId;
       stream: string;
-      contractAddress: `0x${string}`;
-      transactionHash: `0x${string}`;
+      contractAddress: EvmAddress;
+      transactionHash: TransactionHash;
       blockNumber: bigint;
       blockHash: `0x${string}`;
       logIndex: number;
@@ -1560,8 +1568,8 @@ export class PostgresIndexerStore {
       canonicalLogId: log.id,
       chainId: ChainIdSchema.parse(log.chainId),
       stream: log.stream,
-      contractAddress: log.contractAddress as `0x${string}`,
-      transactionHash: log.transactionHash as `0x${string}`,
+      contractAddress: EvmAddressSchema.parse(log.contractAddress),
+      transactionHash: TransactionHashSchema.parse(log.transactionHash),
       blockNumber: log.blockNumber,
       blockHash: log.blockHash as `0x${string}`,
       logIndex: log.logIndex,
