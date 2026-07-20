@@ -1,273 +1,299 @@
+<p align="center">
+  <img src="apps/web/public/brand/opentab-logo.svg" alt="OpenTab" width="260" />
+</p>
+
 # OpenTab
 
-OpenTab is a mobile-first, walletless checkout and event-commerce application.
-Customers authenticate with a Magic embedded wallet, see one fiat-denominated
-spendable balance, and approve one purchase. Particle Universal Accounts is
-configured in EIP-7702 mode to source supported cross-chain value and execute
-the final payment on Arbitrum. A confirmed canonical Arbitrum contract event—not
-a provider submission response—is the source of truth for payment, refund, and
-withdrawal status.
+OpenTab is a mobile-first checkout platform for events, cafés, pop-up shops, and
+creators. A merchant creates a checkout link or QR code. A customer signs in
+with Google or email, reviews one total, and approves one payment.
 
-The repository includes the customer and merchant web application, API and
-application services, PostgreSQL schema/migrations, Redis coordination,
-reorg-aware indexer, deterministic and live provider adapters, Solidity
-settlement/pass/split contracts, protected live-acceptance harness, CI, and
-deployment configuration.
+The customer does not need a browser wallet extension. The customer also does
+not need to bridge funds, change a network, or obtain Arbitrum gas.
 
-## Product surfaces
+Magic provides the embedded wallet and customer authentication. Particle
+Universal Accounts finds eligible balances and routes the payment. OpenTab
+settles native USDC through its contracts on Arbitrum One. OpenTab marks an
+order as paid only after it confirms the canonical `OrderPaid` event.
 
-- Public merchant storefronts, shareable product checkout links, and QR codes
-- Magic Google/social authentication with email OTP fallback and opaque OpenTab sessions
-- Explicit EIP-7702 readiness, constrained bootstrap sponsorship, unified balance, quote, preview, payment, and refresh recovery
-- Premium receipt/pass, loyalty, privacy-safe sharing, and bounded split reimbursement
-- Merchant onboarding, product lifecycle, inventory, orders, refunds, settlement withdrawals, CSV exports, and accessible metrics
-- Public-safe Judge Mode containing sanitized Magic, Particle, and canonical Arbitrum evidence
-- Deterministic local mode with an unmistakable demo label; risky production features default off
+[Open OpenTab](https://opentab-opal.vercel.app) ·
+[View system status](https://opentab-opal.vercel.app/status) ·
+[Read the API definition](openapi/opentab.openapi.yaml)
+
+## Core capabilities
+
+### For customers
+
+- Sign in with Google or an email one-time password.
+- Use an embedded wallet without a browser extension or seed phrase.
+- View eligible balances as one available amount.
+- Review the item price, payment cost, maximum total, and quote expiry.
+- Approve one payment without a manual bridge or network change.
+- Receive a durable receipt and a non-transferable pass.
+- View loyalty progress and refund status.
+- Create private links for group reimbursements.
+
+### For merchants
+
+- Create a merchant profile and a product catalog.
+- Set a USDC price, inventory limit, sale period, and reward value.
+- Publish a checkout link and a QR code.
+- Track orders, revenue, fees, refunds, and available settlement funds.
+- Export order data in CSV format.
+- Refund eligible orders.
+- Withdraw confirmed settlement funds.
+- Configure customer loyalty rewards.
+
+### For operators
+
+- Pause each money operation with an independent feature switch.
+- Monitor service health, payment state, indexer lag, and reconciliation.
+- Use separate roles for administration, pausing, fees, merchants, and signing.
+- Rebuild database projections from canonical Arbitrum events.
+- Use redacted logs that keep a correlation path for each payment.
+
+## How a payment works
+
+1. The merchant creates a product and publishes its checkout link.
+2. The customer opens the link or scans the QR code.
+3. Magic authenticates the customer and opens the embedded EOA.
+4. OpenTab configures Particle in EIP-7702 mode for the same EOA.
+5. OpenTab checks the available supported balances.
+6. The server creates the order and fixes the amount and destination.
+7. Particle prepares a route to native USDC on Arbitrum One.
+8. OpenTab shows the exact purchase details and the payment cost.
+9. The customer approves the payment with Magic.
+10. Particle routes the value and calls the OpenTab checkout contract.
+11. The contract records the order and issues the customer pass.
+12. The indexer confirms the canonical `OrderPaid` event.
+13. OpenTab shows the paid receipt.
+
+A Particle submission is not proof of payment. The confirmed Arbitrum event is
+the payment record.
 
 ## Architecture
 
-```text
-apps/web                 Next.js App Router UI and HTTP API
-apps/indexer             Arbitrum indexer, reconciliation, and BullMQ worker
-packages/application     Provider-independent use cases and ports
-packages/shared          Domain schemas, exact money, IDs, errors, chain events
-packages/db              Drizzle schema, migrations, repositories, Redis coordination
-packages/integrations    Magic, Particle, Arbitrum, KMS, sponsor, and fake adapters
-packages/ui              Accessible OpenTab design system
-packages/contracts       Foundry contracts, tests, deploy scripts, ABIs, evidence
-packages/observability   Structured redacted logging and telemetry boundaries
-packages/testkit         Deterministic fixtures and factories
-spikes/cross-chain-checkout  Guarded credentialed compatibility/evidence harness
+```mermaid
+flowchart LR
+    Customer[Customer] --> Web[Next.js web application]
+    Merchant[Merchant] --> Web
+    Web --> Services[Application services]
+    Web --> Magic[Magic embedded wallet]
+    Services --> Integrations[Typed integration adapters]
+    Integrations --> Particle[Particle Universal Accounts]
+    Integrations --> RPC[Arbitrum RPC providers]
+    Services --> Database[(PostgreSQL)]
+    Services --> Redis[(Redis)]
+    Particle --> Arbitrum[Arbitrum One]
+    Arbitrum --> Contracts[OpenTab contracts]
+    Indexer[Indexer and reconciler] --> Arbitrum
+    Indexer --> Database
 ```
 
-OpenTab uses exact integer strings or `bigint` for token base units. UI modules
-never instantiate Magic or Particle directly. Provider operations are stored
-before finality waits, and the indexer independently verifies chain, contract,
-transaction receipt, decoded event fields, confirmation depth, and canonical
-block hash.
+OpenTab uses a ports-and-adapters design. User-interface modules do not create
+Magic or Particle SDK clients. Application services control the use cases.
+Integration adapters validate vendor data and map vendor errors to stable
+OpenTab errors.
 
-## Local development
+Arbitrum events are the authority for paid, refunded, and withdrawn states.
+PostgreSQL stores workflow data and query projections. The indexer uses stable
+event keys, block hashes, confirmation depth, and reorg recovery. OpenTab uses
+`bigint` or integer strings for all token base units.
 
-The owner-selected toolchain is pinned exactly to Node `25.0.0` and pnpm
-`9.15.1`.
+### Main technology
+
+| Area | Technology |
+| --- | --- |
+| Web application | Next.js 16, React 19, TypeScript 6 |
+| User interface | Tailwind CSS 4, XState, accessible React components |
+| Wallet and identity | Magic Embedded Wallet |
+| Cross-network payment | Particle Universal Accounts with EIP-7702 |
+| Chain access | viem, with ethers at the required Magic signing boundary |
+| Settlement | Arbitrum One and native USDC |
+| Contracts | Solidity, Foundry, OpenZeppelin Contracts |
+| Data | PostgreSQL, Drizzle ORM, Redis, BullMQ |
+| Repository | pnpm and Turborepo |
+
+### Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `apps/web` | Customer, merchant, account, receipt, status, and API surfaces |
+| `apps/indexer` | Arbitrum event indexing and payment reconciliation |
+| `packages/application` | Product use cases and provider-independent ports |
+| `packages/integrations` | Magic, Particle, Arbitrum, sponsor, and signer adapters |
+| `packages/shared` | Domain types, schemas, identifiers, money, and error codes |
+| `packages/db` | Database schema, migrations, repositories, and queues |
+| `packages/contracts` | Solidity contracts, Foundry tests, and deployment data |
+| `packages/ui` | Accessible design components and product presentation |
+| `packages/observability` | Structured logs, telemetry, metrics, and redaction |
+| `openapi` | The OpenTab HTTP API definition |
+| `deployments` | Public deployment manifests |
+
+## Smart contracts
+
+OpenTab uses non-upgradeable contracts on Arbitrum One. The settlement token is
+[native USDC](https://arbiscan.io/token/0xaf88d065e77c8cC2239327C5EDb3A432268e5831).
+
+| Contract | Address | Purpose |
+| --- | --- | --- |
+| `OpenTabCheckout` | [`0x237E…ee91`](https://arbiscan.io/address/0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91) | Products, orders, USDC settlement, refunds, withdrawals, and loyalty |
+| `OpenTabPass1155` | [`0x56CC…568B`](https://arbiscan.io/address/0x56CCBeC6D08f561eCF117964FAB385CBf90A568B) | Non-transferable receipts and passes |
+| `OpenTabSplitReimbursement` | [`0x7EF7…049c`](https://arbiscan.io/address/0x7EF7efa8a53530dEa3F077691422AAbEB183049c) | Signed group reimbursements |
+
+Sourcify has an exact source match for each contract. The public manifest
+contains the complete addresses, transaction hashes, source links, code hashes,
+roles, and chain settings. See [`deployments/42161.json`](deployments/42161.json).
+
+## Run OpenTab locally
+
+### Requirements
+
+- Git
+- Node.js `25.0.0`
+- pnpm `9.15.1`
+- Foundry `1.7.1`
+- Docker Engine with Docker Compose, or local PostgreSQL 17 and Redis 8
+- Chromium for the browser test suite
+
+### Install the project
+
+Run these commands from the repository root:
 
 ```bash
-node --version
-pnpm --version
+bash scripts/verify-prerequisites.sh
 pnpm install --frozen-lockfile
-cp .env.example .env.local
-set -a
-. ./.env.local
-set +a
+./scripts/bootstrap-contracts.sh
 docker compose up -d postgres redis
+```
+
+Set the local sandbox environment:
+
+```bash
+export APP_ENV=local
+export NEXT_PUBLIC_APP_ENV=local
+export NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
+export PROVIDER_MODE=deterministic
+export DETERMINISTIC_DEMO_ENABLED=true
+export DATABASE_URL=postgresql://opentab:opentab@127.0.0.1:5432/opentab
+export REDIS_URL=redis://127.0.0.1:6379
+```
+
+Prepare the database and add the sample catalog:
+
+```bash
 pnpm --filter @opentab/db db:migrate
+DEMO_SEED_CONFIRMATION=seed-opentab-deterministic-demo \
+DEMO_SEED_SECRET_PEPPER="$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))")" \
+pnpm db:seed
+```
+
+Start the web application and the local services:
+
+```bash
 pnpm dev
 ```
 
-The expected output is `v25.0.0` and `9.15.1`. Node 25 does not bundle
-Corepack on the supported build device, so `pnpm` must be installed directly
-and available on `PATH`; do not replace the repository pin with an implicit
-Corepack-managed version.
+Open <http://localhost:3000>. The local sandbox uses synthetic records and
+deterministic provider responses. It does not send a real payment.
 
-The root environment file is intentionally ignored by Git. Source it into the
-launching shell as shown so the web, worker, migrations, and Turbo child
-processes receive one explicit local configuration; Next.js does not
-automatically load a repository-root env file from `apps/web`.
+## Configuration
 
-Open <http://localhost:3000>. The checked-in environment example enables only
-explicit local deterministic mode. It contains placeholder values, never
-working credentials. If Docker is unavailable, PostgreSQL and Redis may be run
-natively with the same URLs.
+Use [`.env.example`](.env.example) as the deployment configuration template.
+It separates shared values, web values, and indexer values. Enter secrets only
+in the secret manager for the target environment.
 
-Useful commands:
+Apply these rules to every deployment:
+
+- Keep Magic secret keys, signer keys, session secrets, and private RPC URLs on
+  the server.
+- Use only public vendor identifiers in `NEXT_PUBLIC_*` variables.
+- Use separate database roles for the web application, indexer, and migrations.
+- Use independent primary and fallback Arbitrum RPC providers.
+- Keep payment, sponsor, refund, withdrawal, and split switches off until their
+  required configuration is valid.
+- Use a managed signer for a production deployment.
+- Never reuse a deployer, administrator, sponsor, merchant, or customer key.
+
+The application validates its environment at startup. It does not enable a
+money operation when a required value is absent or invalid.
+
+## API and service health
+
+The HTTP API uses the `/api/v1` base path. The OpenAPI file defines the request,
+response, authentication, and error schemas:
+
+- [OpenAPI definition](openapi/opentab.openapi.yaml)
+- Liveness: `/api/health`
+- Readiness: `/api/v1/ready`
+- Product status: `/status`
+
+Mutation routes require the correct session and authorization. Browser
+mutations also use origin checks, CSRF protection, rate limits, and idempotency
+keys.
+
+## Verification
+
+Use the following commands to check a change:
 
 ```bash
-pnpm smoke:demo
-pnpm test:unit
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
 pnpm test:integration
 pnpm test:e2e
+pnpm build
+```
+
+Run the complete repository check:
+
+```bash
 pnpm verify
+```
+
+Run the release check when you change a security, payment, contract, or
+deployment boundary:
+
+```bash
 pnpm verify:release
 ```
 
-The default browser command runs 22 Chromium desktop/mobile checks. Focused
-Firefox and WebKit projects are also configured; WebKit currently needs host
-libraries unavailable on the validated workstation.
+Run contract checks separately when you change Solidity code:
 
-Contract-only checks are available through `pnpm contracts:build`,
-`pnpm contracts:test`, `pnpm contracts:coverage`, and
-`pnpm contracts:slither`.
-
-## Deployment topology
-
-- Vercel runs `apps/web` and its API routes on Vercel's supported Node 24.x
-  runtime with pnpm 9.15.1 and the frozen monorepo lockfile. Local tooling and
-  Railway remain pinned to Node 25.0.0.
-- Railway runs the indexer image on exact Node 25.0.0 and pnpm 9.15.1.
-- Supabase provides dedicated PostgreSQL. Vercel uses its transaction pooler;
-  the indexer and controlled jobs use direct/session connections with separate
-  least-privilege roles.
-- One authenticated TLS Redis endpoint is shared by Vercel and Railway; Upstash
-  Redis is the default documented choice.
-
-For a new database, paste
-[`SUPABASE_SQL_EDITOR_SETUP.sql`](SUPABASE_SQL_EDITOR_SETUP.sql) into the
-Supabase SQL Editor. For the already-created OpenTab database, paste only
-[`SUPABASE_SQL_EDITOR_PARTICLE_CERTIFICATION.sql`](SUPABASE_SQL_EDITOR_PARTICLE_CERTIFICATION.sql).
-Vercel must use the `opentab_runtime` transaction-pooler URL on port `6543`;
-Railway must use the separate `opentab_indexer` session/direct URL on port
-`5432`.
-
-## Arbitrum One deployment
-
-The reviewed non-upgradeable contracts are deployed on Arbitrum One (`42161`)
-from canonical indexer block `484866936`:
-
-- Checkout: `0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91`
-- Pass: `0x56CCBeC6D08f561eCF117964FAB385CBf90A568B`
-- Split reimbursement: `0x7EF7efa8a53530dEa3F077691422AAbEB183049c`
-- Native USDC: `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`
-
-All four deployment/binding receipts succeeded. Infura and PublicNode both
-passed the keyless deployment assertions, and all three contracts have
-creation/runtime `exact_match` source on Sourcify. Public runtime defaults are
-recorded in
-[`packages/contracts/deployments/42161.public.env`](packages/contracts/deployments/42161.public.env).
-This is deployment evidence, not a payment claim: payment activation is proven
-only by its recorded Particle operation and confirmed `OrderPaid` settlement.
-
-### Railway dashboard handoff
-
-Create the indexer from the GitHub repository with config path
-`/railway.indexer.json` and one replica. GitHub pushes automatically redeploy
-both Railway and Vercel. Railway needs a public domain only for the
-`/health/live` and `/health/ready` operator checks. Configure:
-
-```text
-APP_ENV=demo-mainnet
-DATABASE_URL_INDEXER=<Supabase opentab_indexer session/direct URL>
-REDIS_URL=<shared authenticated rediss:// URL>
-ARBITRUM_RPC_URL=<authenticated Arbitrum One primary RPC>
-PARTICLE_LIVE_ENABLED=true
-NEXT_PUBLIC_PARTICLE_PROJECT_ID=<Particle project ID>
-NEXT_PUBLIC_PARTICLE_CLIENT_KEY=<Particle client key>
-NEXT_PUBLIC_PARTICLE_APP_UUID=<Particle app UUID>
+```bash
+pnpm contracts:fmt:check
+pnpm contracts:build
+pnpm contracts:test
+pnpm contracts:coverage
+pnpm contracts:slither
 ```
 
-Chain `42161`, native USDC, checkout/pass/split addresses, PublicNode fallback,
-and block `484866936` are source defaults documented in
-[`42161.public.env`](packages/contracts/deployments/42161.public.env); they are
-not additional mandatory Railway variables.
+The test system includes unit, integration, browser, accessibility, contract,
+fuzz, invariant, fork, security, and failure-recovery checks.
 
-The deployed checkout's platform fee is `0` basis points. That reviewed value
-is pinned in source and independently checked against the contract before a
-payment can be prepared, so `PLATFORM_FEE_BPS` should not be duplicated in the
-Vercel or Railway dashboard. A malformed optional payment setting pauses only
-money-moving features; it does not take account, merchant, receipt, or sign-in
-APIs offline.
+## Security model
 
-`INDEXER_ENABLED`, writes, reconciliation, chain `42161`, native USDC,
-checkout/pass/split addresses, PublicNode fallback, and block `484866936` are
-safe source defaults rather than dashboard variables.
+- The server validates each Magic DID token before it creates a session.
+- The server stores only a hash of each opaque session token.
+- Secure deployments use `Secure`, `HttpOnly`, and `SameSite` cookies.
+- The server fixes each payment amount, token, destination, and contract call.
+- OpenTab verifies the EIP-7702 chain, target, nonce, and code before use.
+- OpenTab records provider operations before it waits for finality.
+- The indexer checks the receipt, decoded event, block hash, and confirmation
+  depth.
+- Smart contracts use replay protection, exact accounting, role separation,
+  pause controls, and reentrancy protection.
+- Logs redact tokens, cookies, email addresses, IP addresses, signatures, keys,
+  and vendor payloads.
+- Feature switches can stop new money operations without removing access to
+  existing receipts and reconciliation.
 
-Railway's deployment health check uses `/health/live`, because a newly started
-worker is alive while it catches up from the deployment block. During that
-catch-up, `/health/ready` correctly returns HTTP 503 with reason `starting` or
-`lagging`; during a rolling deployment it may briefly report `standby` while
-the previous container owns the single-active-worker lease. Standby is live,
-does not count as a scan failure, and takes over automatically after handoff.
-Wait for HTTP 200 with `"ready": true` before payment activation. The
-reconciliation worker starts safely without a profile and discovers each new
-immutable Supabase certification stage within 15 seconds—no Railway restart or
-profile environment-variable copy is required.
+Do not put credentials, private keys, wallet tokens, session cookies, or raw
+signatures in an issue, log, fixture, screenshot, or support message. Send a
+sensitive security report to the repository owner through a private channel.
 
-No Magic secret, DID token, KMS credential/identifier, private key, session
-secret, or Vercel OIDC credential belongs in the Railway indexer.
+## License
 
-### One-time payment activation
-
-Push the configured GitHub branch and wait for its automatic Vercel and Railway
-deployments. Set `PARTICLE_LIVE_ENABLED=true` and `PAYMENTS_ENABLED=true` on
-Vercel before that deployment; the database profile gate still keeps ordinary
-customer checkout closed until activation succeeds. Visit `/operator/particle`,
-sign in with the Magic payment-operator account, and enter
-`PARTICLE_CERTIFICATION_TOKEN`. The same strong value must be stored as the
-server-only Vercel environment variable; it must never use a `NEXT_PUBLIC_`
-name. Leaving it unset now keeps normal APIs online but disables this privileged
-activation/rotation action.
-
-The page presents one resumable activation journey. Select an existing active
-product priced at no more than 1 USDC, or let OpenTab create its fixed 0.10-USDC
-activation item. Creating the item on a fresh account requires three exact
-Magic-approved setup transactions, so the displayed EOA needs a small Arbitrum
-ETH fee balance. The final screen shows the exact activation amount and route
-fees before the single Particle payment approval. The EOA also needs enough
-supported non-Arbitrum value to cover that payment and its route fees.
-
-The profile is stored centrally in Supabase and bound to the Particle project,
-Arbitrum contracts/token, operator subject, delegate code hash, source-token
-policy, and activation item. It is deliberately reused across ordinary Git
-redeploys during this run. Railway and every warm Vercel instance reload it
-automatically. Normal checkout opens only after Railway has indexed the
-confirmed `OrderPaid` event and issued the pass; Particle success by itself is
-not sufficient. Customers never repeat project activation.
-
-## Live-provider safety
-
-Live paths fail closed unless environment validation succeeds. The default
-production flags are:
-
-```text
-PAYMENTS_ENABLED=false
-PARTICLE_LIVE_ENABLED=false
-BOOTSTRAP_SPONSOR_ENABLED=false
-BOOTSTRAP_SPONSOR_ALLOWLIST_ONLY=true
-JUDGE_MODE_ENABLED=false
-MERCHANT_MUTATIONS_ENABLED=false
-REFUNDS_ENABLED=false
-WITHDRAWALS_ENABLED=false
-SPLITS_ENABLED=false
-```
-
-Never put Magic DID tokens, private keys, session cookies, signatures, private
-RPC URLs, or raw provider payloads in source or evidence. The credentialed
-cross-chain harness additionally requires an explicit tiny-spend acknowledgement
-and an exact maximum USDC amount. Deterministic tests are not represented as
-live-chain proof.
-
-The deployment-time order signer
-`0x03981bA2a287b173A16b2c0a04088aB33AA98526` is a temporary local encrypted
-EOA dedicated only to EIP-712 order intents; it holds no customer or merchant
-funds. The protected payment-activation flow may use that key from a Vercel encrypted
-Sensitive variable only under `APP_ENV=demo-mainnet`, with
-`DEMO_PRIVATE_KEY_ORDER_SIGNER_ENABLED=true` and
-`ORDER_SIGNER_MODE=private-key`. Preview, staging, and production still reject
-private-key order signers; production requires a managed remote signer.
-
-The local release bundle records the remaining external gates and guarded
-acceptance procedure. It is intentionally excluded from Git by the owner's
-Markdown policy.
-
-## Contracts and payment truth
-
-The non-upgradeable Solidity suite implements merchant/product registration,
-EIP-712 order intents, replay and inventory protection, exact stable-token
-accounting, refundable liabilities, pull-based merchant settlement, refunds,
-withdrawals, non-transferable ERC-1155 receipts/passes, and signed split
-reimbursement. Foundry unit, negative, fuzz, invariant, fork, deployment, gas,
-size, coverage, and Slither evidence is stored under
-[`packages/contracts/evidence`](packages/contracts/evidence).
-
-OpenTab never marks an order paid from a Particle status alone. Only a matching,
-successful, confirmed, canonical `OrderPaid` event from the configured Arbitrum
-checkout contract can make the paid projection authoritative.
-
-## Documentation and release
-
-The local working tree retains the architecture, technical specification, API
-contract, threat model, deployment handoff, final report, blocker ledger,
-evidence matrix, license notes, and third-party notices. They are intentionally
-excluded from Git because this repository's owner policy permits only this
-Markdown file on GitHub. The implementation is original to OpenTab; runtime
-manifests, migrations, ABIs, tests, and deployment evidence remain tracked in
-their non-Markdown formats.
+This repository is unlicensed. No permission to copy, modify, or distribute the
+source is granted unless the repository owner gives written permission.
