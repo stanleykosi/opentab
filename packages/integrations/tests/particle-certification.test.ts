@@ -237,6 +237,48 @@ describe('Particle operator compatibility certification', () => {
     expect(sdk.createUniversalTransaction).toHaveBeenCalledOnce();
   });
 
+  it('surfaces insufficient route balance with the exact Particle method and code', async () => {
+    const { adapter, sdk, checkoutBinding } = fixture();
+    sdk.createUniversalTransaction.mockRejectedValueOnce(
+      Object.assign(new Error('Server error'), {
+        code: -32603,
+        data: { code: 40104, message: 'Insufficient funds' },
+      }),
+    );
+
+    await expect(adapter.captureCanaryReady(checkoutBinding)).rejects.toMatchObject({
+      code: 'UA_INSUFFICIENT_BALANCE',
+      message: expect.stringContaining('0.10 USDC payment plus route fees'),
+      retryable: false,
+      submissionPossible: false,
+      safeDetails: expect.objectContaining({
+        vendor: 'particle',
+        vendorCode: '-32603',
+        vendorCauseCode: '40104',
+        providerMethod: 'universal_createTransaction',
+      }),
+    });
+  });
+
+  it('surfaces rejected route parameters instead of a generic provider error', async () => {
+    const { adapter, sdk, checkoutBinding } = fixture();
+    sdk.createUniversalTransaction.mockRejectedValueOnce(
+      Object.assign(new Error('Invalid parameters'), { code: -32602 }),
+    );
+
+    await expect(adapter.captureCanaryReady(checkoutBinding)).rejects.toMatchObject({
+      code: 'UA_PROVIDER_SCHEMA_INVALID',
+      message: expect.stringContaining('universal_createTransaction parameters (code -32602)'),
+      retryable: false,
+      submissionPossible: false,
+      safeDetails: expect.objectContaining({
+        vendor: 'particle',
+        vendorCode: '-32602',
+        providerMethod: 'universal_createTransaction',
+      }),
+    });
+  });
+
   it('identifies rejected Particle project credentials without exposing provider payloads', async () => {
     const { adapter, sdk } = fixture();
     sdk.getPrimaryAssets.mockRejectedValueOnce(

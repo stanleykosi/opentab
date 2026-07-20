@@ -174,13 +174,17 @@ interface BootstrapCapture {
   readonly delegateAddress: EvmAddress;
 }
 
-type BootstrapProviderMethod =
+type CertificationProviderMethod =
   | 'universal_getUniversalAccount'
   | 'universal_getPrimaryAssets'
   | 'universal_getEIP7702Deployments'
-  | 'universal_createEIP7702DelegationAuth';
+  | 'universal_createEIP7702DelegationAuth'
+  | 'universal_createTransaction';
 
-function particleBootstrapProviderError(method: BootstrapProviderMethod, error: unknown): AppError {
+function particleCertificationProviderError(
+  method: CertificationProviderMethod,
+  error: unknown,
+): AppError {
   if (error instanceof AppError) return error;
   if (error instanceof z.ZodError) {
     const issue = error.issues[0];
@@ -201,18 +205,27 @@ function particleBootstrapProviderError(method: BootstrapProviderMethod, error: 
     );
   }
   const mapped = mapParticleError(error, 'UA_PROVIDER_SCHEMA_INVALID');
-  const vendorCode = mapped.safeDetails?.vendorCode;
+  const vendorCode = mapped.safeDetails?.vendorCauseCode ?? mapped.safeDetails?.vendorCode;
+  const vendorReason = mapped.safeDetails?.vendorReason;
   const diagnostic = mapped.safeDetails?.causeDigest?.slice(2, 14);
   const message =
     vendorCode === '40102'
       ? `Particle rejected the configured project credentials during ${method}. Copy the Project ID, Client Key, and App ID from the same Particle web application, set its domain to opentab-opal.vercel.app, then redeploy Vercel. No transaction was submitted.`
-      : vendorCode === 'ERR_NETWORK'
-        ? `The browser could not reach Particle during ${method}. Confirm the Particle web-app domain is opentab-opal.vercel.app and disable any blocker for universal-rpc-proxy.particle.network, then retry. No transaction was submitted.`
-        : vendorCode === 'ECONNABORTED' || vendorCode === 'ETIMEDOUT'
-          ? `Particle timed out during ${method}. Retry once; if it repeats, report this method and code to Particle support. No transaction was submitted.`
-          : `Particle could not complete ${method}${vendorCode === undefined ? '' : ` (code ${vendorCode})`}${diagnostic === undefined ? '' : `, diagnostic ${diagnostic}`}. No transaction was submitted.`;
+      : vendorReason === 'insufficient_funds'
+        ? `Particle could not prepare the activation route during ${method} because the unified balance is insufficient for the 0.10 USDC payment plus route fees. Add supported non-Arbitrum liquidity, then create a fresh activation preview. No transaction was submitted.`
+        : vendorReason === 'invalid_parameters'
+          ? `Particle rejected the ${method} parameters${vendorCode === undefined ? '' : ` (code ${vendorCode})`}. Verify that the Project ID, Client Key, and App ID belong to the same web app and that its allowed domain is opentab-opal.vercel.app. No transaction was submitted.`
+          : vendorReason === 'unsupported_chain'
+            ? `Particle does not support one of the configured chains during ${method} (code ${vendorCode}). No transaction was submitted.`
+            : vendorReason === 'simulation_failed'
+              ? `Particle could not simulate the exact OpenTab activation payment during ${method} (code ${vendorCode}). Refresh to create an unexpired order, then retry once. No transaction was submitted.`
+              : vendorReason === 'network_unavailable'
+                ? `The browser could not reach Particle during ${method}. Confirm the Particle web-app domain is opentab-opal.vercel.app and disable any blocker for universal-rpc-proxy.particle.network, then retry. No transaction was submitted.`
+                : vendorReason === 'timeout'
+                  ? `Particle timed out during ${method}. Retry once; if it repeats, report this method and code to Particle support. No transaction was submitted.`
+                  : `Particle could not complete ${method}${vendorCode === undefined ? '' : ` (code ${vendorCode})`}${diagnostic === undefined ? '' : `, diagnostic ${diagnostic}`}. No transaction was submitted.`;
   return new AppError(mapped.code, message, {
-    retryable: mapped.retryable,
+    retryable: vendorCode === '40102' ? false : mapped.retryable,
     submissionPossible: false,
     ...(mapped.safeDetails === undefined
       ? { safeDetails: { providerMethod: method } }
@@ -222,7 +235,7 @@ function particleBootstrapProviderError(method: BootstrapProviderMethod, error: 
 }
 
 async function captureBootstrapProviderResponse<T>(
-  method: BootstrapProviderMethod,
+  method: CertificationProviderMethod,
   read: () => Promise<unknown>,
   schema: { parse(value: unknown): T },
 ): Promise<{ readonly raw: unknown; readonly value: T }> {
@@ -230,7 +243,7 @@ async function captureBootstrapProviderResponse<T>(
     const raw = await read();
     return { raw, value: schema.parse(raw) };
   } catch (error) {
-    throw particleBootstrapProviderError(method, error);
+    throw particleCertificationProviderError(method, error);
   }
 }
 
@@ -361,25 +374,31 @@ export class ParticleOperatorCertificationAdapter {
     await this.#assertOwnerContinuity();
     const template = createCheckoutOperationTemplate(binding);
     try {
-      const raw = await this.dependencies.sdk.createUniversalTransaction({
-        chainId: CHAIN_ID.ARBITRUM_MAINNET_ONE,
-        expectTokens: [
-          {
-            type: SUPPORTED_TOKEN_TYPE.USDC,
-            amount: `${BigInt(binding.orderIntent.amountBaseUnits) / 1_000_000n}.${(
-              BigInt(binding.orderIntent.amountBaseUnits) % 1_000_000n
-            )
-              .toString()
-              .padStart(6, '0')}`,
-          },
-        ],
-        transactions: template.calls.map((call) => ({
-          to: call.to,
-          data: call.data,
-          value: toHex(BigInt(call.valueWei)),
-        })),
-      });
-      const prepared = PreparedCaptureSchema.parse(raw);
+      const preparedCapture = await captureBootstrapProviderResponse(
+        'universal_createTransaction',
+        () =>
+          this.dependencies.sdk.createUniversalTransaction({
+            chainId: CHAIN_ID.ARBITRUM_MAINNET_ONE,
+            expectTokens: [
+              {
+                type: SUPPORTED_TOKEN_TYPE.USDC,
+                amount: `${BigInt(binding.orderIntent.amountBaseUnits) / 1_000_000n}.${(
+                  BigInt(binding.orderIntent.amountBaseUnits) % 1_000_000n
+                )
+                  .toString()
+                  .padStart(6, '0')}`,
+              },
+            ],
+            transactions: template.calls.map((call) => ({
+              to: call.to,
+              data: call.data,
+              value: toHex(BigInt(call.valueWei)),
+            })),
+          }),
+        PreparedCaptureSchema,
+      );
+      const raw = preparedCapture.raw;
+      const prepared = preparedCapture.value;
       if (
         !sameEvmAddress(prepared.sender, this.config.ownerAddress) ||
         !sameEvmAddress(prepared.smartAccountOptions.ownerAddress, this.config.ownerAddress) ||

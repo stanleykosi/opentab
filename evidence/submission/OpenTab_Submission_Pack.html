@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OpenTab Submission Pack</title>
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 11mm 13mm 13mm;
+      @bottom-left { content: "OpenTab · Hackathon Submission Pack"; color: #61706a; font-size: 8pt; }
+      @bottom-right { content: "Page " counter(page); color: #61706a; font-size: 8pt; }
+    }
+    :root { --ink:#0e211a; --muted:#52665e; --line:#cfdad5; --paper:#f5f8f6; --blue:#2457ed; --green:#087c58; --sand:#fff5e7; }
+    * { box-sizing: border-box; }
+    body { margin:0; color:var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 9.1pt; line-height:1.32; background:white; }
+    a { color:var(--blue); text-decoration:none; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { font-size:38pt; line-height:.98; letter-spacing:-1.7pt; margin-bottom:8mm; }
+    h2 { font-size:20pt; line-height:1.05; letter-spacing:-.7pt; margin-bottom:3.5mm; }
+    h3 { font-size:11.5pt; margin-bottom:1.3mm; }
+    p { margin-bottom:2.5mm; }
+    .page { page-break-after:always; min-height:176mm; position:relative; overflow:hidden; }
+    .page:last-child { page-break-after:auto; }
+    .eyebrow { color:var(--blue); font-size:8pt; font-weight:800; letter-spacing:1.4pt; text-transform:uppercase; margin-bottom:2mm; }
+    .lede { color:var(--muted); font-size:13.2pt; line-height:1.28; max-width:170mm; }
+    .small { color:var(--muted); font-size:8pt; }
+    .grid-2 { display:flex; gap:9mm; }
+    .grid-2 > * { flex:1; min-width:0; }
+    .grid-3 { display:flex; gap:5mm; }
+    .grid-3 > * { flex:1; min-width:0; }
+    .card { border:1px solid var(--line); border-radius:5mm; padding:3.6mm; background:#fff; }
+    .soft { background:var(--paper); border:0; }
+    .blue { background:var(--blue); color:white; border:0; }
+    .blue p, .blue .small { color:#e7edff; }
+    .metric { font-size:23pt; font-weight:800; letter-spacing:-1pt; display:block; }
+    .pill { display:inline-block; padding:1.4mm 3mm; border-radius:99px; background:#e8eeff; color:#173eaf; font-size:8pt; font-weight:700; margin:0 1.5mm 1.5mm 0; }
+    .status { background:var(--sand); border:1px solid #efc989; border-radius:4mm; padding:4mm 5mm; }
+    .status strong { display:block; margin-bottom:1mm; }
+    .cover { display:flex; gap:10mm; align-items:stretch; }
+    .cover-copy { flex:1.05; }
+    .cover > .hero { flex:.95; min-width:0; }
+    .cover-copy { padding:9mm 3mm 0 2mm; }
+    .logo { width:58mm; height:auto; margin-bottom:18mm; }
+    .hero { width:100%; height:160mm; object-fit:cover; border-radius:7mm; }
+    .links { border-top:1px solid var(--line); margin-top:9mm; padding-top:4mm; font-size:9pt; }
+    .links span { display:block; margin-bottom:1.5mm; }
+    .shot { width:100%; border:1px solid var(--line); border-radius:4mm; display:block; }
+    .caption { color:var(--muted); font-size:7.8pt; margin-top:2mm; }
+    .journey { display:flex; gap:3mm; margin:4.5mm 0; }
+    .journey > * { flex:1; min-width:0; }
+    .step { background:var(--paper); border-radius:4mm; padding:3mm; min-height:25mm; }
+    .step b { width:7mm; height:7mm; border-radius:99px; display:block; background:var(--blue); color:white; text-align:center; line-height:7mm; margin-bottom:3mm; }
+    .feature-list { margin:0; padding-left:5mm; }
+    .feature-list li { margin-bottom:1.6mm; }
+    .architecture { display:flex; align-items:center; gap:3mm; margin:5mm 0; }
+    .node { border:1px solid var(--line); border-radius:4mm; padding:4mm 3mm; text-align:center; min-height:29mm; background:white; flex:1; }
+    .node strong { display:block; margin-bottom:2mm; }
+    .arrow { color:var(--blue); font-size:18pt; font-weight:800; text-align:center; flex:0 0 16mm; }
+    .architecture .arrow + .node { margin-left:0; }
+    .contract { display:flex; gap:3mm; padding:2.2mm 0; border-bottom:1px solid var(--line); }
+    .contract > b { flex:0 0 36mm; }
+    .contract > :last-child { flex:1; min-width:0; }
+    .contract:last-child { border-bottom:0; }
+    .mono { font-family:"DejaVu Sans Mono", ui-monospace, monospace; font-size:7.7pt; overflow-wrap:anywhere; }
+    .check { list-style:none; padding:0; margin:0; }
+    .check li { position:relative; padding-left:7mm; margin-bottom:2mm; }
+    .check li:before { content:"✓"; color:var(--green); font-weight:900; position:absolute; left:0; }
+    .truth { border-left:3px solid var(--green); padding-left:5mm; font-size:11.3pt; }
+    .footer-note { position:absolute; bottom:2mm; left:0; color:var(--muted); font-size:7.7pt; }
+  </style>
+</head>
+<body>
+  <section class="page cover">
+    <div class="cover-copy">
+      <img class="logo" src="../../apps/web/public/brand/opentab-logo.svg" alt="OpenTab">
+      <p class="eyebrow">Hackathon submission · Particle × Magic × Arbitrum</p>
+      <h1>Sell anywhere.<br>Settle with certainty.</h1>
+      <p class="lede">Walletless checkout for events, creators, cafés, and pop-ups—one familiar sign-in, one available balance, and settlement made authoritative on Arbitrum.</p>
+      <div style="margin-top:11mm">
+        <span class="pill">Magic embedded wallet</span>
+        <span class="pill">Particle Universal Accounts</span>
+        <span class="pill">EIP-7702 mode</span>
+        <span class="pill">Arbitrum One settlement</span>
+      </div>
+      <div class="links">
+        <span><b>Live application:</b> <a href="https://opentab-opal.vercel.app">opentab-opal.vercel.app</a></span>
+        <span><b>Source:</b> <a href="https://github.com/stanleykosi/opentab">github.com/stanleykosi/opentab</a></span>
+        <span><b>Submission source revision:</b> <span class="mono">6828c94edc81ad5b37eeca4bab043ec7300f363c</span></span>
+      </div>
+    </div>
+    <img class="hero" src="../../apps/web/public/images/marketing/hero-checkout.jpg" alt="OpenTab checkout on a phone">
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">01 · The product</p>
+    <h2>A checkout customers understand</h2>
+    <div class="grid-2">
+      <div>
+        <p class="lede">OpenTab turns a merchant offer into a shareable link or QR. Customers authenticate with Google or email, review a clear total, and approve without installing a browser wallet or manually choosing a payment network.</p>
+        <div class="journey">
+          <div class="step"><b>1</b><strong>Create</strong><br><span class="small">Price, inventory, terms, rewards</span></div>
+          <div class="step"><b>2</b><strong>Share</strong><br><span class="small">Public link or venue QR</span></div>
+          <div class="step"><b>3</b><strong>Sign in</strong><br><span class="small">Google or email with Magic</span></div>
+          <div class="step"><b>4</b><strong>Review</strong><br><span class="small">Item, cost, maximum total</span></div>
+          <div class="step"><b>5</b><strong>Confirm</strong><br><span class="small">Receipt only after settlement</span></div>
+        </div>
+        <div class="truth"><b>Core truth:</b> a provider response is not payment proof. OpenTab treats a matching, confirmed, canonical Arbitrum <span class="mono">OrderPaid</span> event as authoritative.</div>
+      </div>
+      <div>
+        <img class="shot" src="../../apps/web/public/images/marketing/merchant-qr.jpg" alt="Merchant presenting an OpenTab QR checkout">
+        <p class="caption">One offer can be shared online or presented at a physical venue.</p>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:7mm">
+      <div class="card soft"><h3>Familiar customer journey</h3><p>No extension, seed phrase, manual bridge, network switch, or destination-gas setup in the ordinary checkout experience.</p></div>
+      <div class="card soft"><h3>Complete merchant loop</h3><p>Products, inventory, orders, settlement, refunds, withdrawals, loyalty, analytics, links, and QR sharing.</p></div>
+      <div class="card soft"><h3>Proof without clutter</h3><p>Normal users see calm commerce. A separate public-safe Judge Mode exposes the integration and settlement evidence.</p></div>
+    </div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">02 · Merchant experience</p>
+    <h2>One console from storefront to settlement</h2>
+    <div class="grid-2">
+      <div>
+        <img class="shot" src="../../artifacts/autonomous-build/evidence/ui/chromium/merchant-dashboard.png" alt="OpenTab merchant dashboard">
+        <p class="caption">Deterministic interface capture. Values are synthetic and shown only to demonstrate product behavior.</p>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:4mm"><h3>Overview</h3><p>Confirmed revenue, returning customers, recent orders, and settlement freshness at a glance.</p></div>
+        <div class="card" style="margin-bottom:4mm"><h3>Products</h3><p>Create and manage prices, inventory, availability, purchase limits, event information, checkout links, and QR codes.</p></div>
+        <div class="card" style="margin-bottom:4mm"><h3>Orders and balance</h3><p>Track pending and confirmed states separately. Only confirmed settlement becomes paid revenue or withdrawable balance.</p></div>
+        <div class="card"><h3>Settings and operations</h3><p>Manage storefront information, support details, exports, refunds, withdrawals, and guarded feature controls.</p></div>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:7mm">
+      <div class="card blue"><span class="metric">Exact</span><p>Integer-based USDC accounting—never JavaScript floating point for token base units.</p></div>
+      <div class="card blue"><span class="metric">Reorg-aware</span><p>The indexer verifies confirmations and canonical block hashes before updating merchant projections.</p></div>
+      <div class="card blue"><span class="metric">Recoverable</span><p>Saved operations and idempotency controls prevent refreshes and repeated clicks from creating duplicate payments.</p></div>
+    </div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">03 · Customer and identity experience</p>
+    <h2>Familiar access, durable results</h2>
+    <div class="grid-2">
+      <div>
+        <img class="shot" src="../../artifacts/autonomous-build/evidence/ui/chromium/checkout-preview.png" alt="OpenTab checkout payment review">
+        <p class="caption">Deterministic payment-review capture. The interface shows item cost, estimated payment cost, maximum total, and available balance before approval.</p>
+      </div>
+      <div>
+        <img class="shot" src="../../artifacts/autonomous-build/evidence/ui/chromium/receipt-pass.png" alt="OpenTab receipt and event pass">
+        <p class="caption">Deterministic receipt/pass capture. No live payment is represented by this screenshot.</p>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:7mm">
+      <div class="card soft"><h3>Magic authentication</h3><p>Google or email sign-in provisions the embedded EOA. OpenTab exchanges the DID token for an opaque, server-managed session.</p></div>
+      <div class="card soft"><h3>Same-account EIP-7702 design</h3><p>Particle Universal Accounts is configured with explicit <span class="mono">useEIP7702: true</span>; the Magic EOA remains the owner address.</p></div>
+      <div class="card soft"><h3>After checkout</h3><p>Confirmed customers receive a durable receipt/pass, loyalty progress, refund state, and privacy-safe split-reimbursement tools.</p></div>
+    </div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">04 · Architecture and deployed contracts</p>
+    <h2>Chain abstraction with an authoritative settlement boundary</h2>
+    <div class="architecture">
+      <div class="node"><strong>Customer</strong><span class="small">Link or QR<br>one clear review</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><strong>Magic</strong><span class="small">Google/email<br>embedded EOA</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><strong>Particle UA</strong><span class="small">EIP-7702 mode<br>unified balance route</span></div>
+    </div>
+    <div class="architecture" style="grid-template-columns:1fr 34mm 1fr 34mm 1fr; margin-top:0">
+      <div class="node"><strong>Arbitrum contracts</strong><span class="small">USDC checkout<br>pass and split</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><strong>Canonical indexer</strong><span class="small">Confirmations<br>reorg detection</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><strong>Product result</strong><span class="small">Receipt/pass<br>merchant dashboard</span></div>
+    </div>
+    <div class="grid-2" style="margin-top:6mm">
+      <div class="card soft">
+        <h3>Arbitrum One deployment</h3>
+        <div class="contract"><b>Checkout</b><a class="mono" href="https://arbiscan.io/address/0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91">0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91</a></div>
+        <div class="contract"><b>Pass</b><a class="mono" href="https://arbiscan.io/address/0x56CCBeC6D08f561eCF117964FAB385CBf90A568B">0x56CCBeC6D08f561eCF117964FAB385CBf90A568B</a></div>
+        <div class="contract"><b>Split</b><a class="mono" href="https://arbiscan.io/address/0x7EF7efa8a53530dEa3F077691422AAbEB183049c">0x7EF7efa8a53530dEa3F077691422AAbEB183049c</a></div>
+        <div class="contract"><b>Native USDC</b><a class="mono" href="https://arbiscan.io/address/0xaf88d065e77c8cC2239327C5EDb3A432268e5831">0xaf88d065e77c8cC2239327C5EDb3A432268e5831</a></div>
+      </div>
+      <div class="card">
+        <h3>Deployment facts</h3>
+        <ul class="check">
+          <li>Arbitrum One chain ID <span class="mono">42161</span></li>
+          <li>Canonical deployment block <span class="mono">484866936</span></li>
+          <li>Non-upgradeable Solidity contracts compiled with <span class="mono">0.8.36</span></li>
+          <li>Checkout, pass, and split deployments independently verified</li>
+          <li>Sourcify creation/runtime status recorded as <span class="mono">exact_match</span></li>
+          <li>Contract payment success depends on exact native USDC accounting and unique order protection</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="page">
+    <p class="eyebrow">05 · Evidence, quality, and reviewer links</p>
+    <h2>Built as a product, reviewed as payment infrastructure</h2>
+    <div class="grid-2">
+      <div>
+        <div class="grid-2" style="gap:4mm">
+          <div class="card soft"><span class="metric">22/22</span><p>Recorded desktop/mobile Chromium product-journey and quality matrix.</p></div>
+          <div class="card soft"><span class="metric">12</span><p>Ordered PostgreSQL migrations with separate least-privilege runtime identities.</p></div>
+        </div>
+        <div class="card" style="margin-top:4mm">
+          <h3>Security and correctness</h3>
+          <ul class="check">
+            <li>Strict TypeScript and runtime schemas at network and provider boundaries</li>
+            <li>Foundry unit, negative, fuzz, invariant, fork, gas, size, coverage, and Slither evidence</li>
+            <li>Exact integer/string money handling and contract-enforced accounting invariants</li>
+            <li>Opaque sessions, CSRF/origin controls, redacted logs, and guarded feature flags</li>
+            <li>Canonical event reconciliation, restart recovery, idempotency, and reorg handling</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <img class="shot" src="../../artifacts/autonomous-build/evidence/ui/chromium/judge-proof.png" alt="OpenTab deterministic Judge Mode">
+        <p class="caption">Judge Mode interface capture. It is visibly marked deterministic and is not live payment proof.</p>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:6mm">
+      <div class="card blue"><h3>Try the application</h3><p><a style="color:white" href="https://opentab-opal.vercel.app">https://opentab-opal.vercel.app</a></p></div>
+      <div class="card blue"><h3>Review the source</h3><p><a style="color:white" href="https://github.com/stanleykosi/opentab">https://github.com/stanleykosi/opentab</a></p></div>
+      <div class="card blue"><h3>Review the contracts</h3><p><a style="color:white" href="https://arbiscan.io/address/0x237E5Da5E0a1F7230E6AE93D737b9cecbcfDee91">OpenTabCheckout on Arbiscan</a></p></div>
+    </div>
+    <p class="footer-note">Current status: live Particle checkout remains disabled pending an owner-authorized canary; no Particle operation or checkout OrderPaid event is claimed. Public-safe document: no credentials, signatures, personal email, private RPC URLs, or sensitive provider payloads are included.</p>
+  </section>
+</body>
+</html>
