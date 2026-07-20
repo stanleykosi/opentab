@@ -288,6 +288,23 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
     expect(fake.getEIP7702Auth).toHaveBeenCalledWith([42161]);
   });
 
+  it.each([
+    ['decimal string', '42161'],
+    ['JSON-RPC hex string', '0xa4b1'],
+  ])('normalizes a live %s chain ID before preparing delegation', async (_encoding, chainId) => {
+    const fake = sdk(template);
+    fake.getEIP7702Auth.mockResolvedValueOnce([
+      { chainId, address: implementation, nonce: 7 },
+    ] as unknown as Awaited<ReturnType<typeof fake.getEIP7702Auth>>);
+    const adapter = new ParticleUniversalAccountAdapter(fake, config());
+
+    await expect(adapter.prepareDelegation()).resolves.toMatchObject({
+      chainId: ARBITRUM_ONE_CHAIN_ID,
+      implementationAddress: implementation,
+      nonce: '8',
+    });
+  });
+
   it('validates exact destination calls, source policy, hard fee, and explicit delegation', async () => {
     const fake = sdk(template);
     const adapter = new ParticleUniversalAccountAdapter(fake, config());

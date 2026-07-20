@@ -50,6 +50,7 @@ import {
 } from 'viem';
 import { z } from 'zod';
 import { adapterEvidence, digestUnknown } from './evidence.js';
+import { ParticleResponseChainIdSchema } from './particle-response-schemas.js';
 import { mapParticleError } from './vendor-errors.js';
 
 const PARTICLE_PACKAGE_VERSION = '2.0.3';
@@ -128,7 +129,7 @@ const DeploymentResponseSchema = z.array(DeploymentRecordSchema).min(1);
 
 const DelegationAuthRecordSchema = z
   .object({
-    chainId: z.number().int().positive().safe().optional(),
+    chainId: ParticleResponseChainIdSchema.optional(),
     address: EvmAddressSchema,
     nonce: z.number().int().nonnegative().safe(),
   })

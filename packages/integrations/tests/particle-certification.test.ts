@@ -177,6 +177,33 @@ describe('Particle operator compatibility certification', () => {
     expect(magic.probeDelegationAuthorizationNonce).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['decimal string', '42161'],
+    ['JSON-RPC hex string', '0xa4b1'],
+  ])('normalizes a live %s authorization chain ID', async (_encoding, chainId) => {
+    const { adapter, sdk } = fixture();
+    sdk.getEIP7702Auth.mockResolvedValueOnce([
+      { chainId, address: delegate, nonce: 7 },
+    ] as unknown as Awaited<ReturnType<typeof sdk.getEIP7702Auth>>);
+
+    await expect(adapter.captureBootstrap()).resolves.toMatchObject({
+      profile: { stage: 'bootstrap', chainId: ARBITRUM_ONE_CHAIN_ID },
+    });
+  });
+
+  it('rejects a normalized authorization for a chain other than Arbitrum One', async () => {
+    const { adapter, sdk } = fixture();
+    sdk.getEIP7702Auth.mockResolvedValueOnce([
+      { chainId: '8453', address: delegate, nonce: 7 },
+    ] as unknown as Awaited<ReturnType<typeof sdk.getEIP7702Auth>>);
+
+    await expect(adapter.captureBootstrap()).rejects.toMatchObject({
+      code: 'UA_PROVIDER_SCHEMA_INVALID',
+      message: 'Particle returned a wrong-chain delegation authorization.',
+      submissionPossible: false,
+    });
+  });
+
   it('captures a distinct canary-ready semantic policy without raw route data', async () => {
     const { adapter, sdk, checkoutBinding, sourceCalldata, prepared } = fixture();
     const result = await adapter.captureCanaryReady(checkoutBinding);

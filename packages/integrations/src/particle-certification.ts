@@ -22,6 +22,7 @@ import { getAddress, type Hex, keccak256, toHex } from 'viem';
 import { z } from 'zod';
 import { digestUnknown } from './evidence.js';
 import { createCheckoutOperationTemplate } from './particle.js';
+import { ParticleResponseChainIdSchema } from './particle-response-schemas.js';
 import { mapParticleError } from './vendor-errors.js';
 
 const ARBITRUM_CHAIN_NUMBER = Number(ARBITRUM_ONE_CHAIN_ID);
@@ -63,7 +64,7 @@ const DeploymentSchema = z
 
 const AuthSchema = z
   .object({
-    chainId: z.number().int().positive().safe().optional(),
+    chainId: ParticleResponseChainIdSchema.optional(),
     address: EvmAddressSchema,
     nonce: z.number().int().nonnegative().safe(),
   })
@@ -569,9 +570,19 @@ export class ParticleOperatorCertificationAdapter {
       const deployments = deploymentsCapture.value;
       const authRaw = authCapture.raw;
       const [auth] = authCapture.value;
+      if (auth === undefined) {
+        throw new AppError(
+          'UA_PROVIDER_SCHEMA_INVALID',
+          'Particle omitted the Arbitrum delegation authorization.',
+        );
+      }
+      if (auth.chainId !== undefined && auth.chainId !== ARBITRUM_CHAIN_NUMBER) {
+        throw new AppError(
+          'UA_PROVIDER_SCHEMA_INVALID',
+          'Particle returned a wrong-chain delegation authorization.',
+        );
+      }
       if (
-        auth === undefined ||
-        (auth.chainId !== undefined && auth.chainId !== ARBITRUM_CHAIN_NUMBER) ||
         !sameEvmAddress(account.ownerAddress, this.config.ownerAddress) ||
         !sameEvmAddress(account.smartAccountAddress, this.config.ownerAddress)
       ) {
