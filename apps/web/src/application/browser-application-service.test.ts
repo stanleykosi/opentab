@@ -11,7 +11,11 @@ import {
 } from '@opentab/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserApiClient } from './browser-api-client';
-import { BrowserApplicationService, type ContinuationStore } from './browser-application-service';
+import {
+  BrowserApplicationService,
+  type ContinuationStore,
+  createBrowserIdempotencyKey,
+} from './browser-application-service';
 
 const owner = '0x1111111111111111111111111111111111111111' as EvmAddress;
 const digest = `0x${'1'.repeat(64)}`;
@@ -397,6 +401,18 @@ function checkoutFetcher() {
 }
 
 describe('browser application service boundaries', () => {
+  it('bounds the full Particle checkout scope to the server idempotency-key contract', () => {
+    const nonce = '00000000-0000-4000-8000-000000000000';
+    const scope = `particle-certification.checkout.${'a'.repeat(40)}.prd_${'0'.repeat(26)}`;
+    const key = createBrowserIdempotencyKey(scope, nonce);
+
+    expect(key).toHaveLength(128);
+    expect(key).toMatch(/^[A-Za-z0-9._~-]+$/);
+    expect(key).toContain('particle-certification.checkout');
+    expect(key).toContain(`prd_${'0'.repeat(26)}`);
+    expect(key.endsWith(`.${nonce}`)).toBe(true);
+  });
+
   it('restores the server session without importing wallet integrations', async () => {
     const fetcher = vi.fn<typeof fetch>(async () => json(session()));
     const loader = vi.fn();

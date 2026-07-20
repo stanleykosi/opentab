@@ -240,8 +240,44 @@ function decimalUsdToMicros(value: string): string {
   return (BigInt(whole) * 1_000_000n + BigInt(fraction)).toString();
 }
 
-function idempotencyKey(scope: string): string {
-  return `web.${scope}.${globalThis.crypto.randomUUID()}`;
+const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._~-]+$/;
+
+export function createBrowserIdempotencyKey(
+  scope: string,
+  nonce = globalThis.crypto.randomUUID(),
+): string {
+  if (scope.length === 0 || !IDEMPOTENCY_KEY_PATTERN.test(scope)) {
+    throw new BrowserApiError({
+      code: 'CONFIGURATION_INVALID',
+      message: 'The browser operation reference is invalid.',
+      status: 0,
+    });
+  }
+  const fixedLength = 'web.'.length + '.'.length + nonce.length;
+  const maximumScopeLength = IDEMPOTENCY_KEY_MAX_LENGTH - fixedLength;
+  if (maximumScopeLength < 1 || !IDEMPOTENCY_KEY_PATTERN.test(nonce)) {
+    throw new BrowserApiError({
+      code: 'CONFIGURATION_INVALID',
+      message: 'The browser operation nonce is invalid.',
+      status: 0,
+    });
+  }
+  const boundedScope =
+    scope.length <= maximumScopeLength
+      ? scope
+      : `${scope.slice(0, Math.ceil((maximumScopeLength - 1) / 2))}~${scope.slice(
+          -Math.floor((maximumScopeLength - 1) / 2),
+        )}`;
+  const value = `web.${boundedScope}.${nonce}`;
+  if (value.length < 16 || value.length > IDEMPOTENCY_KEY_MAX_LENGTH) {
+    throw new BrowserApiError({
+      code: 'CONFIGURATION_INVALID',
+      message: 'The browser operation reference is outside the supported size.',
+      status: 0,
+    });
+  }
+  return value;
 }
 
 function certificationIdempotencyKey(
@@ -372,7 +408,7 @@ export class BrowserApplicationService {
     this.#continuationStore = options.continuationStore ?? browserContinuationStore();
     this.#origin = options.origin ?? (() => window.location.origin);
     this.#submissionLock = options.submissionLock ?? browserSubmissionLock();
-    this.#createIdempotencyKey = options.createIdempotencyKey ?? idempotencyKey;
+    this.#createIdempotencyKey = options.createIdempotencyKey ?? createBrowserIdempotencyKey;
     this.#wait =
       options.wait ??
       ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));

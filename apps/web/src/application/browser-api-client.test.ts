@@ -20,6 +20,19 @@ function json(value: unknown, status = 200): Response {
 describe('browser API client session handling', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('rejects an invalid idempotency key before dispatching a request', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const client = new BrowserApiClient({ fetcher });
+
+    await expect(
+      client.createCheckoutSession(
+        { productId: `prd_${'0'.repeat(26)}`, quantity: '1' },
+        'too-short',
+      ),
+    ).rejects.toMatchObject({ code: 'CONFIGURATION_INVALID' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('binds the native browser fetch receiver before restoring a session', async () => {
     const guardedFetch = vi.fn<typeof fetch>(function (this: unknown) {
       if (this !== globalThis) throw new TypeError('Illegal invocation');
@@ -186,7 +199,7 @@ describe('browser API client session handling', () => {
     await client.restoreSession();
 
     await client.evaluateBootstrapEligibility(eligibilityToken, 'eligibility-key-1');
-    await client.requestBootstrapGrant(grantToken, 'grant-key-1');
+    await client.requestBootstrapGrant(grantToken, 'grant-key-0000001');
 
     expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
       challengeToken: eligibilityToken,

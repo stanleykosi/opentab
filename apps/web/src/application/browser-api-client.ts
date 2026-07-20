@@ -46,6 +46,11 @@ export {
 } from './public-session-api-client';
 
 const RequestIdSchema = z.string().min(1).max(128);
+const IdempotencyKeySchema = z
+  .string()
+  .min(16)
+  .max(128)
+  .regex(/^[A-Za-z0-9._~-]+$/);
 const DateTimeSchema = z.string().datetime();
 const UnsignedIntegerSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
 const SplitCapabilityReferenceSchema = z
@@ -1449,7 +1454,15 @@ export class BrowserApiClient {
       headers.set('X-CSRF-Token', this.#csrfToken);
     }
     if (options.idempotencyKey !== undefined) {
-      headers.set('Idempotency-Key', options.idempotencyKey);
+      const idempotencyKey = IdempotencyKeySchema.safeParse(options.idempotencyKey);
+      if (!idempotencyKey.success) {
+        throw new BrowserApiError({
+          code: 'CONFIGURATION_INVALID',
+          message: 'The browser operation reference is invalid.',
+          status: 0,
+        });
+      }
+      headers.set('Idempotency-Key', idempotencyKey.data);
     }
     let response: Response;
     try {
