@@ -34,7 +34,7 @@ import { PostgresSessionService } from '../src/session-service.js';
 import { PostgresUnitOfWork } from '../src/unit-of-work.js';
 import { PostgresWorkflowStore } from '../src/workflow-store.js';
 
-const databaseUrl = process.env['DATABASE_URL_TEST'];
+const databaseUrl = process.env.DATABASE_URL_TEST;
 const OLD_SESSION_PEPPER = 'old-session-pepper-'.padEnd(40, 's');
 const NEW_SESSION_PEPPER = 'new-session-pepper-'.padEnd(40, 'n');
 const OLD_CSRF_PEPPER = 'old-csrf-pepper-'.padEnd(40, 'c');
@@ -452,11 +452,14 @@ describe.skipIf(databaseUrl === undefined)(
       workflowFixtures.push({ merchantId, productId, checkoutId, orderId, attemptId });
       const payout = address();
       const orderKey = digest();
+      const merchantOnchainId = BigInt(`0x${randomBytes(8).toString('hex')}`).toString();
+      const productOnchainId = BigInt(`0x${randomBytes(8).toString('hex')}`).toString();
       await uow
         .current()
         .insert(merchants)
         .values({
           id: merchantId,
+          onchainMerchantId: merchantOnchainId,
           ownerUserId: created.user.id,
           slug: `merchant-${randomUUID()}`,
           displayName: 'CAS merchant',
@@ -471,6 +474,7 @@ describe.skipIf(databaseUrl === undefined)(
         .values({
           id: productId,
           merchantId,
+          onchainProductId: productOnchainId,
           slug: `product-${randomUUID()}`,
           title: 'CAS product',
           description: 'Concurrent transition fixture',
@@ -537,6 +541,11 @@ describe.skipIf(databaseUrl === undefined)(
       const intruder = await service.create(identity(now));
       userIds.add(intruder.user.id);
       const workflow = new PostgresWorkflowStore(uow);
+      await expect(workflow.findAuthoritativeProduct(productId)).resolves.toMatchObject({
+        active: true,
+        merchantOnchainId,
+        productOnchainId,
+      });
       await expect(
         workflow.recordPreparedAttempt({
           attemptId,

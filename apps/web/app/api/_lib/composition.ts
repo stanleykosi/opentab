@@ -1408,7 +1408,7 @@ export async function createBackendApiRegistry(
     rateLimits,
     requestLog: {
       info: (fields) => apiLogger.info(fields, 'API request completed'),
-      error: (fields) => apiLogger.error(fields, 'API request failed'),
+      error: (error, fields) => apiLogger.error({ ...fields, err: error }, 'API request failed'),
     },
     allowedOrigin: config.NEXT_PUBLIC_APP_ORIGIN,
     sessionCookieName: secureCookies ? '__Host-opentab_session' : 'opentab_session',

@@ -43,8 +43,16 @@ function sanitizeString(value: string): string {
   return sanitized.length > 2_000 ? `${sanitized.slice(0, 2_000)}…` : sanitized;
 }
 
-export function sanitizeError(error: unknown, includeStack = false): SafeLogValue {
+function sanitizeErrorValue(
+  error: unknown,
+  includeStack: boolean,
+  depth: number,
+  seen: WeakSet<object>,
+): SafeLogValue {
+  if (depth > 4) return '[TRUNCATED]';
   if (!(error instanceof Error)) return sanitizeTelemetry(error);
+  if (seen.has(error)) return '[CIRCULAR]';
+  seen.add(error);
   const stack = includeStack
     ? error.stack
         ?.split('\n')
@@ -52,11 +60,20 @@ export function sanitizeError(error: unknown, includeStack = false): SafeLogValu
         .map((line) => sanitizeString(line))
         .join('\n')
     : undefined;
+  const coded = error as Error & { readonly cause?: unknown; readonly code?: unknown };
   return {
     type: sanitizeString(error.name),
     message: sanitizeString(error.message),
+    ...(typeof coded.code === 'string' ? { code: sanitizeString(coded.code) } : {}),
     ...(stack === undefined ? {} : { stack }),
+    ...(coded.cause === undefined
+      ? {}
+      : { cause: sanitizeErrorValue(coded.cause, includeStack, depth + 1, seen) }),
   };
+}
+
+export function sanitizeError(error: unknown, includeStack = false): SafeLogValue {
+  return sanitizeErrorValue(error, includeStack, 0, new WeakSet<object>());
 }
 
 export function sanitizeTelemetry(value: unknown, depth = 0): SafeLogValue {

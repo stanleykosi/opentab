@@ -45,7 +45,7 @@ export interface BackendApiRegistry {
   readonly rateLimits: RateLimitPort;
   readonly requestLog: {
     info(fields: Readonly<Record<string, string | number | boolean>>): void;
-    error(fields: Readonly<Record<string, string | number | boolean>>): void;
+    error(error: unknown, fields: Readonly<Record<string, string | number | boolean>>): void;
   };
   readonly allowedOrigin: string;
   readonly sessionCookieName: '__Host-opentab_session' | 'opentab_session';

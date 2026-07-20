@@ -115,7 +115,43 @@ describe('HTTP rate-limit and redacted logging boundary', () => {
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBe('17');
     expect(info).not.toHaveBeenCalled();
-    expect(error).toHaveBeenCalledWith(expect.objectContaining({ status: 429 }));
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'RATE_LIMITED' }),
+      expect.objectContaining({ status: 429 }),
+    );
+  });
+
+  it('keeps unexpected failures generic for the client and attaches the exception to its request log', async () => {
+    const info = vi.fn();
+    const error = vi.fn();
+    install({ info, error });
+    const failure = new TypeError('value.toISOString is not a function');
+    const response = await handleMutation({
+      request: new Request('https://opentab.example/api/v1/operator/particle-certification', {
+        method: 'POST',
+        headers: { origin: 'https://opentab.example', 'content-type': 'application/json' },
+        body: '{}',
+      }),
+      schema: z.object({}).strict(),
+      auth: 'none',
+      execute: async () => {
+        throw failure;
+      },
+    });
+
+    const body = await response.json();
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+    expect(JSON.stringify(body)).not.toContain(failure.message);
+    expect(error).toHaveBeenCalledWith(
+      failure,
+      expect.objectContaining({
+        path: '/api/v1/operator/particle-certification',
+        status: 503,
+        requestId: body.error.requestId,
+      }),
+    );
+    expect(info).not.toHaveBeenCalled();
   });
 
   it.each([

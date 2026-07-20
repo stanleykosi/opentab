@@ -35,8 +35,10 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { DrizzleMerchantRepository, DrizzleProductRepository } from './repositories.js';
 import {
   checkoutSessions,
+  merchants,
   orders,
   paymentAttempts,
+  products,
   refunds,
   settlementCredits,
   signedOrderIntents,
@@ -147,17 +149,14 @@ export class PostgresWorkflowStore
     const [projection] = await this.uow
       .current()
       .select({
-        productSync: sql<string>`chain_sync_status`,
-        merchantOnchainId: sql<string | null>`(
-          select onchain_merchant_id::text from merchants where id = ${product.merchantId}
-        )`,
-        merchantSync: sql<string | null>`(
-          select chain_sync_status::text from merchants where id = ${product.merchantId}
-        )`,
-        observedAt: sql<Date>`updated_at`,
+        productSync: products.chainSyncStatus,
+        merchantOnchainId: merchants.onchainMerchantId,
+        merchantSync: merchants.chainSyncStatus,
+        observedAt: products.updatedAt,
       })
-      .from(sql`products`)
-      .where(sql`id = ${productId}`)
+      .from(products)
+      .innerJoin(merchants, eq(merchants.id, products.merchantId))
+      .where(and(eq(products.id, productId), eq(merchants.id, product.merchantId)))
       .limit(1);
     if (projection?.merchantOnchainId === null || projection?.merchantOnchainId === undefined)
       return undefined;

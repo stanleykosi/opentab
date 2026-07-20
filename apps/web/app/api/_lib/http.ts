@@ -436,6 +436,7 @@ export async function handleMutation<T>(input: {
     const response = errorResponse(error, requestId);
     try {
       getBackendApiRegistry().requestLog.error(
+        error,
         requestLogFields(input.request, requestId, startedAt, response.status),
       );
     } catch {
@@ -518,6 +519,7 @@ export async function handleQuery(input: {
     const response = errorResponse(error, requestId);
     try {
       getBackendApiRegistry().requestLog.error(
+        error,
         requestLogFields(input.request, requestId, startedAt, response.status),
       );
     } catch {

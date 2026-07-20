@@ -40,6 +40,17 @@ describe('telemetry redaction', () => {
     expect(sanitizeError(new Error('safe failure'), false)).not.toHaveProperty('stack');
   });
 
+  it('preserves a redacted causal chain for production request diagnostics', () => {
+    const secret = `0x${'9'.repeat(64)}`;
+    const cause = new TypeError(`value.toISOString failed after ${secret}`);
+    const error = new Error('Stored compatibility certification failed closed.', { cause });
+    const serialized = JSON.stringify(sanitizeError(error, false));
+
+    expect(serialized).toContain('value.toISOString failed');
+    expect(serialized).not.toContain(secret);
+    expect(serialized).toContain(REDACTED);
+  });
+
   it('redacts embedded private keys, root hashes, signatures, JWTs, and bearer credentials', () => {
     const privateKey = `0x${'a'.repeat(64)}`;
     const signature = `0x${'b'.repeat(130)}`;
