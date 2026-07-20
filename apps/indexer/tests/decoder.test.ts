@@ -12,6 +12,7 @@ const token = EvmAddressSchema.parse(`0x${'4'.repeat(40)}`);
 const txHash = TransactionHashSchema.parse(`0x${'5'.repeat(64)}`);
 const orderKey = `0x${'6'.repeat(64)}` as const;
 const intentDigest = `0x${'7'.repeat(64)}` as const;
+const metadataHash = `0x${'a'.repeat(64)}` as const;
 
 function baseLog(): RawContractLog {
   return {
@@ -59,7 +60,7 @@ describe('versioned contract event decoder', () => {
       kind: 'decoded',
       event: {
         eventName: 'OrderPaid',
-        decoderVersion: 'opentab-contract-events-v4',
+        decoderVersion: 'opentab-contract-events-v5',
         fields: {
           orderKey,
           merchantId: '9',
@@ -73,6 +74,47 @@ describe('versioned contract event decoder', () => {
           passTokenId: '7',
           refundDeadline: '1800000000',
           intentDigest,
+        },
+      },
+    });
+  });
+
+  it('normalizes ProductCreated uint32 fields decoded by viem as safe numbers', () => {
+    const topics = encodeEventTopics({
+      abi: OPEN_TAB_EVENT_ABI,
+      eventName: 'ProductCreated',
+      args: { productId: 1n, merchantId: 1n, version: 1n },
+    });
+    const data = encodeAbiParameters(
+      parseAbiParameters(
+        'uint128 unitPrice,uint64 startsAt,uint64 endsAt,uint64 maxSupply,uint64 maxPerWallet,uint32 loyaltyPoints,uint32 refundWindow,bytes32 metadataHash',
+      ),
+      [100_000n, 1_735_689_600n, 0n, 100n, 1n, 1, 0, metadataHash],
+    );
+
+    expect(
+      new OpenTabContractLogDecoder().decode({
+        ...baseLog(),
+        topics: topics as readonly `0x${string}`[],
+        data,
+      }),
+    ).toEqual({
+      kind: 'decoded',
+      event: {
+        eventName: 'ProductCreated',
+        decoderVersion: 'opentab-contract-events-v5',
+        fields: {
+          productId: '1',
+          merchantId: '1',
+          version: '1',
+          unitPrice: '100000',
+          startsAt: '1735689600',
+          endsAt: '0',
+          maxSupply: '100',
+          maxPerWallet: '1',
+          loyaltyPoints: '1',
+          refundWindow: '0',
+          metadataHash,
         },
       },
     });

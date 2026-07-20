@@ -1,6 +1,7 @@
 import type { ArbitrumReadPort, RawContractLog } from '@opentab/application';
 import { ARBITRUM_ONE_CHAIN_ID, EvmAddressSchema, TransactionHashSchema } from '@opentab/shared';
 import { describe, expect, it } from 'vitest';
+import { digestRawLog } from '../src/decoder.js';
 import { IndexerScanner, type IndexerScannerOptions } from '../src/scanner.js';
 import type {
   ContractLogDecoder,
@@ -8,6 +9,7 @@ import type {
   IndexedLog,
   IndexerCursor,
   IndexerStore,
+  QuarantinedLogReference,
   ReorgDetails,
 } from '../src/types.js';
 
@@ -67,6 +69,8 @@ class MemoryStore implements IndexerStore {
   }[] = [];
   readonly canonicalBlocks = new Map<bigint, IndexedBlock>();
   readonly uniqueLogIdentities = new Set<string>();
+  quarantinedLogs: readonly QuarantinedLogReference[] = [];
+  readonly reprocessedLogs: IndexedLog[] = [];
 
   constructor(startBlock = 1n) {
     this.cursor = {
@@ -128,6 +132,15 @@ class MemoryStore implements IndexerStore {
 
   async replayQuarantined(): Promise<number> {
     return 0;
+  }
+
+  async loadQuarantinedLogs(): Promise<readonly QuarantinedLogReference[]> {
+    return this.quarantinedLogs;
+  }
+
+  async reprocessQuarantinedLog(input: { log: IndexedLog }): Promise<boolean> {
+    this.reprocessedLogs.push(input.log);
+    return input.log.decoded.kind === 'decoded';
   }
 }
 
@@ -208,6 +221,41 @@ function options(overrides: Partial<IndexerScannerOptions> = {}): IndexerScanner
 }
 
 describe('IndexerScanner deterministic range processing', () => {
+  it('re-fetches and re-decodes an unresolved decoder quarantine without rewinding the cursor', async () => {
+    const source = new MemorySource();
+    source.latest = 4;
+    const quarantined = rawLog(3, 0);
+    source.logs = [quarantined];
+    const store = new MemoryStore(5n);
+    store.quarantinedLogs = [
+      {
+        canonicalLogId: 'canonical-log-1',
+        chainId,
+        stream: 'checkout',
+        contractAddress: quarantined.contractAddress,
+        transactionHash: quarantined.transactionHash,
+        blockNumber: 3n,
+        blockHash: quarantined.blockHash,
+        logIndex: 0,
+        payloadDigest: digestRawLog(quarantined),
+        observedAt: now,
+      },
+    ];
+
+    await expect(
+      new IndexerScanner(source, store, decoder, options()).scanOnce(),
+    ).resolves.toMatchObject({
+      kind: 'idle',
+    });
+    expect(source.logRanges).toContain('3-3');
+    expect(store.reprocessedLogs).toHaveLength(1);
+    expect(store.reprocessedLogs[0]?.decoded).toMatchObject({
+      kind: 'decoded',
+      event: { eventName: 'OrderPaid' },
+    });
+    expect(store.cursor.nextBlock).toBe(5n);
+  });
+
   it('loads sparse canonical checkpoints concurrently instead of every empty block', async () => {
     const source = new MemorySource();
     source.latest = 12;

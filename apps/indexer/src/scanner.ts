@@ -186,6 +186,8 @@ export class IndexerScanner {
       };
     }
 
+    await this.#reprocessDecoderQuarantines(latestBlock, safeHead);
+
     if (safeHead < cursor.nextBlock) {
       return {
         kind: 'idle',
@@ -256,6 +258,60 @@ export class IndexerScanner {
       processedLogs: logs.length,
       lagBlocks: safeHead > toBlock ? safeHead - toBlock : 0n,
     };
+  }
+
+  async #reprocessDecoderQuarantines(latestBlock: bigint, safeHead: bigint): Promise<void> {
+    const references = await this.store.loadQuarantinedLogs({
+      chainId: this.options.chainId,
+      stream: this.options.stream,
+      decoderVersion: this.decoder.version,
+      limit: 25,
+    });
+    for (const reference of references) {
+      if (reference.blockNumber > safeHead) continue;
+      const canonicalBlock = await this.source.getBlock(reference.blockNumber.toString());
+      if (canonicalBlock.hash.toLowerCase() !== reference.blockHash.toLowerCase()) {
+        throw new AppError(
+          'RPC_INCONSISTENT',
+          'A quarantined event no longer belongs to its recorded canonical block.',
+          { retryable: true },
+        );
+      }
+      const candidates = await this.source.getLogs({
+        fromBlock: reference.blockNumber.toString(),
+        toBlock: reference.blockNumber.toString(),
+        addresses: [reference.contractAddress],
+      });
+      const raw = candidates.find(
+        (candidate) =>
+          candidate.transactionHash.toLowerCase() === reference.transactionHash.toLowerCase() &&
+          candidate.blockHash.toLowerCase() === reference.blockHash.toLowerCase() &&
+          Number(candidate.logIndex) === reference.logIndex,
+      );
+      if (
+        raw === undefined ||
+        digestRawLog(raw).toLowerCase() !== reference.payloadDigest.toLowerCase()
+      ) {
+        throw new AppError(
+          'RPC_INCONSISTENT',
+          'A quarantined event could not be reproduced from the configured RPC.',
+          { retryable: true },
+        );
+      }
+      const decoded = this.decoder.decode(raw);
+      this.#assertEventContractRole(raw, decoded);
+      await this.store.reprocessQuarantinedLog({
+        canonicalLogId: reference.canonicalLogId,
+        log: {
+          raw,
+          decoded,
+          payloadDigest: reference.payloadDigest,
+          confirmations: latestBlock - reference.blockNumber + 1n,
+          observedAt: reference.observedAt,
+        },
+        now: this.#now(),
+      });
+    }
   }
 
   #assertEventContractRole(raw: RawContractLog, decoded: IndexedLog['decoded']): void {

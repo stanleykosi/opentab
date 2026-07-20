@@ -3,7 +3,7 @@ import type { RawContractLog } from '@opentab/application';
 import { decodeEventLog, parseAbi } from 'viem';
 import type { ContractLogDecoder, DecodeResult } from './types.js';
 
-export const OPEN_TAB_EVENT_DECODER_VERSION = 'opentab-contract-events-v4' as const;
+export const OPEN_TAB_EVENT_DECODER_VERSION = 'opentab-contract-events-v5' as const;
 
 // This versioned list is compatibility-tested against Foundry artifacts. It is
 // deliberately local to the worker so an ABI drift fails closed at decoding.
@@ -54,6 +54,13 @@ function unknownRecord(value: unknown): Readonly<Record<string, unknown>> | unde
 
 function normalizeField(value: unknown): string | undefined {
   if (typeof value === 'bigint') return value.toString();
+  // viem intentionally decodes ABI integers up to 48 bits as JavaScript
+  // numbers. All such fields in the allowlisted OpenTab events are unsigned,
+  // so accept only exact non-negative integers and normalize them at the
+  // boundary just like wider bigint values.
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    return value.toString();
+  }
   if (typeof value === 'string') return value;
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   return undefined;

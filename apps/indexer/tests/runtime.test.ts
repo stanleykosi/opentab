@@ -3,7 +3,13 @@ import { ARBITRUM_ONE_CHAIN_ID, EvmAddressSchema } from '@opentab/shared';
 import { describe, expect, it } from 'vitest';
 import { parseIndexerRuntimeConfig } from '../src/config.js';
 import { startIndexerRuntime } from '../src/runtime.js';
-import type { IndexedBlock, IndexerCursor, IndexerStore } from '../src/types.js';
+import type {
+  IndexedBlock,
+  IndexedLog,
+  IndexerCursor,
+  IndexerStore,
+  QuarantinedLogReference,
+} from '../src/types.js';
 
 const checkout = EvmAddressSchema.parse(`0x${'1'.repeat(40)}`);
 const pass = EvmAddressSchema.parse(`0x${'2'.repeat(40)}`);
@@ -81,6 +87,14 @@ class RuntimeStore implements IndexerStore {
 
   async replayQuarantined(): Promise<number> {
     return 0;
+  }
+
+  async loadQuarantinedLogs(): Promise<readonly QuarantinedLogReference[]> {
+    return [];
+  }
+
+  async reprocessQuarantinedLog(_input: { log: IndexedLog }): Promise<boolean> {
+    return false;
   }
 }
 

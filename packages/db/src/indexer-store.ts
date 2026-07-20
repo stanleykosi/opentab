@@ -1517,6 +1517,173 @@ export class PostgresIndexerStore {
     });
   }
 
+  async loadQuarantinedLogs(input: {
+    chainId: ChainId;
+    stream: string;
+    decoderVersion: string;
+    limit: number;
+  }): Promise<
+    readonly {
+      canonicalLogId: string;
+      chainId: ChainId;
+      stream: string;
+      contractAddress: `0x${string}`;
+      transactionHash: `0x${string}`;
+      blockNumber: bigint;
+      blockHash: `0x${string}`;
+      logIndex: number;
+      payloadDigest: `0x${string}`;
+      observedAt: Date;
+    }[]
+  > {
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 1_000) {
+      throw new RangeError('Quarantine recovery limit must be between one and one thousand');
+    }
+    const records = await this.uow
+      .current()
+      .select({ log: canonicalLogs })
+      .from(chainEventQuarantine)
+      .innerJoin(canonicalLogs, eq(canonicalLogs.id, chainEventQuarantine.canonicalLogId))
+      .where(
+        and(
+          eq(canonicalLogs.chainId, input.chainId),
+          eq(canonicalLogs.stream, input.stream),
+          eq(canonicalLogs.canonical, true),
+          eq(canonicalLogs.eventName, '__quarantined__'),
+          sql`${canonicalLogs.decodedPayload}->>'decoderVersion' <> ${input.decoderVersion}`,
+          isNull(chainEventQuarantine.resolvedAt),
+        ),
+      )
+      .orderBy(asc(canonicalLogs.blockNumber), asc(canonicalLogs.logIndex))
+      .limit(input.limit);
+    return records.map(({ log }) => ({
+      canonicalLogId: log.id,
+      chainId: ChainIdSchema.parse(log.chainId),
+      stream: log.stream,
+      contractAddress: log.contractAddress as `0x${string}`,
+      transactionHash: log.transactionHash as `0x${string}`,
+      blockNumber: log.blockNumber,
+      blockHash: log.blockHash as `0x${string}`,
+      logIndex: log.logIndex,
+      payloadDigest: log.payloadDigest as `0x${string}`,
+      observedAt: log.observedAt,
+    }));
+  }
+
+  async reprocessQuarantinedLog(input: {
+    canonicalLogId: string;
+    log: DatabaseIndexedLog;
+    now: Date;
+  }): Promise<boolean> {
+    return this.uow.transaction(async () => {
+      const [record] = await this.uow
+        .current()
+        .select({ log: canonicalLogs, quarantine: chainEventQuarantine })
+        .from(canonicalLogs)
+        .innerJoin(chainEventQuarantine, eq(chainEventQuarantine.canonicalLogId, canonicalLogs.id))
+        .where(
+          and(
+            eq(canonicalLogs.id, input.canonicalLogId),
+            eq(canonicalLogs.canonical, true),
+            eq(canonicalLogs.projectionStatus, 'quarantined'),
+            isNull(chainEventQuarantine.resolvedAt),
+          ),
+        )
+        .for('update')
+        .limit(1);
+      if (record === undefined) return false;
+      const raw = input.log.raw;
+      if (
+        record.log.chainId !== raw.chainId ||
+        record.log.stream.length === 0 ||
+        record.log.contractAddress.toLowerCase() !== raw.contractAddress.toLowerCase() ||
+        record.log.transactionHash.toLowerCase() !== raw.transactionHash.toLowerCase() ||
+        record.log.blockNumber !== BigInt(raw.blockNumber) ||
+        record.log.blockHash.toLowerCase() !== raw.blockHash.toLowerCase() ||
+        record.log.logIndex !== Number(raw.logIndex) ||
+        record.log.payloadDigest.toLowerCase() !== input.log.payloadDigest.toLowerCase()
+      ) {
+        throw new AppError(
+          'RPC_INCONSISTENT',
+          'Quarantined log recovery did not match the persisted canonical identity.',
+        );
+      }
+      if (input.log.decoded.kind === 'quarantined') {
+        await this.uow
+          .current()
+          .update(canonicalLogs)
+          .set({
+            decodedPayload: decodedPayload(input.log),
+            mismatchCode: input.log.decoded.reasonCode,
+            projectedAt: input.now,
+          })
+          .where(eq(canonicalLogs.id, record.log.id));
+        await this.uow
+          .current()
+          .update(chainEventQuarantine)
+          .set({
+            reasonCode: input.log.decoded.reasonCode,
+            safeDetails: { ...input.log.decoded.safeDetails },
+          })
+          .where(eq(chainEventQuarantine.id, record.quarantine.id));
+        return false;
+      }
+      await this.uow
+        .current()
+        .update(canonicalLogs)
+        .set({
+          eventName: input.log.decoded.event.eventName,
+          decodedPayload: decodedPayload(input.log),
+          projectionStatus: 'pending',
+          mismatchCode: null,
+          projectedAt: null,
+        })
+        .where(eq(canonicalLogs.id, record.log.id));
+      const result = await this.#projector.apply({
+        canonicalLogId: record.log.id,
+        decoded: input.log.decoded.event,
+        position: {
+          chainId: raw.chainId,
+          contractAddress: raw.contractAddress,
+          transactionHash: raw.transactionHash,
+          blockNumber: BigInt(raw.blockNumber),
+          blockHash: raw.blockHash,
+          logIndex: Number(raw.logIndex),
+          confirmations: input.log.confirmations,
+          observedAt: record.log.observedAt,
+        },
+      });
+      if (result.kind === 'quarantined') {
+        await this.uow
+          .current()
+          .update(canonicalLogs)
+          .set({
+            projectionStatus: 'quarantined',
+            mismatchCode: result.reasonCode,
+            projectedAt: input.now,
+          })
+          .where(eq(canonicalLogs.id, record.log.id));
+        await this.uow
+          .current()
+          .update(chainEventQuarantine)
+          .set({ reasonCode: result.reasonCode, safeDetails: { ...result.safeDetails } })
+          .where(eq(chainEventQuarantine.id, record.quarantine.id));
+        return false;
+      }
+      await this.uow
+        .current()
+        .update(canonicalLogs)
+        .set({ projectionStatus: 'applied', mismatchCode: null, projectedAt: input.now })
+        .where(eq(canonicalLogs.id, record.log.id));
+      await this.uow
+        .current()
+        .update(chainEventQuarantine)
+        .set({ resolvedAt: input.now, resolution: 'redecoded' })
+        .where(eq(chainEventQuarantine.id, record.quarantine.id));
+      return true;
+    });
+  }
+
   async #quarantine(input: {
     canonicalLogId: string;
     reasonCode: string;

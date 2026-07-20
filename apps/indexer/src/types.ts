@@ -47,6 +47,19 @@ export interface ReorgDetails {
   readonly newHeadHash: `0x${string}`;
 }
 
+export interface QuarantinedLogReference {
+  readonly canonicalLogId: string;
+  readonly chainId: ChainId;
+  readonly stream: string;
+  readonly contractAddress: `0x${string}`;
+  readonly transactionHash: `0x${string}`;
+  readonly blockNumber: bigint;
+  readonly blockHash: `0x${string}`;
+  readonly logIndex: number;
+  readonly payloadDigest: `0x${string}`;
+  readonly observedAt: Date;
+}
+
 export interface IndexerStore {
   loadOrCreateCursor(input: {
     chainId: ChainId;
@@ -80,6 +93,17 @@ export interface IndexerStore {
     now: Date;
   }): Promise<void>;
   rewind(input: { cursor: IndexerCursor; details: ReorgDetails; now: Date }): Promise<void>;
+  loadQuarantinedLogs(input: {
+    chainId: ChainId;
+    stream: string;
+    decoderVersion: string;
+    limit: number;
+  }): Promise<readonly QuarantinedLogReference[]>;
+  reprocessQuarantinedLog(input: {
+    canonicalLogId: string;
+    log: IndexedLog;
+    now: Date;
+  }): Promise<boolean>;
   replayQuarantined(input: {
     chainId: ChainId;
     stream: string;
