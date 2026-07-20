@@ -22,7 +22,7 @@ import { getAddress, type Hex, keccak256, toHex } from 'viem';
 import { z } from 'zod';
 import { digestUnknown } from './evidence.js';
 import { createCheckoutOperationTemplate } from './particle.js';
-import { ParticleResponseChainIdSchema } from './particle-response-schemas.js';
+import { ParticleAuthorizationChainIdSchema } from './particle-response-schemas.js';
 import { mapParticleError } from './vendor-errors.js';
 
 const ARBITRUM_CHAIN_NUMBER = Number(ARBITRUM_ONE_CHAIN_ID);
@@ -64,7 +64,7 @@ const DeploymentSchema = z
 
 const AuthSchema = z
   .object({
-    chainId: ParticleResponseChainIdSchema.optional(),
+    chainId: ParticleAuthorizationChainIdSchema.optional(),
     address: EvmAddressSchema,
     nonce: z.number().int().nonnegative().safe(),
   })
@@ -576,7 +576,11 @@ export class ParticleOperatorCertificationAdapter {
           'Particle omitted the Arbitrum delegation authorization.',
         );
       }
-      if (auth.chainId !== undefined && auth.chainId !== ARBITRUM_CHAIN_NUMBER) {
+      if (
+        auth.chainId !== undefined &&
+        auth.chainId !== 0 &&
+        auth.chainId !== ARBITRUM_CHAIN_NUMBER
+      ) {
         throw new AppError(
           'UA_PROVIDER_SCHEMA_INVALID',
           'Particle returned a wrong-chain delegation authorization.',

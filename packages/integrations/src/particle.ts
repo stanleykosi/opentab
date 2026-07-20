@@ -50,7 +50,7 @@ import {
 } from 'viem';
 import { z } from 'zod';
 import { adapterEvidence, digestUnknown } from './evidence.js';
-import { ParticleResponseChainIdSchema } from './particle-response-schemas.js';
+import { ParticleAuthorizationChainIdSchema } from './particle-response-schemas.js';
 import { mapParticleError } from './vendor-errors.js';
 
 const PARTICLE_PACKAGE_VERSION = '2.0.3';
@@ -129,7 +129,7 @@ const DeploymentResponseSchema = z.array(DeploymentRecordSchema).min(1);
 
 const DelegationAuthRecordSchema = z
   .object({
-    chainId: ParticleResponseChainIdSchema.optional(),
+    chainId: ParticleAuthorizationChainIdSchema.optional(),
     address: EvmAddressSchema,
     nonce: z.number().int().nonnegative().safe(),
   })
@@ -1028,7 +1028,7 @@ export class ParticleUniversalAccountAdapter implements UniversalOperationPort {
       const [auth] = DelegationAuthResponseSchema.parse(raw);
       if (
         auth === undefined ||
-        (auth.chainId !== undefined && auth.chainId !== ARBITRUM_CHAIN_NUMBER)
+        (auth.chainId !== undefined && auth.chainId !== 0 && auth.chainId !== ARBITRUM_CHAIN_NUMBER)
       ) {
         throw new AppError(
           'UA_PROVIDER_SCHEMA_INVALID',

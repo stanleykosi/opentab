@@ -178,6 +178,9 @@ describe('Particle operator compatibility certification', () => {
   });
 
   it.each([
+    ['numeric chain-agnostic zero', 0],
+    ['decimal chain-agnostic zero', '0'],
+    ['JSON-RPC chain-agnostic zero', '0x0'],
     ['decimal string', '42161'],
     ['JSON-RPC hex string', '0xa4b1'],
   ])('normalizes a live %s authorization chain ID', async (_encoding, chainId) => {

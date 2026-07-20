@@ -289,6 +289,9 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
   });
 
   it.each([
+    ['numeric chain-agnostic zero', 0],
+    ['decimal chain-agnostic zero', '0'],
+    ['JSON-RPC chain-agnostic zero', '0x0'],
     ['decimal string', '42161'],
     ['JSON-RPC hex string', '0xa4b1'],
   ])('normalizes a live %s chain ID before preparing delegation', async (_encoding, chainId) => {
