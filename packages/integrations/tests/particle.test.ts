@@ -162,7 +162,7 @@ function preparedFor(template: BoundOperationTemplate) {
     },
     amount: '1.1',
     amountInUSD: '1.1',
-    senderAddress: owner,
+    senderAddress: null,
   };
   return {
     type: 'universal',
@@ -308,9 +308,11 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
     });
   });
 
-  it('validates exact destination calls, source policy, hard fee, and explicit delegation', async () => {
+  it('validates a live route with nullable token sender metadata', async () => {
     const fake = sdk(template);
     const adapter = new ParticleUniversalAccountAdapter(fake, config());
+    expect(fake.state.prepared.depositTokens[0]?.senderAddress).toBeNull();
+    expect(fake.state.prepared.tokenChanges.decr[0]?.senderAddress).toBeNull();
     const prepared = await adapter.prepareOperation(template);
     const plan = await adapter.validateOperation({ template, prepared });
 

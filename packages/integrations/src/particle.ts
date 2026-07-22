@@ -95,7 +95,10 @@ const ParticleTokenAmountSchema = z.object({
   token: ParticleTokenSchema,
   amount: z.string().min(1).max(100),
   amountInUSD: z.string().min(1).max(100),
-  senderAddress: z.string().min(1).max(128),
+  // The live v2 RPC does not consistently return this redundant token-row
+  // attribution field. The authoritative owner fields remain mandatory on
+  // PreparedTransactionSchema and are checked before any route is signed.
+  senderAddress: z.string().min(1).max(128).nullish(),
 });
 
 const PrimaryAssetsSchema = z.object({

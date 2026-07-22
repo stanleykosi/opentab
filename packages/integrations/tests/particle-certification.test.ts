@@ -54,14 +54,19 @@ function fixture() {
     sender: owner,
     transactionId: 'sensitive-provider-transaction-id',
     smartAccountOptions: { ownerAddress: owner, senderAddress: owner },
-    depositTokens: [],
+    depositTokens: [
+      {
+        token: { type: 'usdc', chainId: 8453, address: baseUsdc },
+        amount: '0.42',
+        amountInUSD: '0.42',
+      },
+    ],
     tokenChanges: {
       decr: [
         {
           token: { type: 'usdc', chainId: 8453, address: baseUsdc },
           amount: '0.42',
           amountInUSD: '0.42',
-          senderAddress: owner,
         },
       ],
     },
@@ -235,6 +240,16 @@ describe('Particle operator compatibility certification', () => {
     expect(serialized).not.toContain(prepared.transactionId);
     expect(serialized).not.toContain('0.42');
     expect(sdk.createUniversalTransaction).toHaveBeenCalledOnce();
+  });
+
+  it('accepts live v2 token rows without the redundant senderAddress field', async () => {
+    const { adapter, checkoutBinding, prepared } = fixture();
+
+    expect(prepared.depositTokens[0]).not.toHaveProperty('senderAddress');
+    expect(prepared.tokenChanges.decr[0]).not.toHaveProperty('senderAddress');
+    await expect(adapter.captureCanaryReady(checkoutBinding)).resolves.toMatchObject({
+      profile: { stage: 'canary_ready' },
+    });
   });
 
   it('surfaces insufficient route balance with the exact Particle method and code', async () => {

@@ -78,7 +78,11 @@ const TokenAmountSchema = z.object({
   }),
   amount: z.string().min(1).max(100),
   amountInUSD: z.string().min(1).max(100),
-  senderAddress: z.string().min(1).max(128),
+  // Particle's live v2 RPC can omit this token-row attribution field even
+  // though SDK 2.0.3 still declares it as required. It is not an authority
+  // boundary: owner continuity is enforced by the required top-level sender
+  // and smartAccountOptions addresses below.
+  senderAddress: z.string().min(1).max(128).nullish(),
 });
 
 const PreparedCaptureSchema = z
