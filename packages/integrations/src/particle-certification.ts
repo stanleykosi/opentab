@@ -179,14 +179,16 @@ type CertificationProviderMethod =
 function particleCertificationProviderError(
   method: CertificationProviderMethod,
   error: unknown,
+  response?: unknown,
 ): AppError {
   if (error instanceof AppError) return error;
   if (error instanceof z.ZodError) {
     const issue = error.issues[0];
     const issuePath = issue?.path.map(String).join('.') || 'root';
+    const providerShape = particleUserOpsShape(response);
     return new AppError(
       'UA_PROVIDER_SCHEMA_INVALID',
-      `Particle returned an unsupported response for ${method} at ${issuePath}. No transaction was submitted.`,
+      `Particle returned an unsupported response for ${method} at ${issuePath}.${providerShape === undefined ? '' : ` Shape: ${providerShape}.`} No transaction was submitted.`,
       {
         retryable: false,
         safeDetails: {
@@ -194,8 +196,8 @@ function particleCertificationProviderError(
           providerMethod: method,
           schemaIssueCode: issue?.code ?? 'unknown',
           schemaIssuePath: issuePath,
+          ...(providerShape === undefined ? {} : { providerShape }),
         },
-        cause: error,
       },
     );
   }
@@ -229,16 +231,55 @@ function particleCertificationProviderError(
   });
 }
 
+function particleUserOpsShape(response: unknown): string | undefined {
+  if (typeof response !== 'object' || response === null) return undefined;
+  const userOps = (response as Readonly<Record<string, unknown>>).userOps;
+  if (!Array.isArray(userOps)) return undefined;
+
+  return userOps
+    .slice(0, 8)
+    .map((entry, index) => {
+      if (typeof entry !== 'object' || entry === null) return `${index}:invalid`;
+      const operation = entry as Readonly<Record<string, unknown>>;
+      const chainId =
+        typeof operation.chainId === 'number' || typeof operation.chainId === 'string'
+          ? String(operation.chainId).slice(0, 20)
+          : 'unknown';
+      const userOp =
+        typeof operation.userOp === 'object' && operation.userOp !== null
+          ? (operation.userOp as Readonly<Record<string, unknown>>)
+          : undefined;
+      const kind =
+        typeof userOp?.callData === 'string'
+          ? 'evm'
+          : Array.isArray(userOp?.insArgs)
+            ? 'solana'
+            : 'unknown';
+      const txCount = Array.isArray(operation.txs) ? Math.min(operation.txs.length, 99) : 0;
+      const callDataBytes =
+        typeof userOp?.callData === 'string' && /^0x[0-9a-fA-F]*$/.test(userOp.callData)
+          ? Math.max(0, Math.floor((userOp.callData.length - 2) / 2))
+          : 0;
+      return `${index}:chain=${chainId},kind=${kind},txs=${txCount},callDataBytes=${callDataBytes}`;
+    })
+    .join(';');
+}
+
 async function captureBootstrapProviderResponse<T>(
   method: CertificationProviderMethod,
   read: () => Promise<unknown>,
   schema: { parse(value: unknown): T },
 ): Promise<{ readonly raw: unknown; readonly value: T }> {
+  let raw: unknown;
   try {
-    const raw = await read();
-    return { raw, value: schema.parse(raw) };
+    raw = await read();
   } catch (error) {
     throw particleCertificationProviderError(method, error);
+  }
+  try {
+    return { raw, value: schema.parse(raw) };
+  } catch (error) {
+    throw particleCertificationProviderError(method, error, raw);
   }
 }
 
@@ -404,6 +445,21 @@ export class ParticleOperatorCertificationAdapter {
           'WALLET_ADDRESS_MISMATCH',
           'Particle prepared the canary for another owner.',
         );
+      }
+      for (const operation of prepared.userOps) {
+        if (
+          operation.chainId !== ARBITRUM_CHAIN_NUMBER &&
+          !this.config.allowedSourceChainIds.includes(operation.chainId.toString())
+        ) {
+          throw new AppError(
+            'UA_ROUTE_UNAVAILABLE',
+            `Particle selected source chain ${operation.chainId}, which is outside the configured activation route.`,
+            {
+              submissionPossible: false,
+              safeDetails: { providerChainId: operation.chainId.toString() },
+            },
+          );
+        }
       }
       exactDestination(prepared, binding);
       const sourceValues =
@@ -762,13 +818,10 @@ export function createParticleOperatorCertificationAdapter(
     tradeConfig: {
       slippageBps: config.slippageBps,
       preferTokenType: PREFER_TOKEN_TYPE.USD,
-      usePrimaryTokens: config.allowedSourceAssets.map((asset) =>
-        asset === 'USDC'
-          ? SUPPORTED_TOKEN_TYPE.USDC
-          : asset === 'USDT'
-            ? SUPPORTED_TOKEN_TYPE.USDT
-            : SUPPORTED_TOKEN_TYPE.ETH,
-      ),
+      // The certification canary intentionally proves the funded Base-USDC to
+      // Arbitrum-USDC route. ETH remains available for the one-time delegation
+      // transaction, but must not become the canary payment or fee source.
+      usePrimaryTokens: [SUPPORTED_TOKEN_TYPE.USDC],
     },
     ...(config.particleRpcUrl === undefined ? {} : { rpcUrl: config.particleRpcUrl }),
   });

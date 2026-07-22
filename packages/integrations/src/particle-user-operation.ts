@@ -19,17 +19,16 @@ export const ParticlePreparedCallSchema = z.object({
     .optional(),
 });
 
+const EvmCallDataSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/);
+const ProviderObjectSchema = z.record(z.string(), z.unknown());
+
 export const ParticleUserOpExecutionSchema = z
   .object({
-    // SDK 2.0.3 declares `txs` as required, but its live V2 fee-quote response
-    // can omit it. The actual EVM callData remains part of the signed user op.
-    txs: z.array(ParticlePreparedCallSchema).max(16).optional(),
-    userOp: z
-      .object({
-        callData: z.string().regex(/^0x(?:[0-9a-fA-F]{2})+$/),
-      })
-      .passthrough()
-      .optional(),
+    // SDK 2.0.3 declares an EVM | Solana user-op union. Live fee-quote
+    // responses may omit the convenience `txs`, so parse the union envelope
+    // here and perform chain-specific EVM validation only at the call boundary.
+    txs: z.array(z.unknown()).max(16).optional(),
+    userOp: ProviderObjectSchema.optional(),
   })
   .passthrough();
 
@@ -47,15 +46,37 @@ export interface ParticleUserOpExecutionEvidence {
   }[];
 }
 
-function invalidExecutionCalls(path: string): AppError {
+function chainIdOf(input: ParticleUserOpExecution): number | undefined {
+  const chainId = (input as Readonly<Record<string, unknown>>).chainId;
+  return typeof chainId === 'number' && Number.isSafeInteger(chainId) ? chainId : undefined;
+}
+
+function invalidExecutionCalls(path: string, input: ParticleUserOpExecution): AppError {
+  const chainId = chainIdOf(input);
+  const solana = chainId === 101;
   return new AppError(
-    'UA_PROVIDER_SCHEMA_INVALID',
-    'Particle omitted independently verifiable EVM transaction calls.',
+    solana ? 'UA_ROUTE_UNAVAILABLE' : 'UA_PROVIDER_SCHEMA_INVALID',
+    solana
+      ? 'Particle selected an unreviewed Solana operation instead of the configured EVM source route.'
+      : 'Particle omitted independently verifiable EVM transaction calls.',
     {
       submissionPossible: false,
-      safeDetails: { schemaIssuePath: path },
+      safeDetails: {
+        schemaIssuePath: path,
+        ...(chainId === undefined ? {} : { providerChainId: chainId.toString() }),
+      },
     },
   );
+}
+
+function previewCalls(input: ParticleUserOpExecution): readonly ParticlePreparedCall[] | undefined {
+  const parsed = z.array(ParticlePreparedCallSchema).min(1).max(16).safeParse(input.txs);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function evmCallData(input: ParticleUserOpExecution): Hex | undefined {
+  const parsed = EvmCallDataSchema.safeParse(input.userOp?.callData);
+  return parsed.success ? (parsed.data as Hex) : undefined;
 }
 
 function normalizedCall(to: string, value: bigint, data: Hex): ParticlePreparedCall {
@@ -78,12 +99,15 @@ export function particleUserOpCalls(
   path: string,
 ): readonly ParticlePreparedCall[] {
   const parsed = ParticleUserOpExecutionSchema.parse(input);
-  if (parsed.txs !== undefined && parsed.txs.length > 0) return parsed.txs;
-  const callData = parsed.userOp?.callData;
-  if (callData === undefined) throw invalidExecutionCalls(`${path}.userOp.callData`);
+  const reviewedPreviewCalls = previewCalls(parsed);
+  if (reviewedPreviewCalls !== undefined) return reviewedPreviewCalls;
+  const callData = evmCallData(parsed);
+  if (callData === undefined || callData === '0x') {
+    throw invalidExecutionCalls(`${path}.userOp.callData`, parsed);
+  }
 
   try {
-    const decoded = decodeFunctionData({ abi: universalExecutorAbi, data: callData as Hex });
+    const decoded = decodeFunctionData({ abi: universalExecutorAbi, data: callData });
     if (decoded.functionName === 'execute' || decoded.functionName === 'execute_ncC') {
       const [target, value, data] = decoded.args;
       return [normalizedCall(target, value, data)];
@@ -96,20 +120,20 @@ export function particleUserOpCalls(
       targets.length !== values.length ||
       targets.length !== data.length
     ) {
-      throw invalidExecutionCalls(`${path}.userOp.callData`);
+      throw invalidExecutionCalls(`${path}.userOp.callData`, parsed);
     }
     return targets.map((target, index) => {
       const value = values[index];
       const callDataAtIndex = data[index];
       if (value === undefined || callDataAtIndex === undefined) {
-        throw invalidExecutionCalls(`${path}.userOp.callData`);
+        throw invalidExecutionCalls(`${path}.userOp.callData`, parsed);
       }
       return normalizedCall(target, value, callDataAtIndex);
     });
   } catch (error) {
     if (error instanceof AppError) throw error;
     // Do not attach the decoder error: viem errors may echo full calldata.
-    throw invalidExecutionCalls(`${path}.userOp.callData`);
+    throw invalidExecutionCalls(`${path}.userOp.callData`, parsed);
   }
 }
 
@@ -124,11 +148,11 @@ export function particleUserOpExecutionEvidence(
 ): ParticleUserOpExecutionEvidence {
   const parsed = ParticleUserOpExecutionSchema.parse(input);
   const calls = particleUserOpCalls(parsed, path);
+  const reviewedPreviewCalls = previewCalls(parsed);
+  const callData = evmCallData(parsed);
   return {
-    representation:
-      parsed.txs !== undefined && parsed.txs.length > 0 ? 'preview_calls' : 'executor_calldata',
-    executorCallDataDigest:
-      parsed.userOp === undefined ? null : keccak256(parsed.userOp.callData as Hex),
+    representation: reviewedPreviewCalls === undefined ? 'executor_calldata' : 'preview_calls',
+    executorCallDataDigest: callData === undefined ? null : keccak256(callData),
     calls: calls.map((call) => ({
       uaType: call.uaType,
       to: call.to,

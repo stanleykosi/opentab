@@ -262,6 +262,82 @@ describe('Particle operator compatibility certification', () => {
     });
   });
 
+  it('accepts an empty EVM userOp callData when exact preview calls are present', async () => {
+    const { adapter, sdk, checkoutBinding, prepared } = fixture();
+    const template = createCheckoutOperationTemplate(checkoutBinding);
+    const destination = prepared.userOps[0];
+    if (destination === undefined || destination.userOp === undefined) {
+      throw new Error('fixture destination operation is missing');
+    }
+    sdk.createUniversalTransaction.mockResolvedValueOnce({
+      ...prepared,
+      userOps: [
+        {
+          ...destination,
+          userOp: { ...destination.userOp, callData: '0x' },
+          txs: template.calls.map((call) => ({
+            uaType: 'evm',
+            to: call.to,
+            data: call.data,
+            value: '0x0',
+          })),
+        },
+        ...prepared.userOps.slice(1),
+      ],
+    } as unknown as Awaited<ReturnType<typeof sdk.createUniversalTransaction>>);
+
+    await expect(adapter.captureCanaryReady(checkoutBinding)).resolves.toMatchObject({
+      profile: { stage: 'canary_ready' },
+    });
+  });
+
+  it('rejects a Solana user operation as an unconfigured route, not an EVM schema failure', async () => {
+    const { adapter, sdk, checkoutBinding, prepared } = fixture();
+    sdk.createUniversalTransaction.mockResolvedValueOnce({
+      ...prepared,
+      userOps: [
+        {
+          chainId: 101,
+          userOp: {
+            insArgs: [],
+            recentBlockhash: 'public-blockhash',
+          },
+          txs: [],
+        },
+        ...prepared.userOps,
+      ],
+    } as unknown as Awaited<ReturnType<typeof sdk.createUniversalTransaction>>);
+
+    await expect(adapter.captureCanaryReady(checkoutBinding)).rejects.toMatchObject({
+      code: 'UA_ROUTE_UNAVAILABLE',
+      message:
+        'Particle selected source chain 101, which is outside the configured activation route.',
+      submissionPossible: false,
+      safeDetails: { providerChainId: '101' },
+    });
+  });
+
+  it('reports only a sanitized operation shape when another response field drifts', async () => {
+    const { adapter, sdk, checkoutBinding, prepared } = fixture();
+    sdk.createUniversalTransaction.mockResolvedValueOnce({
+      ...prepared,
+      rootHash: 'invalid-root-hash',
+    } as unknown as Awaited<ReturnType<typeof sdk.createUniversalTransaction>>);
+
+    await expect(adapter.captureCanaryReady(checkoutBinding)).rejects.toMatchObject({
+      code: 'UA_PROVIDER_SCHEMA_INVALID',
+      message: expect.stringContaining(
+        'universal_createTransaction at rootHash. Shape: 0:chain=42161,kind=evm',
+      ),
+      submissionPossible: false,
+      safeDetails: expect.objectContaining({
+        providerMethod: 'universal_createTransaction',
+        schemaIssuePath: 'rootHash',
+        providerShape: expect.stringContaining('1:chain=8453,kind=unknown,txs=1'),
+      }),
+    });
+  });
+
   it('surfaces insufficient route balance with the exact Particle method and code', async () => {
     const { adapter, sdk, checkoutBinding } = fixture();
     sdk.createUniversalTransaction.mockRejectedValueOnce(
