@@ -59,7 +59,11 @@ function classifyVendorReason(
   ) {
     return 'invalid_parameters';
   }
-  if (codes.includes('-32001') || /unsupported chain|chain.+not supported/.test(combined)) {
+  if (
+    codes.includes('-32001') ||
+    codes.includes('4902') ||
+    /unsupported chain|chain.+not supported|unrecognized chain/.test(combined)
+  ) {
     return 'unsupported_chain';
   }
   if (

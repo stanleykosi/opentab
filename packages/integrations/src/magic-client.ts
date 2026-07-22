@@ -21,6 +21,7 @@ import { openTabCheckoutOperationAbi } from './generated/operation-abis.js';
 import { mapMagicError } from './vendor-errors.js';
 
 const ARBITRUM_CHAIN_NUMBER = Number(ARBITRUM_ONE_CHAIN_ID);
+const ARBITRUM_CHAIN_HEX = `0x${ARBITRUM_CHAIN_NUMBER.toString(16)}` as const;
 const ZERO_ADDRESS = EvmAddressSchema.parse('0x0000000000000000000000000000000000000000');
 
 export const MagicOperatorBootstrapActionSchema = z.enum([
@@ -284,6 +285,15 @@ function assertUnexpired(expiresAt: string): void {
   }
 }
 
+async function readMagicChainId(magic: MagicBrowserLike): Promise<string> {
+  const chainHex = ChainIdHexSchema.parse(
+    await magic.rpcProvider.request({ method: 'eth_chainId' }),
+  );
+  const chain = BigInt(chainHex);
+  if (chain <= 0n) throw new Error('Invalid chain ID');
+  return chain.toString();
+}
+
 function safeNonce(value: string): number {
   const nonce = BigInt(value);
   if (nonce > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -431,28 +441,55 @@ export class MagicBrowserWalletAdapter implements MagicWalletPort {
   async getChainId(): Promise<string> {
     try {
       const magic = await this.loader(this.config);
-      const chainHex = ChainIdHexSchema.parse(
-        await magic.rpcProvider.request({ method: 'eth_chainId' }),
-      );
-      const chain = BigInt(chainHex);
-      if (chain <= 0n) throw new Error('Invalid chain ID');
-      return chain.toString();
+      return await readMagicChainId(magic);
     } catch (error) {
       throw mapMagicError(error, 'WALLET_CHAIN_SWITCH_FAILED');
     }
   }
 
   async switchToArbitrum(): Promise<void> {
+    let magic: MagicBrowserLike;
     try {
-      const magic = await this.loader(this.config);
-      await magic.evm.switchChain(ARBITRUM_CHAIN_NUMBER);
-      if ((await this.getChainId()) !== ARBITRUM_ONE_CHAIN_ID) {
-        throw new AppError('WALLET_CHAIN_SWITCH_FAILED', 'Magic did not switch to Arbitrum One.');
-      }
+      magic = await this.loader(this.config);
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw mapMagicError(error, 'WALLET_CHAIN_SWITCH_FAILED');
     }
+    try {
+      if ((await readMagicChainId(magic)) === ARBITRUM_ONE_CHAIN_ID) return;
+    } catch {
+      // Continue to explicit switch attempts; the final chain read is authoritative.
+    }
+
+    try {
+      await magic.evm.switchChain(ARBITRUM_CHAIN_NUMBER);
+    } catch {
+      try {
+        if ((await readMagicChainId(magic)) === ARBITRUM_ONE_CHAIN_ID) return;
+      } catch {
+        // Fall through to the standard EIP-1193 switch attempt.
+      }
+      try {
+        await magic.rpcProvider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: ARBITRUM_CHAIN_HEX }],
+        });
+      } catch (fallbackError) {
+        try {
+          if ((await readMagicChainId(magic)) === ARBITRUM_ONE_CHAIN_ID) return;
+        } catch {
+          // Preserve the provider's switch failure below.
+        }
+        throw mapMagicError(fallbackError, 'WALLET_CHAIN_SWITCH_FAILED');
+      }
+    }
+
+    try {
+      if ((await readMagicChainId(magic)) === ARBITRUM_ONE_CHAIN_ID) return;
+    } catch (error) {
+      throw mapMagicError(error, 'WALLET_CHAIN_SWITCH_FAILED');
+    }
+    throw new AppError('WALLET_CHAIN_SWITCH_FAILED', 'Magic did not switch to Arbitrum One.');
   }
 
   /**

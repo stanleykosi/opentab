@@ -61,6 +61,18 @@ function createFake() {
     if (input.method === 'eth_getBalance') return '0x38d7ea4c68000';
     if (input.method === 'eth_estimateGas') return '0x0186a0';
     if (input.method === 'eth_sendTransaction') return transactionHash;
+    if (input.method === 'wallet_switchEthereumChain') {
+      const next = input.params?.[0];
+      if (
+        typeof next !== 'object' ||
+        next === null ||
+        typeof (next as { chainId?: unknown }).chainId !== 'string'
+      ) {
+        throw new Error('wallet_switchEthereumChain chain missing');
+      }
+      chainId = (next as { chainId: string }).chainId;
+      return null;
+    }
     throw new Error(`Unexpected RPC method: ${input.method}`);
   });
   return {
@@ -257,6 +269,60 @@ describe('Magic browser wallet adapter', () => {
     expect(fake.magic.evm.switchChain).toHaveBeenCalledWith(42161);
     expect(fake.controls.rpcRequest).toHaveBeenCalledWith({ method: 'eth_chainId' });
     await expect(adapter.getChainId()).resolves.toBe(ARBITRUM_ONE_CHAIN_ID);
+  });
+
+  it('treats an already-Arbitrum Magic provider as switched without another prompt', async () => {
+    const fake = createFake();
+    fake.controls.setChain('0xa4b1');
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+
+    await expect(adapter.switchToArbitrum()).resolves.toBeUndefined();
+
+    expect(fake.magic.evm.switchChain).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the standard wallet chain switch when the Magic extension rejects', async () => {
+    const fake = createFake();
+    fake.magic.evm.switchChain.mockRejectedValueOnce({
+      code: -32601,
+      message: 'evm_switchChain unavailable',
+    });
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+
+    await expect(adapter.switchToArbitrum()).resolves.toBeUndefined();
+
+    expect(fake.controls.rpcRequest).toHaveBeenCalledWith({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0xa4b1' }],
+    });
+    await expect(adapter.getChainId()).resolves.toBe(ARBITRUM_ONE_CHAIN_ID);
+  });
+
+  it('surfaces an unconfigured Magic chain switch as a safe configuration error', async () => {
+    const fake = createFake();
+    fake.magic.evm.switchChain.mockRejectedValueOnce({
+      code: -32601,
+      message: 'evm_switchChain unavailable',
+    });
+    fake.controls.rpcRequest.mockImplementation(async (input) => {
+      if (input.method === 'eth_chainId') return '0x1';
+      if (input.method === 'wallet_switchEthereumChain') {
+        throw { code: 4902, message: 'Unrecognized chain ID' };
+      }
+      if (input.method === 'eth_accounts' || input.method === 'eth_requestAccounts') return [owner];
+      throw new Error(`Unexpected RPC method: ${input.method}`);
+    });
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+
+    await expect(adapter.switchToArbitrum()).rejects.toMatchObject({
+      code: 'WALLET_CHAIN_SWITCH_FAILED',
+      message: 'Magic is not configured for the selected chain.',
+      safeDetails: expect.objectContaining({
+        vendor: 'magic',
+        vendorCode: '4902',
+        vendorReason: 'unsupported_chain',
+      }),
+    });
   });
 
   it('returns only sanitized nonce convention fields from the operator authorization probe', async () => {
