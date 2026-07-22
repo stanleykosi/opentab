@@ -652,19 +652,16 @@ export class MagicBrowserWalletAdapter implements MagicWalletPort {
 
     try {
       const magic = await this.loader(this.config);
-      const provider = new BrowserProvider(magic.rpcProvider);
-      const signer = await provider.getSigner();
-      const signerAddress = EvmAddressSchema.parse(await signer.getAddress());
-      if (!sameEvmAddress(signerAddress, template.ownerAddress)) {
-        throw new AppError(
-          'WALLET_ADDRESS_MISMATCH',
-          'The Magic signer does not own this operator action.',
-        );
-      }
-      const rawHash = await signer.sendUncheckedTransaction({
-        to: checkoutAddress,
-        data: call.data,
-        value: 0n,
+      const rawHash = await magic.rpcProvider.request({
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            from: template.ownerAddress.toLowerCase(),
+            to: checkoutAddress.toLowerCase(),
+            data: call.data,
+            value: '0x0',
+          },
+        ],
       });
       const parsedHash = TransactionHashSchema.safeParse(rawHash);
       if (!parsedHash.success) {

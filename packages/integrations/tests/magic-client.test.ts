@@ -359,6 +359,39 @@ describe('Magic browser wallet adapter', () => {
     ).resolves.toEqual({ transactionHash });
   });
 
+  it('surfaces a safe Magic transaction rejection reason during operator bootstrap', async () => {
+    const fake = createFake();
+    fake.controls.setChain('0xa4b1');
+    fake.controls.rpcRequest.mockImplementation(async (input) => {
+      if (input.method === 'eth_accounts' || input.method === 'eth_requestAccounts') {
+        return [owner];
+      }
+      if (input.method === 'eth_chainId') return '0xa4b1';
+      if (input.method === 'eth_sendTransaction') {
+        throw { code: -32602, message: 'invalid params' };
+      }
+      throw new Error(`Unexpected RPC method: ${input.method}`);
+    });
+    const adapter = new MagicBrowserWalletAdapter(config(), async () => fake.magic);
+
+    await expect(
+      adapter.submitOperatorBootstrapMutation({
+        template: operatorBootstrapTemplate(),
+        action: 'create_merchant',
+        checkoutAddress: implementation,
+      }),
+    ).rejects.toMatchObject({
+      code: 'RPC_UNAVAILABLE',
+      message: 'Magic rejected the transaction parameters before submission.',
+      safeDetails: expect.objectContaining({
+        vendor: 'magic',
+        vendorCode: '-32602',
+        vendorReason: 'invalid_parameters',
+      }),
+      submissionPossible: true,
+    });
+  });
+
   it('rejects mismatched actions, targets, value, multiple calls, and stale templates', async () => {
     const fake = createFake();
     fake.controls.setChain('0xa4b1');

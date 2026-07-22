@@ -97,16 +97,31 @@ function safeVendorSignals(error: unknown): SafeVendorSignals {
   };
 }
 
-function safeVendorCode(error: unknown): string | undefined {
-  return safeVendorSignals(error).vendorCode;
-}
-
 function looksCancelled(error: unknown): boolean {
   const parsed = VendorErrorShape.safeParse(error);
   if (!parsed.success) return false;
   if (parsed.data.code === 4001 || parsed.data.code === '4001') return true;
   const message = parsed.data.message?.toLowerCase() ?? '';
   return /cancel|closed by user|user reject|denied/.test(message);
+}
+
+function magicFallbackMessage(fallbackCode: ErrorCode, reason: VendorReason | undefined): string {
+  if (reason === 'network_unavailable') return 'The browser could not reach Magic.';
+  if (reason === 'timeout') return 'Magic did not respond before the request timed out.';
+  if (reason === 'invalid_parameters') {
+    return 'Magic rejected the transaction parameters before submission.';
+  }
+  if (reason === 'unsupported_chain') return 'Magic is not configured for the selected chain.';
+  if (fallbackCode === 'RPC_UNAVAILABLE') {
+    return 'Magic could not submit the Arbitrum transaction.';
+  }
+  if (fallbackCode === 'WALLET_CHAIN_SWITCH_FAILED') {
+    return 'Magic could not switch to Arbitrum One.';
+  }
+  if (fallbackCode === 'WALLET_SIGNATURE_REJECTED') {
+    return 'Magic could not complete the wallet signature.';
+  }
+  return 'Magic could not open or restore the embedded wallet.';
 }
 
 export function mapMagicError(
@@ -116,17 +131,23 @@ export function mapMagicError(
 ): AppError {
   const cancelled = looksCancelled(error);
   const code: ErrorCode = cancelled ? 'AUTH_CANCELLED' : fallbackCode;
-  const vendorCode = safeVendorCode(error);
+  const signals = safeVendorSignals(error);
   return new AppError(
     code,
-    cancelled ? 'The wallet action was cancelled.' : 'Magic is unavailable.',
+    cancelled
+      ? 'The wallet action was cancelled.'
+      : magicFallbackMessage(fallbackCode, signals.vendorReason),
     {
       retryable: !cancelled,
       submissionPossible: options.submissionPossible ?? false,
       safeDetails: {
         vendor: 'magic',
         causeDigest: digestUnknown(error),
-        ...(vendorCode === undefined ? {} : { vendorCode }),
+        ...(signals.vendorCode === undefined ? {} : { vendorCode: signals.vendorCode }),
+        ...(signals.vendorCauseCode === undefined
+          ? {}
+          : { vendorCauseCode: signals.vendorCauseCode }),
+        ...(signals.vendorReason === undefined ? {} : { vendorReason: signals.vendorReason }),
       },
       cause: error,
     },
