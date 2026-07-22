@@ -1,5 +1,5 @@
 import { ARBITRUM_ONE_CHAIN_ID, CheckoutBindingSchema, EvmAddressSchema } from '@opentab/shared';
-import { keccak256 } from 'viem';
+import { encodeFunctionData, getAddress, type Hex, keccak256, parseAbi } from 'viem';
 import { describe, expect, it, vi } from 'vitest';
 import { createCheckoutOperationTemplate } from '../src/particle.js';
 import { ParticleOperatorCertificationAdapter } from '../src/particle-certification.js';
@@ -12,6 +12,9 @@ const arbitrumUsdc = EvmAddressSchema.parse('0xaf88d065e77c8cC2239327C5EDb3A4322
 const baseUsdc = EvmAddressSchema.parse('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
 const sourceRouter = EvmAddressSchema.parse('0x4444444444444444444444444444444444444444');
 const now = new Date('2026-07-18T00:00:00.000Z');
+const universalExecutorAbi = parseAbi([
+  'function executeBatch(address[] targets, uint256[] values, bytes[] data)',
+]);
 
 function binding() {
   return CheckoutBindingSchema.parse({
@@ -74,12 +77,17 @@ function fixture() {
     userOps: [
       {
         chainId: 42161,
-        txs: template.calls.map((call) => ({
-          uaType: 'evm',
-          to: call.to,
-          data: call.data,
-          value: '0x0',
-        })),
+        userOp: {
+          callData: encodeFunctionData({
+            abi: universalExecutorAbi,
+            functionName: 'executeBatch',
+            args: [
+              template.calls.map((call) => getAddress(call.to)),
+              template.calls.map((call) => BigInt(call.valueWei)),
+              template.calls.map((call) => call.data as Hex),
+            ],
+          }),
+        },
       },
       {
         chainId: 8453,
@@ -242,11 +250,13 @@ describe('Particle operator compatibility certification', () => {
     expect(sdk.createUniversalTransaction).toHaveBeenCalledOnce();
   });
 
-  it('accepts live v2 token rows without the redundant senderAddress field', async () => {
+  it('accepts live v2 omissions while decoding the signed destination calldata', async () => {
     const { adapter, checkoutBinding, prepared } = fixture();
 
     expect(prepared.depositTokens[0]).not.toHaveProperty('senderAddress');
     expect(prepared.tokenChanges.decr[0]).not.toHaveProperty('senderAddress');
+    expect(prepared.userOps[0]).not.toHaveProperty('txs');
+    expect(prepared.userOps[0]?.userOp?.callData).toMatch(/^0x47e1da2a/);
     await expect(adapter.captureCanaryReady(checkoutBinding)).resolves.toMatchObject({
       profile: { stage: 'canary_ready' },
     });

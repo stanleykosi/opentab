@@ -23,6 +23,11 @@ import { z } from 'zod';
 import { digestUnknown } from './evidence.js';
 import { createCheckoutOperationTemplate } from './particle.js';
 import { ParticleAuthorizationChainIdSchema } from './particle-response-schemas.js';
+import {
+  ParticleUserOpExecutionSchema,
+  particleUserOpCalls,
+  particleUserOpExecutionEvidence,
+} from './particle-user-operation.js';
 import { mapParticleError } from './vendor-errors.js';
 
 const ARBITRUM_CHAIN_NUMBER = Number(ARBITRUM_ONE_CHAIN_ID);
@@ -97,23 +102,9 @@ const PreparedCaptureSchema = z
     tokenChanges: z.object({ decr: z.array(TokenAmountSchema) }),
     rootHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
     userOps: z.array(
-      z.object({
+      ParticleUserOpExecutionSchema.extend({
         chainId: z.number().int().positive().safe(),
-        txs: z
-          .array(
-            z.object({
-              uaType: z.string().regex(/^[A-Za-z0-9._:-]{1,80}$/),
-              to: EvmAddressSchema,
-              data: z.string().regex(/^0x(?:[0-9a-fA-F]{2})+$/),
-              value: z
-                .string()
-                .regex(/^0x[0-9a-fA-F]+$/)
-                .optional(),
-            }),
-          )
-          .min(1)
-          .max(16),
-      }),
+      }).passthrough(),
     ),
   })
   .passthrough();
@@ -322,9 +313,11 @@ function exactDestination(
   binding: CheckoutBinding,
 ) {
   const template = createCheckoutOperationTemplate(binding);
-  const calls = prepared.userOps
-    .filter((operation) => operation.chainId === ARBITRUM_CHAIN_NUMBER)
-    .flatMap((operation) => operation.txs);
+  const calls = prepared.userOps.flatMap((operation, index) =>
+    operation.chainId === ARBITRUM_CHAIN_NUMBER
+      ? particleUserOpCalls(operation, `userOps.${index}`)
+      : [],
+  );
   if (calls.length !== template.calls.length) {
     throw new AppError(
       'UA_PROVIDER_SCHEMA_INVALID',
@@ -401,7 +394,6 @@ export class ParticleOperatorCertificationAdapter {
           }),
         PreparedCaptureSchema,
       );
-      const raw = preparedCapture.raw;
       const prepared = preparedCapture.value;
       if (
         !sameEvmAddress(prepared.sender, this.config.ownerAddress) ||
@@ -443,7 +435,19 @@ export class ParticleOperatorCertificationAdapter {
         EvmAddressSchema.parse(entry.token.address);
         byChain.set(entry.token.chainId, entry);
       }
-      const preparedFixtureDigest = digestUnknown(raw);
+      const preparedFixtureDigest = digestUnknown({
+        schemaVersion: 2,
+        sender: prepared.sender,
+        transactionId: prepared.transactionId,
+        smartAccountOptions: prepared.smartAccountOptions,
+        depositTokens: prepared.depositTokens,
+        tokenChanges: prepared.tokenChanges,
+        rootHash: prepared.rootHash,
+        userOps: prepared.userOps.map((operation, index) => ({
+          chainId: operation.chainId,
+          execution: particleUserOpExecutionEvidence(operation, `userOps.${index}`),
+        })),
+      });
       const allowedSourceTokens = [...byChain.values()].map((entry) => ({
         chainId: entry.token.chainId.toString(),
         asset: assetForToken(entry.token) as 'USDC' | 'USDT' | 'ETH',
@@ -461,9 +465,8 @@ export class ParticleOperatorCertificationAdapter {
         maxCalls: number;
         capturedFixtureDigest: EvidenceDigest;
       }[] = [];
-      for (const operation of prepared.userOps.filter(
-        (entry) => entry.chainId !== ARBITRUM_CHAIN_NUMBER,
-      )) {
+      for (const [operationIndex, operation] of prepared.userOps.entries()) {
+        if (operation.chainId === ARBITRUM_CHAIN_NUMBER) continue;
         const source = byChain.get(operation.chainId);
         const asset = source === undefined ? undefined : assetForToken(source.token);
         if (source === undefined || asset === undefined) {
@@ -482,7 +485,7 @@ export class ParticleOperatorCertificationAdapter {
             count: number;
           }
         >();
-        for (const call of operation.txs) {
+        for (const call of particleUserOpCalls(operation, `userOps.${operationIndex}`)) {
           const selector = call.data.slice(0, 10).toLowerCase();
           if (!/^0x[0-9a-f]{8}$/.test(selector)) {
             throw new AppError(

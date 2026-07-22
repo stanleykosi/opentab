@@ -51,6 +51,12 @@ import {
 import { z } from 'zod';
 import { adapterEvidence, digestUnknown } from './evidence.js';
 import { ParticleAuthorizationChainIdSchema } from './particle-response-schemas.js';
+import {
+  type ParticlePreparedCall,
+  ParticleUserOpExecutionSchema,
+  particleUserOpCalls,
+  particleUserOpExecutionEvidence,
+} from './particle-user-operation.js';
 import { mapParticleError } from './vendor-errors.js';
 
 const PARTICLE_PACKAGE_VERSION = '2.0.3';
@@ -139,21 +145,10 @@ const DelegationAuthRecordSchema = z
   .passthrough();
 const DelegationAuthResponseSchema = z.array(DelegationAuthRecordSchema).length(1);
 
-const PreparedCallSchema = z.object({
-  uaType: z.string().min(1).max(80),
-  to: EvmAddressSchema,
-  data: z.string().regex(/^0x[0-9a-fA-F]*$/),
-  value: z
-    .string()
-    .regex(/^0x[0-9a-fA-F]+$/)
-    .optional(),
-});
-
-const PreparedUserOpSchema = z.object({
+const PreparedUserOpSchema = ParticleUserOpExecutionSchema.extend({
   chainId: z.number().int().positive().safe(),
   userOpHash: Bytes32Schema,
   expiredAt: z.number().int().positive().safe(),
-  txs: z.array(PreparedCallSchema),
   eip7702Delegated: z.boolean().optional(),
   eip7702Auth: z
     .object({
@@ -162,7 +157,7 @@ const PreparedUserOpSchema = z.object({
       address: EvmAddressSchema,
     })
     .optional(),
-});
+}).passthrough();
 
 const FeeQuoteSchema = z.object({
   fees: z.object({
@@ -603,13 +598,50 @@ function expirationFromUserOps(userOps: readonly z.infer<typeof PreparedUserOpSc
   return expiry;
 }
 
+function preparedUserOpEvidence(
+  entry: z.infer<typeof PreparedUserOpSchema>,
+  path: string,
+): Record<string, unknown> {
+  return {
+    chainId: entry.chainId,
+    userOpHash: entry.userOpHash,
+    expiredAt: entry.expiredAt,
+    eip7702Delegated: entry.eip7702Delegated ?? null,
+    eip7702Auth: entry.eip7702Auth ?? null,
+    execution: particleUserOpExecutionEvidence(entry, path),
+  };
+}
+
+function preparedTransactionEvidence(
+  prepared: z.infer<typeof PreparedTransactionSchema>,
+): Record<string, unknown> {
+  return {
+    schemaVersion: 2,
+    type: prepared.type,
+    mode: prepared.mode,
+    sender: prepared.sender,
+    receiver: prepared.receiver,
+    transactionId: prepared.transactionId,
+    smartAccountOptions: prepared.smartAccountOptions,
+    depositTokens: prepared.depositTokens,
+    feeQuotes: prepared.feeQuotes.map((quote) => quote.fees),
+    gaslessFees: prepared.gasless?.fees ?? null,
+    tokenChanges: prepared.tokenChanges,
+    rootHash: prepared.rootHash,
+    userOps: prepared.userOps.map((entry, index) =>
+      preparedUserOpEvidence(entry, `userOps.${index}`),
+    ),
+    quotedAt: prepared.quotedAt,
+  };
+}
+
 function assertExactDestinationCalls(
   prepared: z.infer<typeof PreparedTransactionSchema>,
   template: BoundOperationTemplate,
 ): void {
-  const destinationCalls = prepared.userOps
-    .filter((entry) => entry.chainId === ARBITRUM_CHAIN_NUMBER)
-    .flatMap((entry) => entry.txs);
+  const destinationCalls = prepared.userOps.flatMap((entry, index) =>
+    entry.chainId === ARBITRUM_CHAIN_NUMBER ? particleUserOpCalls(entry, `userOps.${index}`) : [],
+  );
   if (destinationCalls.length !== template.calls.length) {
     throw new AppError(
       'UA_PROVIDER_SCHEMA_INVALID',
@@ -630,7 +662,7 @@ function assertExactDestinationCalls(
 }
 
 function sourceCallMatches(
-  actual: z.infer<typeof PreparedCallSchema>,
+  actual: ParticlePreparedCall,
   expected: ParticleSourceCallProfile['calls'][number],
 ): boolean {
   return (
@@ -662,19 +694,20 @@ function assertReviewedSourceCalls(
   }
   const consumedProfiles = new Set<string>();
   const consumedSourceEntries = new Set<number>();
-  for (const userOp of sourceOps) {
+  for (const [userOpIndex, userOp] of sourceOps.entries()) {
     if (!sourceChains.has(userOp.chainId)) {
       throw new AppError(
         'UA_PROVIDER_SCHEMA_INVALID',
         'Particle added a source-chain operation without a selected source asset.',
       );
     }
+    const calls = particleUserOpCalls(userOp, `sourceUserOps.${userOpIndex}`);
     const matches = profiles.flatMap((profile) => {
       if (
         Number(profile.chainId) !== userOp.chainId ||
-        profile.calls.length !== userOp.txs.length ||
+        profile.calls.length !== calls.length ||
         !profile.calls.every((expected, index) => {
-          const actual = userOp.txs[index];
+          const actual = calls[index];
           return actual !== undefined && sourceCallMatches(actual, expected);
         })
       ) {
@@ -774,7 +807,7 @@ function assertCertifiedSourceCalls(
       'Particle source operations do not match the selected source chains.',
     );
   }
-  for (const userOp of sourceOps) {
+  for (const [userOpIndex, userOp] of sourceOps.entries()) {
     const source = sourceByChain.get(userOp.chainId);
     const sourceAddress =
       source === undefined ? undefined : EvmAddressSchema.safeParse(source.token.address);
@@ -785,8 +818,9 @@ function assertCertifiedSourceCalls(
         'Particle added a source operation without one approved source token.',
       );
     }
+    const calls = particleUserOpCalls(userOp, `sourceUserOps.${userOpIndex}`);
     const matchCounts = new Map<string, number>();
-    for (const call of userOp.txs) {
+    for (const call of calls) {
       const selector = call.data.slice(0, 10).toLowerCase();
       const matches = policies.filter(
         (policy) =>
@@ -1137,7 +1171,7 @@ export class ParticleUniversalAccountAdapter implements UniversalOperationPort {
         providerOperationId: raw.transactionId,
         quotedAt: raw.quotedAt,
         expiresAt: expiresAt.toISOString(),
-        redactedPayloadDigest: digestUnknown(rawUnknown),
+        redactedPayloadDigest: digestUnknown(preparedTransactionEvidence(raw)),
       });
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -1172,7 +1206,15 @@ export class ParticleUniversalAccountAdapter implements UniversalOperationPort {
     if (feeQuote === undefined) {
       throw new AppError('UA_PROVIDER_SCHEMA_INVALID', 'Particle omitted the route fee.');
     }
-    if (digestUnknown(feeQuote.userOps) !== digestUnknown(raw.userOps)) {
+    const quotedUserOpsDigest = digestUnknown(
+      feeQuote.userOps.map((entry, index) =>
+        preparedUserOpEvidence(entry, `feeQuote.userOps.${index}`),
+      ),
+    );
+    const selectedUserOpsDigest = digestUnknown(
+      raw.userOps.map((entry, index) => preparedUserOpEvidence(entry, `userOps.${index}`)),
+    );
+    if (quotedUserOpsDigest !== selectedUserOpsDigest) {
       throw new AppError(
         'UA_PROVIDER_SCHEMA_INVALID',
         'Particle changed the user operations selected by the fee quote.',

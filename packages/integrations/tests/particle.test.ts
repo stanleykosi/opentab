@@ -7,7 +7,7 @@ import {
   ProviderOperationIdSchema,
 } from '@opentab/shared';
 import { getBytes, Wallet } from 'ethers';
-import { encodeFunctionData, parseAbi } from 'viem';
+import { encodeFunctionData, getAddress, type Hex, parseAbi } from 'viem';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createCheckoutOperationTemplate,
@@ -29,6 +29,10 @@ const sourceApprovalData = encodeFunctionData({
   functionName: 'approve',
   args: [sourceRouter as `0x${string}`, 1_100_000n],
 });
+const universalExecutorAbi = parseAbi([
+  'function executeBatch(address[] targets, uint256[] values, bytes[] data)',
+  'function executeBatch_y6U(address[] targets, uint256[] values, bytes[] data)',
+]);
 const now = new Date('2026-07-14T12:00:00.000Z');
 const expiry = new Date(now.getTime() + 5 * 60_000).toISOString();
 
@@ -310,9 +314,27 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
 
   it('validates a live route with nullable token sender metadata', async () => {
     const fake = sdk(template);
+    const destinationOp = fake.state.prepared.userOps[0];
+    if (destinationOp === undefined) throw new Error('fixture destination operation missing');
+    Object.assign(destinationOp, {
+      userOp: {
+        callData: encodeFunctionData({
+          abi: universalExecutorAbi,
+          functionName: 'executeBatch_y6U',
+          args: [
+            destinationOp.txs.map((call) => getAddress(call.to)),
+            destinationOp.txs.map((call) => BigInt(call.value)),
+            destinationOp.txs.map((call) => call.data as Hex),
+          ],
+        }),
+        signature: '0x',
+      },
+    });
+    Reflect.deleteProperty(destinationOp, 'txs');
     const adapter = new ParticleUniversalAccountAdapter(fake, config());
     expect(fake.state.prepared.depositTokens[0]?.senderAddress).toBeNull();
     expect(fake.state.prepared.tokenChanges.decr[0]?.senderAddress).toBeNull();
+    expect(destinationOp).not.toHaveProperty('txs');
     const prepared = await adapter.prepareOperation(template);
     const plan = await adapter.validateOperation({ template, prepared });
 
@@ -322,6 +344,21 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
     expect(plan.quote.sources).toEqual([
       expect.objectContaining({ chainId: '8453', symbol: 'USDC' }),
     ]);
+  });
+
+  it('fails closed when omitted preview calls cannot be decoded from the signed user op', async () => {
+    const fake = sdk(template);
+    const destinationOp = fake.state.prepared.userOps[0];
+    if (destinationOp === undefined) throw new Error('fixture destination operation missing');
+    Object.assign(destinationOp, { userOp: { callData: '0xdeadbeef', signature: '0x' } });
+    Reflect.deleteProperty(destinationOp, 'txs');
+
+    const adapter = new ParticleUniversalAccountAdapter(fake, config());
+    await expect(adapter.prepareOperation(template)).rejects.toMatchObject({
+      code: 'UA_PROVIDER_SCHEMA_INVALID',
+      message: 'Particle omitted independently verifiable EVM transaction calls.',
+      submissionPossible: false,
+    });
   });
 
   it('accepts staged evidence and a certified semantic source-call policy', async () => {
