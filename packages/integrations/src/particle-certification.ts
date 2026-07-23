@@ -24,8 +24,13 @@ import { digestUnknown } from './evidence.js';
 import { createCheckoutOperationTemplate } from './particle.js';
 import { ParticleAuthorizationChainIdSchema } from './particle-response-schemas.js';
 import {
+  isParticleUserOpCallOmission,
+  PARTICLE_TOKEN_PROFILE_SELECTOR,
+  PARTICLE_TOKEN_PROFILE_UA_TYPE,
+  type ParticlePreparedCall,
   ParticleUserOpExecutionSchema,
   particleUserOpCalls,
+  particleUserOpEnvelopeEvidence,
   particleUserOpExecutionEvidence,
 } from './particle-user-operation.js';
 import { mapParticleError } from './vendor-errors.js';
@@ -501,7 +506,7 @@ export class ParticleOperatorCertificationAdapter {
         rootHash: prepared.rootHash,
         userOps: prepared.userOps.map((operation, index) => ({
           chainId: operation.chainId,
-          execution: particleUserOpExecutionEvidence(operation, `userOps.${index}`),
+          execution: certificationUserOpEvidence(operation, `userOps.${index}`),
         })),
       });
       const allowedSourceTokens = [...byChain.values()].map((entry) => ({
@@ -541,7 +546,31 @@ export class ParticleOperatorCertificationAdapter {
             count: number;
           }
         >();
-        for (const call of particleUserOpCalls(operation, `userOps.${operationIndex}`)) {
+        let sourceCalls: readonly ParticlePreparedCall[];
+        try {
+          sourceCalls = particleUserOpCalls(operation, `userOps.${operationIndex}`);
+        } catch (error) {
+          if (!isParticleUserOpCallOmission(error)) throw error;
+          const policyId = `source-${operation.chainId}-${asset.toLowerCase()}-token-profile`;
+          sourceCallPolicies.push({
+            policyId,
+            chainId: operation.chainId.toString(),
+            asset,
+            tokenAddress: EvmAddressSchema.parse(source.token.address),
+            uaType: PARTICLE_TOKEN_PROFILE_UA_TYPE,
+            target: EvmAddressSchema.parse(source.token.address),
+            functionSelector: PARTICLE_TOKEN_PROFILE_SELECTOR,
+            nativeValueAllowed: asset === 'ETH',
+            maxCalls: 1,
+            capturedFixtureDigest: digestUnknown({
+              domain: 'opentab/particle-source-token-profile-policy',
+              policyId,
+              preparedFixtureDigest,
+            }),
+          });
+          continue;
+        }
+        for (const call of sourceCalls) {
           const selector = call.data.slice(0, 10).toLowerCase();
           if (!/^0x[0-9a-f]{8}$/.test(selector)) {
             throw new AppError(
@@ -795,6 +824,20 @@ export class ParticleOperatorCertificationAdapter {
       });
     }
     return RpcResponseSchema.parse(await response.json()).result as Hex;
+  }
+}
+
+function certificationUserOpEvidence(
+  operation: z.infer<typeof PreparedCaptureSchema>['userOps'][number],
+  path: string,
+) {
+  try {
+    return particleUserOpExecutionEvidence(operation, path);
+  } catch (error) {
+    if (operation.chainId !== ARBITRUM_CHAIN_NUMBER && isParticleUserOpCallOmission(error)) {
+      return particleUserOpEnvelopeEvidence(operation, path);
+    }
+    throw error;
   }
 }
 

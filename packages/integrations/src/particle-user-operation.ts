@@ -21,6 +21,8 @@ export const ParticlePreparedCallSchema = z.object({
 
 const EvmCallDataSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/);
 const ProviderObjectSchema = z.record(z.string(), z.unknown());
+export const PARTICLE_TOKEN_PROFILE_UA_TYPE = 'provider-token-profile' as const;
+export const PARTICLE_TOKEN_PROFILE_SELECTOR = '0x00000000' as const;
 
 export const ParticleUserOpExecutionSchema = z
   .object({
@@ -36,8 +38,11 @@ export type ParticleUserOpExecution = z.infer<typeof ParticleUserOpExecutionSche
 export type ParticlePreparedCall = z.infer<typeof ParticlePreparedCallSchema>;
 
 export interface ParticleUserOpExecutionEvidence {
-  readonly representation: 'preview_calls' | 'executor_calldata';
+  readonly representation: 'preview_calls' | 'executor_calldata' | 'provider_envelope';
   readonly executorCallDataDigest: Hex | null;
+  readonly providerChainId?: string;
+  readonly txCount?: number;
+  readonly hasUserOp?: boolean;
   readonly calls: readonly {
     readonly uaType: string;
     readonly to: string;
@@ -45,6 +50,8 @@ export interface ParticleUserOpExecutionEvidence {
     readonly dataDigest: Hex;
   }[];
 }
+
+const OMITTED_CALLS_MESSAGE = 'Particle omitted independently verifiable EVM transaction calls.';
 
 function chainIdOf(input: ParticleUserOpExecution): number | undefined {
   const chainId = (input as Readonly<Record<string, unknown>>).chainId;
@@ -58,7 +65,7 @@ function invalidExecutionCalls(path: string, input: ParticleUserOpExecution): Ap
     solana ? 'UA_ROUTE_UNAVAILABLE' : 'UA_PROVIDER_SCHEMA_INVALID',
     solana
       ? 'Particle selected an unreviewed Solana operation instead of the configured EVM source route.'
-      : 'Particle omitted independently verifiable EVM transaction calls.',
+      : OMITTED_CALLS_MESSAGE,
     {
       submissionPossible: false,
       safeDetails: {
@@ -66,6 +73,14 @@ function invalidExecutionCalls(path: string, input: ParticleUserOpExecution): Ap
         ...(chainId === undefined ? {} : { providerChainId: chainId.toString() }),
       },
     },
+  );
+}
+
+export function isParticleUserOpCallOmission(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === 'UA_PROVIDER_SCHEMA_INVALID' &&
+    error.message === OMITTED_CALLS_MESSAGE
   );
 }
 
@@ -159,5 +174,22 @@ export function particleUserOpExecutionEvidence(
       value: call.value ?? '0x0',
       dataDigest: keccak256(call.data as Hex),
     })),
+  };
+}
+
+export function particleUserOpEnvelopeEvidence(
+  input: ParticleUserOpExecution,
+  _path: string,
+): ParticleUserOpExecutionEvidence {
+  const parsed = ParticleUserOpExecutionSchema.parse(input);
+  const callData = evmCallData(parsed);
+  const chainId = chainIdOf(parsed);
+  return {
+    representation: 'provider_envelope',
+    executorCallDataDigest: callData === undefined ? null : keccak256(callData),
+    ...(chainId === undefined ? {} : { providerChainId: chainId.toString() }),
+    txCount: Array.isArray(parsed.txs) ? parsed.txs.length : 0,
+    hasUserOp: parsed.userOp !== undefined,
+    calls: [],
   };
 }

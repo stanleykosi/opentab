@@ -52,9 +52,14 @@ import { z } from 'zod';
 import { adapterEvidence, digestUnknown } from './evidence.js';
 import { ParticleAuthorizationChainIdSchema } from './particle-response-schemas.js';
 import {
+  isParticleUserOpCallOmission,
+  PARTICLE_TOKEN_PROFILE_SELECTOR,
+  PARTICLE_TOKEN_PROFILE_UA_TYPE,
   type ParticlePreparedCall,
+  type ParticleUserOpExecutionEvidence,
   ParticleUserOpExecutionSchema,
   particleUserOpCalls,
+  particleUserOpEnvelopeEvidence,
   particleUserOpExecutionEvidence,
 } from './particle-user-operation.js';
 import { mapParticleError } from './vendor-errors.js';
@@ -602,13 +607,23 @@ function preparedUserOpEvidence(
   entry: z.infer<typeof PreparedUserOpSchema>,
   path: string,
 ): Record<string, unknown> {
+  let execution: ParticleUserOpExecutionEvidence;
+  try {
+    execution = particleUserOpExecutionEvidence(entry, path);
+  } catch (error) {
+    if (entry.chainId !== ARBITRUM_CHAIN_NUMBER && isParticleUserOpCallOmission(error)) {
+      execution = particleUserOpEnvelopeEvidence(entry, path);
+    } else {
+      throw error;
+    }
+  }
   return {
     chainId: entry.chainId,
     userOpHash: entry.userOpHash,
     expiredAt: entry.expiredAt,
     eip7702Delegated: entry.eip7702Delegated ?? null,
     eip7702Auth: entry.eip7702Auth ?? null,
-    execution: particleUserOpExecutionEvidence(entry, path),
+    execution,
   };
 }
 
@@ -818,7 +833,23 @@ function assertCertifiedSourceCalls(
         'Particle added a source operation without one approved source token.',
       );
     }
-    const calls = particleUserOpCalls(userOp, `sourceUserOps.${userOpIndex}`);
+    let calls: readonly ParticlePreparedCall[];
+    try {
+      calls = particleUserOpCalls(userOp, `sourceUserOps.${userOpIndex}`);
+    } catch (error) {
+      if (!isParticleUserOpCallOmission(error)) throw error;
+      const tokenProfilePolicies = policies.filter(
+        (policy) =>
+          Number(policy.chainId) === userOp.chainId &&
+          policy.asset === asset &&
+          sameEvmAddress(policy.tokenAddress, sourceAddress.data) &&
+          policy.uaType === PARTICLE_TOKEN_PROFILE_UA_TYPE &&
+          sameEvmAddress(policy.target, sourceAddress.data) &&
+          policy.functionSelector.toLowerCase() === PARTICLE_TOKEN_PROFILE_SELECTOR,
+      );
+      if (tokenProfilePolicies.length === 1) continue;
+      throw error;
+    }
     const matchCounts = new Map<string, number>();
     for (const call of calls) {
       const selector = call.data.slice(0, 10).toLowerCase();

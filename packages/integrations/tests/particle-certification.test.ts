@@ -262,6 +262,41 @@ describe('Particle operator compatibility certification', () => {
     });
   });
 
+  it('captures a token-profile source policy when Particle omits source EVM calls', async () => {
+    const { adapter, sdk, checkoutBinding, prepared } = fixture();
+    const source = prepared.userOps[1];
+    if (source === undefined) throw new Error('fixture source operation is missing');
+    sdk.createUniversalTransaction.mockResolvedValueOnce({
+      ...prepared,
+      userOps: [
+        prepared.userOps[0],
+        {
+          ...source,
+          userOp: { callData: '0x', signature: '0x' },
+          txs: [],
+        },
+      ],
+    } as unknown as Awaited<ReturnType<typeof sdk.createUniversalTransaction>>);
+
+    await expect(adapter.captureCanaryReady(checkoutBinding)).resolves.toMatchObject({
+      profile: {
+        stage: 'canary_ready',
+        sourceTokenProfile: {
+          sourceCallPolicies: [
+            expect.objectContaining({
+              policyId: 'source-8453-usdc-token-profile',
+              chainId: '8453',
+              asset: 'USDC',
+              uaType: 'provider-token-profile',
+              target: baseUsdc,
+              functionSelector: '0x00000000',
+            }),
+          ],
+        },
+      },
+    });
+  });
+
   it('accepts an empty EVM userOp callData when exact preview calls are present', async () => {
     const { adapter, sdk, checkoutBinding, prepared } = fixture();
     const template = createCheckoutOperationTemplate(checkoutBinding);

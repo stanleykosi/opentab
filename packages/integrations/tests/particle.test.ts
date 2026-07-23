@@ -397,6 +397,53 @@ describe('Particle Universal Account 2.0.3 adapter', () => {
     });
   });
 
+  it('accepts a certified token-profile source policy when Particle omits source calls', async () => {
+    const fake = sdk(template);
+    const destinationOp = fake.state.prepared.userOps[0];
+    const sourceOp = fake.state.prepared.userOps[1];
+    if (destinationOp === undefined || sourceOp === undefined) {
+      throw new Error('fixture operations missing');
+    }
+    const userOps = [
+      destinationOp,
+      {
+        ...sourceOp,
+        userOp: { callData: '0x', signature: '0x' },
+        txs: [],
+      },
+    ];
+    fake.state.prepared = {
+      ...fake.state.prepared,
+      userOps,
+      feeQuotes: fake.state.prepared.feeQuotes.map((quote) => ({ ...quote, userOps })),
+    };
+    const adapter = new ParticleUniversalAccountAdapter(
+      fake,
+      config({
+        sourceCallProfiles: [],
+        sourceCallPolicies: [
+          {
+            policyId: 'base-usdc-token-profile-v1',
+            chainId: '8453',
+            asset: 'USDC',
+            tokenAddress: sourceToken,
+            uaType: 'provider-token-profile',
+            target: sourceToken,
+            functionSelector: '0x00000000',
+            nativeValueAllowed: false,
+            maxCalls: 1,
+            capturedFixtureDigest: Bytes32Schema.parse(digest('d')),
+          },
+        ],
+      }),
+    );
+
+    const prepared = await adapter.prepareOperation(template);
+    await expect(adapter.validateOperation({ template, prepared })).resolves.toMatchObject({
+      quote: { amountBaseUnits: '1000000' },
+    });
+  });
+
   it('rejects injected destination calls before signing', async () => {
     const fake = sdk(template);
     const destinationOp = fake.state.prepared.userOps[0];
